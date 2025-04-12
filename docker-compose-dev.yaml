@@ -1,38 +1,83 @@
 name: tp0
 services:
   rabbitmq:
-      container_name: rabbitmq
-      image: rabbitmq:management
-      ports:
-        - "15672:15672"
-      networks:
-        - testing_net
+    container_name: rabbitmq
+    image: rabbitmq:management
+    ports:
+    - 15672:15672
+    networks:
+    - testing_net
   server:
     container_name: server
     image: server:latest
     entrypoint: python3 /main.py
     environment:
-      - PYTHONUNBUFFERED=1
-      - LOGGING_LEVEL=DEBUG
+    - PYTHONUNBUFFERED=1
+    - LOGGING_LEVEL=DEBUG
     networks:
-      - testing_net
-
-  client1:
+    - testing_net
+  client:
     container_name: client1
     image: client:latest
     entrypoint: /client
     environment:
-      - CLI_ID=1
-      - CLI_LOG_LEVEL=DEBUG
+    - CLI_ID=1
+    - CLI_LOG_LEVEL=DEBUG
     networks:
-      - testing_net
+    - testing_net
     depends_on:
-      - server
-      - rabbitmq
-
+    - server
+  filter1:
+    container_name: filter1
+    image: filter:latest
+    entrypoint: python3 /filter.py
+    environment:
+    - WORKER_ID=1
+    - WORKER_TYPE=FILTER
+    networks:
+    - testing_net
+    depends_on:
+    - server
+    - rabbitmq
+  joiner1:
+    container_name: joiner1
+    image: joiner:latest
+    entrypoint: python3 /joiner.py
+    environment:
+    - WORKER_ID=1
+    - WORKER_TYPE=JOINER
+    networks:
+    - testing_net
+    depends_on:
+    - server
+    - rabbitmq
+  aggregator1:
+    container_name: aggregator1
+    image: aggregator:latest
+    entrypoint: python3 /aggregator.py
+    environment:
+    - WORKER_ID=1
+    - WORKER_TYPE=AGGREGATOR
+    networks:
+    - testing_net
+    depends_on:
+    - server
+    - rabbitmq
+  pnl1:
+    container_name: pnl1
+    image: pnl:latest
+    entrypoint: python3 /pnl.py
+    environment:
+    - WORKER_ID=1
+    - WORKER_TYPE=PNL
+    networks:
+    - testing_net
+    depends_on:
+    - server
+    - rabbitmq
 networks:
   testing_net:
     ipam:
       driver: default
       config:
-        - subnet: 172.25.125.0/24
+      - subnet: 172.25.125.0/24
