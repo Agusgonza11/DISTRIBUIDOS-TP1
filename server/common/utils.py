@@ -1,4 +1,7 @@
 import logging
+import aio_pika
+import asyncio
+
 
 def initialize_log(logging_level):
     """
@@ -12,3 +15,13 @@ def initialize_log(logging_level):
         level=logging_level,
         datefmt='%Y-%m-%d %H:%M:%S',
     )
+
+async def esperar_conexion():
+    for i in range(10):
+        try:
+            conexion = await aio_pika.connect_robust("amqp://guest:guest@rabbitmq/")
+            return conexion
+        except Exception as e:
+            logging.warning(f"Intento {i+1}: No se pudo conectar a RabbitMQ: {e}")
+            await asyncio.sleep(2)
+    raise Exception("No se pudo conectar a RabbitMQ después de varios intentos")
