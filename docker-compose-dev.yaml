@@ -1,5 +1,12 @@
 name: tp0
 services:
+  rabbitmq:
+      container_name: rabbitmq
+      image: rabbitmq:management
+      ports:
+        - "15672:15672"
+      networks:
+        - testing_net
   server:
     container_name: server
     image: server:latest
@@ -21,6 +28,7 @@ services:
       - testing_net
     depends_on:
       - server
+      - rabbitmq
 
 networks:
   testing_net:
