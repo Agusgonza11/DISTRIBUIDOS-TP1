@@ -4,14 +4,55 @@ import json
 import logging
 from common.utils import initialize_log, esperar_conexion
 
+# -----------------------
+# Nodo Filtro
+# -----------------------
 class FiltroNode:
     def ejecutar_consulta(self, consulta_id, datos):
         # Acá iría la lógica específica para cada tipo de consulta
         logging.info(f"Ejecutando consulta {consulta_id} con {len(datos)} elementos")
-        return datos  # Acá devolverías el resultado real
+        match consulta_id:
+            case 1:
+                return self.consulta_1(datos)
+            case 2:
+                return self.consulta_2(datos)
+            case 3:
+                return self.consulta_3(datos)
+            case 4:
+                return self.consulta_4(datos)
+            case 5:
+                return self.consulta_5(datos)
+            case _:
+                logging.warning(f"Consulta desconocida: {consulta_id}")
+                return []
+    
+    def consulta_1(self, datos):
+        logging.debug("Procesando datos para consulta 1")
+        return datos
+
+    def consulta_2(self, datos):
+        logging.debug("Procesando datos para consulta 2")
+        return datos
+
+    def consulta_3(self, datos):
+        logging.debug("Procesando datos para consulta 3")
+        return datos
+
+    def consulta_4(self, datos):
+        logging.debug("Procesando datos para consulta 4")
+        return datos
+
+    def consulta_5(self, datos):
+        logging.debug("Procesando datos para consulta 5")
+        return datos
+    
+
+
+# -----------------------
+# Ejecutando nodo filtro
+# -----------------------
 
 filtro = FiltroNode()
-
 
 async def procesar_mensaje(mensaje: aio_pika.IncomingMessage, consulta_id: int):
     async with mensaje.process():
