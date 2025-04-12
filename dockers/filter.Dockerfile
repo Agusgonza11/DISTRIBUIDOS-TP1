@@ -1,7 +1,9 @@
 FROM python:3.11-slim
 
+COPY server /app
+
 WORKDIR /app
 
-COPY server/workers/filter.py .
+ENV PYTHONPATH=/app
 
-ENTRYPOINT ["python3", "filter.py"]
+ENTRYPOINT ["python3", "workers/filter.py"]

@@ -16,12 +16,12 @@ build: deps
 .PHONY: build
 
 docker-image:
-	docker build -f dockers/server.Dockerfile -t "server:latest" .
-	docker build -f dockers/client.Dockerfile -t "client:latest" .
-	docker build -f dockers/filter.Dockerfile -t filter:latest .
-	docker build -f dockers/joiner.Dockerfile -t joiner:latest .
-	docker build -f dockers/aggregator.Dockerfile -t aggregator:latest .
-	docker build -f dockers/pnl.Dockerfile -t pnl:latest .
+	docker build -f ./dockers/server.Dockerfile -t "server:latest" .
+	docker build -f ./dockers/client.Dockerfile -t "client:latest" .
+	docker build -f ./dockers/filter.Dockerfile -t filter:latest .
+	docker build -f ./dockers/joiner.Dockerfile -t joiner:latest .
+	docker build -f ./dockers/aggregator.Dockerfile -t aggregator:latest .
+	docker build -f ./dockers/pnl.Dockerfile -t pnl:latest .
 
 	# Execute this command from time to time to clean up intermediate stages generated 
 	# during client build (your hard drive will like this :) ). Don't left uncommented if you 
