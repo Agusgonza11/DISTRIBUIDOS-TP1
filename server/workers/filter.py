@@ -10,18 +10,21 @@ from common.utils import initialize_log, esperar_conexion
 class FiltroNode:
     def ejecutar_consulta(self, consulta_id, datos):
         # Acá iría la lógica específica para cada tipo de consulta
-        logging.info(f"Ejecutando consulta {consulta_id} con {len(datos)} elementos")
+        lineas = datos.strip().split("\n")
+
+        logging.info(f"Ejecutando consulta {consulta_id} con {len(lineas)} elementos")
+        
         match consulta_id:
             case 1:
-                return self.consulta_1(datos)
+                return self.consulta_1(lineas)
             case 2:
-                return self.consulta_2(datos)
+                return self.consulta_2(lineas)
             case 3:
-                return self.consulta_3(datos)
+                return self.consulta_3(lineas)
             case 4:
-                return self.consulta_4(datos)
+                return self.consulta_4(lineas)
             case 5:
-                return self.consulta_5(datos)
+                return self.consulta_5(lineas)
             case _:
                 logging.warning(f"Consulta desconocida: {consulta_id}")
                 return []
@@ -57,18 +60,22 @@ filtro = FiltroNode()
 async def procesar_mensaje(mensaje: aio_pika.IncomingMessage, consulta_id: int):
     async with mensaje.process():
         try:
-            batch = json.loads(mensaje.body.decode()) #Me llega el batch
+            batch = mensaje.body.decode() #Me llega el batch
+            if batch.strip() == "EOF":
+                logging.info(f"Consulta {consulta_id} recibió EOF")
+                return
+            
             resultado = filtro.ejecutar_consulta(consulta_id, batch)
 
             # Publicamos el resultado en una cola única por consulta (opcional)
             if consulta_id == 1:
                 await mensaje.channel.default_exchange.publish(
-                    aio_pika.Message(body=json.dumps(resultado).encode()),
+                    aio_pika.Message(body="\n".join(resultado).encode()),
                     routing_key=f"gateway_output_{consulta_id}"
                 )
             else:
                 await mensaje.channel.default_exchange.publish(
-                    aio_pika.Message(body=json.dumps(resultado).encode()),
+                    aio_pika.Message(body="\n".join(resultado).encode()),
                     routing_key=f"aggregator_consult_{consulta_id}"
                 )
         except Exception as e:
