@@ -8,18 +8,45 @@ from common.utils import esperar_conexion
 FILTER = 1
 AGGREGATOR = 2
 PNL = 5
+JOINER = 3
+LIMITE_NODOS_1 = 6
+LIMITE_NODOS_2 = 5
 conexion = None
 canal = None
 
 # ----------------------
 # Diccionario global
 # ----------------------
-ROLES = {
+COLAS = {
+    "filter_consult_1": "gateway_output",
+    "filter_consult_2": "aggregator_consult_2",
+    "filter_consult_3": "joiner_consult_3",
+    "filter_consult_4": "joiner_consult_4",
+    "filter_consult_5": "pnl_consult_5",
+    "aggregator_consult_1": "gateway_output",
+    "aggregator_consult_2": "gateway_output",
+    "aggregator_consult_3": "gateway_output",
+    "aggregator_consult_4": "gateway_output",
+    "aggregator_consult_5": "gateway_output",
+    "pnl_consult_5": "aggregator_consult_5",
+    "joiner_consult_3": "aggregator_consult_3",
+    "joiner_consult_4": "aggregator_consult_4",
+}
+
+
+ENTRADAS = {
     "filter": FILTER,
     "aggregator": AGGREGATOR,
     "pnl": PNL,
+    "joiner": JOINER,
 }
 
+SALIDAS = {
+    "filter": LIMITE_NODOS_1,
+    "aggregator": LIMITE_NODOS_1,
+    "pnl": LIMITE_NODOS_1,
+    "joiner": LIMITE_NODOS_2,
+}
 
 # ---------------------
 # GENERALES
@@ -41,18 +68,10 @@ async def enviar_mensaje(routing_key, body):
 # ---------------------
 # GENERAL
 # ---------------------
-def obtener_cola_output(entrada, consulta_id):
-    nombre_salida = f"gateway_output_{consulta_id}"
-    if entrada == "filter" and consulta_id >= 2:
-        nombre_salida = f"aggregator_consult_{consulta_id}"
-    if entrada == "pnl":
-        nombre_salida = f"filter_consult_{consulta_id}"
-    return nombre_salida
-
 async def escuchar_colas(entrada, nodo):
-    for consulta_id in range(ROLES[entrada], 6):
+    for consulta_id in range(ENTRADAS[entrada], SALIDAS[entrada]):
         nombre_entrada = f"{entrada}_consult_{consulta_id}"
-        nombre_salida = obtener_cola_output(entrada, consulta_id)
+        nombre_salida = COLAS[nombre_entrada]
 
         await canal.declare_queue(nombre_entrada, durable=True)
         await canal.declare_queue(nombre_salida, durable=True)
