@@ -1,8 +1,10 @@
 import asyncio
 import logging
-from common.utils import initialize_log
+from common.utils import create_dataframe, initialize_log
 from workers.test import enviar_mock
 from workers.communication import inicializar_comunicacion, escuchar_colas
+from transformers import pipeline # type: ignore
+import time
 
 PNL = "pnl"
 
@@ -26,6 +28,11 @@ class PnlNode:
 
     def consulta_5(self, datos):
         logging.info("Procesando datos para consulta 5")
+        datos = create_dataframe(datos)
+        sentiment_analyzer = pipeline('sentiment-analysis', model='distilbert-base-uncased-finetuned-sst-2-english')
+        datos['sentiment'] = datos['overview'].fillna('').apply(lambda x: sentiment_analyzer(x)[0]['label'])
+        csv_q5 = datos.to_csv(index=False)
+        logging.info(f"lo que voy a devolver es {csv_q5}")
         return datos
     
 

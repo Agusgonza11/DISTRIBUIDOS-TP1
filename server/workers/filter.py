@@ -29,7 +29,18 @@ class FiltroNode:
             case _:
                 logging.warning(f"Consulta desconocida: {consulta_id}")
                 return []
+
     
+    def filtro_consulta_3_4(datos):
+        datos = create_dataframe(datos)
+        movies_arg_post_2000 = datos[
+            (datos['production_countries'].str.contains('Argentina', case=False, na=False)) &
+            (datos['release_date'].dt.year >= 2000)
+        ]
+        movies_arg_post_2000 = movies_arg_post_2000.astype({'id': int})
+        return movies_arg_post_2000.to_csv(index=False)
+    
+
     def consulta_1(self, datos):
         logging.info("Procesando datos para consulta 1")
         datos = prepare_data_filter_consult_1(datos)
@@ -58,15 +69,26 @@ class FiltroNode:
 
     def consulta_3(self, datos):
         logging.info("Procesando datos para consulta 3")
-        return datos
+        csv_q3 = self.filtro_consulta_3_4(datos)
+        logging.info(f"lo que voy a devolver es {csv_q3}")
+        return csv_q3
 
     def consulta_4(self, datos):
         logging.info("Procesando datos para consulta 4")
-        return datos
+        csv_q4 = self.filtro_consulta_3_4(datos)
+        logging.info(f"lo que voy a devolver es {csv_q4}")
+        return csv_q4
 
     def consulta_5(self, datos):
         logging.info("Procesando datos para consulta 5")
-        return datos
+        # Filtra películas válidas con budget y revenue no nulos
+        datos = create_dataframe(datos)
+        q5_input_df = datos.copy()
+        q5_input_df = q5_input_df.loc[q5_input_df['budget'] != 0]
+        q5_input_df = q5_input_df.loc[q5_input_df['revenue'] != 0]
+        csv_q5 = q5_input_df.to_csv(index=False)
+        logging.info(f"lo que voy a devolver es {csv_q5}")
+        return csv_q5
     
 
 

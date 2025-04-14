@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from common.utils import create_dataframe, initialize_log
+from common.utils import create_dataframe, initialize_log, prepare_data_aggregator_consult_3
 from workers.test import enviar_mock
 from workers.communication import inicializar_comunicacion, escuchar_colas
 
@@ -41,15 +41,31 @@ class AggregatorNode:
 
     def consulta_3(self, datos):
         logging.info("Procesando datos para consulta 3")
-        return datos
+        datos = create_dataframe(datos)
+        mean_ratings = datos.groupby(["id", "title"])['rating'].mean().reset_index()
+        max_rated = mean_ratings.iloc[mean_ratings['rating'].idxmax()]
+        min_rated = mean_ratings.iloc[mean_ratings['rating'].idxmin()]
+        csv_q3 = prepare_data_aggregator_consult_3(min_rated, max_rated)
+        logging.info(f"lo que voy a devolver es {csv_q3}")
+        return csv_q3
 
     def consulta_4(self, datos):
         logging.info("Procesando datos para consulta 4")
-        return datos
+        datos = create_dataframe(datos)
+        actor_counts = datos.groupby("name").count().reset_index().rename(columns={"id": "count"})
+        top_10_actors = actor_counts.nlargest(10, 'count')
+        csv_q4 = top_10_actors.to_csv(index=False)
+        logging.info(f"lo que voy a devolver es {csv_q4}")
+        return csv_q4
 
     def consulta_5(self, datos):
         logging.info("Procesando datos para consulta 5")
-        return datos
+        datos = create_dataframe(datos)
+        datos["rate_revenue_budget"] = datos["revenue"] / datos["budget"]
+        average_rate_by_sentiment = datos.groupby("sentiment")["rate_revenue_budget"].mean()
+        csv_q5 = average_rate_by_sentiment.to_csv(index=False)
+        logging.info(f"lo que voy a devolver es {csv_q5}")
+        return csv_q5
     
 
 

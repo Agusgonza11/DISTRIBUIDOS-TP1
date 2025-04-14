@@ -1,8 +1,8 @@
 import logging
-import aio_pika
+import aio_pika # type: ignore
 import asyncio
 from io import StringIO
-import pandas as pd
+import pandas as pd # type: ignore
 
 
 def initialize_log(logging_level):
@@ -26,6 +26,18 @@ def prepare_data_filter_consult_1(data):
     data = create_dataframe(data)
     data['release_date'] = pd.to_datetime(data['release_date'], errors='coerce')
     return data
+
+def prepare_data_aggregator_consult_3(min, max):
+    headers = ["id", "title", "rating"]
+    lines = [",".join(headers)]
+
+    for fila in [max, min]:
+        linea = ",".join(str(fila[h]) for h in headers)
+        lines.append(linea)
+
+    return "\n".join(lines)
+
+
 
 async def esperar_conexion():
     for i in range(10):

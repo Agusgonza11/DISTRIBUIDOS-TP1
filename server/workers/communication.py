@@ -1,4 +1,4 @@
-import aio_pika
+import aio_pika # type: ignore
 import logging
 from common.utils import esperar_conexion
 
