@@ -64,7 +64,7 @@ async def main():
     logging.info("Se inicializó el worker filter")
     await inicializar_comunicacion()
     await escuchar_colas(FILTER, filtro)
-    #await enviar_mock() Mock para probar consultas
+    #await enviar_mock() #Mock para probar consultas
     await asyncio.Future()
 
 asyncio.run(main())

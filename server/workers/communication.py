@@ -57,22 +57,22 @@ async def escuchar_colas(entrada, nodo):
         await canal.declare_queue(nombre_entrada, durable=True)
         await canal.declare_queue(nombre_salida, durable=True)
 
-        async def wrapper(mensaje, consulta_id=consulta_id):
+        async def wrapper(mensaje, consulta_id=consulta_id, nombre_salida=nombre_salida):
             async with mensaje.process():
                 contenido = mensaje.body.decode('utf-8') 
-                await procesar_mensajes(nodo, consulta_id, contenido, enviar_mensaje)
+                await procesar_mensajes(nodo, nombre_salida, consulta_id, contenido, enviar_mensaje)
 
         queue = await canal.get_queue(nombre_entrada)
         await queue.consume(wrapper)
         logging.info(f"Escuchando en {nombre_entrada}")
 
 
-async def procesar_mensajes(nodo, consulta_id, contenido, enviar_func):
+async def procesar_mensajes(nodo, destino, consulta_id, contenido, enviar_func):
     if contenido.strip() == "EOF":
-        logging.info(f"Consulta {consulta_id} filter recibió EOF")
+        logging.info(f"Consulta {consulta_id} recibió EOF")
+        await enviar_func(destino, "EOF")
         return
     resultado = nodo.ejecutar_consulta(consulta_id, contenido)
-    destino = f"gateway_output_{consulta_id}" if consulta_id == 1 else f"aggregator_consult_{consulta_id}"
     await enviar_func(destino, resultado)
 
 
