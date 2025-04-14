@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from common.utils import initialize_log, prepare_data_filter_consult_1
+from common.utils import create_dataframe, initialize_log, prepare_data_filter_consult_1
 from workers.test import enviar_mock
 from workers.communication import inicializar_comunicacion, escuchar_colas
 
@@ -13,7 +13,6 @@ class FiltroNode:
     def ejecutar_consulta(self, consulta_id, datos):
         # Acá iría la lógica específica para cada tipo de consulta
         lineas = datos.strip().split("\n")
-        datos = prepare_data_filter_consult_1(datos)
         logging.info(f"Ejecutando consulta {consulta_id} con {len(lineas)} elementos")
         
         match consulta_id:
@@ -33,6 +32,7 @@ class FiltroNode:
     
     def consulta_1(self, datos):
         logging.info("Procesando datos para consulta 1")
+        datos = prepare_data_filter_consult_1(datos)
         movies_argentina_españa_00s_df = datos[
             (datos['production_countries'].str.contains('Argentina', case=False, na=False)) & 
             (datos['production_countries'].str.contains('Spain', case=False, na=False)) & 
@@ -46,7 +46,15 @@ class FiltroNode:
 
     def consulta_2(self, datos):
         logging.info("Procesando datos para consulta 2")
-        return datos
+        datos = create_dataframe(datos)
+        solo_country_df = datos[
+            datos['production_countries'].apply(lambda x: len(eval(x)) == 1)
+        ]
+        solo_country_df = solo_country_df.copy()
+        solo_country_df['country'] = solo_country_df['production_countries'].apply(lambda x: eval(x)[0])
+        csv_q2 = solo_country_df.to_csv(index=False)
+        logging.info(f"lo que voy a devolver es {csv_q2}")
+        return csv_q2
 
     def consulta_3(self, datos):
         logging.info("Procesando datos para consulta 3")

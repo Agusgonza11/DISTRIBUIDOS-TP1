@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from common.utils import initialize_log
+from common.utils import create_dataframe, initialize_log
 from workers.test import enviar_mock
 from workers.communication import inicializar_comunicacion, escuchar_colas
 
@@ -32,7 +32,12 @@ class AggregatorNode:
 
     def consulta_2(self, datos):
         logging.info("Procesando datos para consulta 2")
-        return datos
+        datos = create_dataframe(datos)
+        investment_by_country = datos.groupby('country')['budget'].sum().sort_values(ascending=False)
+        top_5_countries = investment_by_country.head(5)
+        csv_q2 = top_5_countries.to_csv(index=False)
+        logging.info(f"lo que voy a devolver es {csv_q2}")
+        return csv_q2
 
     def consulta_3(self, datos):
         logging.info("Procesando datos para consulta 3")
