@@ -25,7 +25,7 @@ class PnlNode:
     
 
     def consulta_5(self, datos):
-        logging.debug("Procesando datos para consulta 5")
+        logging.info("Procesando datos para consulta 5")
         return datos
     
 

@@ -1,6 +1,8 @@
 import logging
 import aio_pika
 import asyncio
+from io import StringIO
+import pandas as pd
 
 
 def initialize_log(logging_level):
@@ -15,6 +17,15 @@ def initialize_log(logging_level):
         level=logging_level,
         datefmt='%Y-%m-%d %H:%M:%S',
     )
+
+def create_dataframe(csv):
+    return pd.read_csv(StringIO(csv))
+
+
+def prepare_data_filter_consult_1(data):
+    data = create_dataframe(data)
+    data['release_date'] = pd.to_datetime(data['release_date'], errors='coerce')
+    return data
 
 async def esperar_conexion():
     for i in range(10):

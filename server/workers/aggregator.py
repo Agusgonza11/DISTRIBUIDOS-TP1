@@ -31,19 +31,19 @@ class AggregatorNode:
     
 
     def consulta_2(self, datos):
-        logging.debug("Procesando datos para consulta 2")
+        logging.info("Procesando datos para consulta 2")
         return datos
 
     def consulta_3(self, datos):
-        logging.debug("Procesando datos para consulta 3")
+        logging.info("Procesando datos para consulta 3")
         return datos
 
     def consulta_4(self, datos):
-        logging.debug("Procesando datos para consulta 4")
+        logging.info("Procesando datos para consulta 4")
         return datos
 
     def consulta_5(self, datos):
-        logging.debug("Procesando datos para consulta 5")
+        logging.info("Procesando datos para consulta 5")
         return datos
     
 
