@@ -42,3 +42,45 @@ async def escuchar_colas_para_filtro(procesar_mensajes):
         queue = await canal.get_queue(nombre_entrada)
         await queue.consume(wrapper)
         logging.info(f"Escuchando en {nombre_entrada}")
+
+
+# ---------------------
+# AGGREGATOR
+# ---------------------
+async def escuchar_colas_para_aggregator(procesar_mensajes):
+    for consulta_id in range(1, 6):
+        nombre_entrada = f"aggregator_consult_{consulta_id}"
+        nombre_salida = f"gateway_output_{consulta_id}"
+
+        await canal.declare_queue(nombre_entrada, durable=True)
+        await canal.declare_queue(nombre_salida, durable=True)
+
+        async def wrapper(mensaje, consulta_id=consulta_id):
+            async with mensaje.process():
+                contenido = mensaje.body.decode('utf-8') 
+                await procesar_mensajes(consulta_id, contenido, enviar_mensaje)
+
+        queue = await canal.get_queue(nombre_entrada)
+        await queue.consume(wrapper)
+        logging.info(f"Escuchando en {nombre_entrada}")
+
+
+# ---------------------
+# PNL
+# ---------------------
+async def escuchar_colas_para_pnl(procesar_mensajes):
+    for consulta_id in range(1, 6):
+        nombre_entrada = f"pnl_consult_{consulta_id}"
+        nombre_salida = f"gateway_output_{consulta_id}"
+
+        await canal.declare_queue(nombre_entrada, durable=True)
+        await canal.declare_queue(nombre_salida, durable=True)
+
+        async def wrapper(mensaje, consulta_id=consulta_id):
+            async with mensaje.process():
+                contenido = mensaje.body.decode('utf-8') 
+                await procesar_mensajes(consulta_id, contenido, enviar_mensaje)
+
+        queue = await canal.get_queue(nombre_entrada)
+        await queue.consume(wrapper)
+        logging.info(f"Escuchando en {nombre_entrada}")

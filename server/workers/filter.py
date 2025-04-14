@@ -60,7 +60,7 @@ filtro = FiltroNode()
 
 async def procesar_mensajes(consulta_id, contenido, enviar_func):
     if contenido.strip() == b"EOF":
-        logging.info(f"Consulta {consulta_id} recibió EOF")
+        logging.info(f"Consulta {consulta_id} filter recibió EOF")
         return
     resultado = filtro.ejecutar_consulta(consulta_id, contenido)
     destino = f"gateway_output_{consulta_id}" if consulta_id == 1 else f"aggregator_consult_{consulta_id}"

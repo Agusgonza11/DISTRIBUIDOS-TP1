@@ -7,7 +7,7 @@ def agregar_workers(compose, tipo, cantidad):
         compose["services"][nombre] = {
             "container_name": nombre,
             "image": f"{tipo}:latest",
-            "entrypoint": f"python3 /{tipo}.py",
+            "entrypoint": f"python3 workers/{tipo}.py",
             "environment": [
                 f"WORKER_ID={i}",
                 f"WORKER_TYPE={tipo.upper()}"
