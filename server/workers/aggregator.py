@@ -2,8 +2,9 @@ import asyncio
 import logging
 from common.utils import initialize_log
 from workers.test import enviar_mock
-from workers.communication import inicializar_comunicacion, escuchar_colas_para_aggregator
+from workers.communication import inicializar_comunicacion, escuchar_colas
 
+AGGREGATOR = "aggregator"
 
 # -----------------------
 # Nodo Filtro
@@ -53,20 +54,12 @@ class AggregatorNode:
 
 aggregator = AggregatorNode()
 
-async def procesar_mensajes(consulta_id, contenido, enviar_func):
-    if contenido.strip() == b"EOF":
-        logging.info(f"Consulta {consulta_id} aggregator recibió EOF")
-        return
-    resultado = aggregator.ejecutar_consulta(consulta_id, contenido)
-    destino = f"gateway_output_{consulta_id}"
-    await enviar_func(destino, resultado)
-
 
 async def main():
     initialize_log("INFO")
     logging.info("Se inicializó el worker aggregator")
     await inicializar_comunicacion()
-    await escuchar_colas_para_aggregator(procesar_mensajes)
+    await escuchar_colas(AGGREGATOR, aggregator)
     #await enviar_mock() Mock para probar consultas
     await asyncio.Future()
 

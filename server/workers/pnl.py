@@ -2,8 +2,9 @@ import asyncio
 import logging
 from common.utils import initialize_log
 from workers.test import enviar_mock
-from workers.communication import inicializar_comunicacion, escuchar_colas_para_pnl
+from workers.communication import inicializar_comunicacion, escuchar_colas
 
+PNL = "pnl"
 
 # -----------------------
 # Nodo Filtro
@@ -35,20 +36,12 @@ class PnlNode:
 
 pnl = PnlNode()
 
-async def procesar_mensajes(consulta_id, contenido, enviar_func):
-    if contenido.strip() == b"EOF":
-        logging.info(f"Consulta {consulta_id} pnl recibió EOF")
-        return
-    resultado = pnl.ejecutar_consulta(consulta_id, contenido)
-    destino = f"gateway_output_{consulta_id}"
-    await enviar_func(destino, resultado)
-
 
 async def main():
     initialize_log("INFO")
     logging.info("Se inicializó el worker pnl")
     await inicializar_comunicacion()
-    await escuchar_colas_para_pnl(procesar_mensajes)
+    await escuchar_colas(PNL, pnl)
     #await enviar_mock() Mock para probar consultas
     await asyncio.Future()
 

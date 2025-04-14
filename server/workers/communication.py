@@ -2,9 +2,24 @@ import aio_pika
 import logging
 from common.utils import esperar_conexion
 
-
+# ----------------------
+# Constantes globales
+# ----------------------
+FILTER = 1
+AGGREGATOR = 2
+PNL = 5
 conexion = None
 canal = None
+
+# ----------------------
+# Diccionario global
+# ----------------------
+ROLES = {
+    "filter": FILTER,
+    "aggregator": AGGREGATOR,
+    "pnl": PNL,
+}
+
 
 # ---------------------
 # GENERALES
@@ -23,6 +38,48 @@ async def enviar_mensaje(routing_key, body):
     )
 
 
+# ---------------------
+# GENERAL
+# ---------------------
+def obtener_cola_output(entrada, consulta_id):
+    nombre_salida = f"gateway_output_{consulta_id}"
+    if entrada == "filter" and consulta_id >= 2:
+        nombre_salida = f"aggregator_consult_{consulta_id}"
+    if entrada == "pnl":
+        nombre_salida = f"filter_consult_{consulta_id}"
+    return nombre_salida
+
+async def escuchar_colas(entrada, nodo):
+    for consulta_id in range(ROLES[entrada], 6):
+        nombre_entrada = f"{entrada}_consult_{consulta_id}"
+        nombre_salida = obtener_cola_output(entrada, consulta_id)
+
+        await canal.declare_queue(nombre_entrada, durable=True)
+        await canal.declare_queue(nombre_salida, durable=True)
+
+        async def wrapper(mensaje, consulta_id=consulta_id):
+            async with mensaje.process():
+                contenido = mensaje.body.decode('utf-8') 
+                await procesar_mensajes(nodo, consulta_id, contenido, enviar_mensaje)
+
+        queue = await canal.get_queue(nombre_entrada)
+        await queue.consume(wrapper)
+        logging.info(f"Escuchando en {nombre_entrada}")
+
+
+async def procesar_mensajes(nodo, consulta_id, contenido, enviar_func):
+    if contenido.strip() == "EOF":
+        logging.info(f"Consulta {consulta_id} filter recibió EOF")
+        return
+    resultado = nodo.ejecutar_consulta(consulta_id, contenido)
+    destino = f"gateway_output_{consulta_id}" if consulta_id == 1 else f"aggregator_consult_{consulta_id}"
+    await enviar_func(destino, resultado)
+
+
+
+
+
+"""
 # ---------------------
 # FILTRO
 # ---------------------
@@ -48,7 +105,7 @@ async def escuchar_colas_para_filtro(procesar_mensajes):
 # AGGREGATOR
 # ---------------------
 async def escuchar_colas_para_aggregator(procesar_mensajes):
-    for consulta_id in range(1, 6):
+    for consulta_id in range(2, 6):
         nombre_entrada = f"aggregator_consult_{consulta_id}"
         nombre_salida = f"gateway_output_{consulta_id}"
 
@@ -69,9 +126,9 @@ async def escuchar_colas_para_aggregator(procesar_mensajes):
 # PNL
 # ---------------------
 async def escuchar_colas_para_pnl(procesar_mensajes):
-    for consulta_id in range(1, 6):
+    for consulta_id in range(5, 6):
         nombre_entrada = f"pnl_consult_{consulta_id}"
-        nombre_salida = f"gateway_output_{consulta_id}"
+        nombre_salida = f"filter_consult_{consulta_id}"
 
         await canal.declare_queue(nombre_entrada, durable=True)
         await canal.declare_queue(nombre_salida, durable=True)
@@ -84,3 +141,5 @@ async def escuchar_colas_para_pnl(procesar_mensajes):
         queue = await canal.get_queue(nombre_entrada)
         await queue.consume(wrapper)
         logging.info(f"Escuchando en {nombre_entrada}")
+
+"""
