@@ -26,7 +26,7 @@ async def enviar_mensaje(routing_key, body):
 # ---------------------
 # FILTRO
 # ---------------------
-async def escuchar_colas_para_filtro(callback_filtro):
+async def escuchar_colas_para_filtro(procesar_mensajes):
     for consulta_id in range(1, 6):
         nombre_entrada = f"filter_consult_{consulta_id}"
         nombre_salida = f"gateway_output_{consulta_id}" if consulta_id == 1 else f"aggregator_consult_{consulta_id}"
@@ -37,7 +37,7 @@ async def escuchar_colas_para_filtro(callback_filtro):
         async def wrapper(mensaje, consulta_id=consulta_id):
             async with mensaje.process():
                 contenido = mensaje.body.decode('utf-8') 
-                await callback_filtro(consulta_id, contenido, enviar_mensaje)
+                await procesar_mensajes(consulta_id, contenido, enviar_mensaje)
 
         queue = await canal.get_queue(nombre_entrada)
         await queue.consume(wrapper)
