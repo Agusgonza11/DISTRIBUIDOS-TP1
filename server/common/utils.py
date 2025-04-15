@@ -3,6 +3,7 @@ import aio_pika # type: ignore
 import asyncio
 from io import StringIO
 import pandas as pd # type: ignore
+import os
 
 
 def initialize_log(logging_level):
@@ -37,7 +38,15 @@ def prepare_data_aggregator_consult_3(min, max):
 
     return "\n".join(lines)
 
-
+def cargar_eofs():
+    raw = os.getenv("EOF_ESPERADOS", "")
+    eofs = {}
+    if raw:
+        for par in raw.split(","):
+            if ":" in par:
+                k, v = par.split(":")
+                eofs[int(k)] = int(v)
+    return eofs
 
 async def esperar_conexion():
     for i in range(10):

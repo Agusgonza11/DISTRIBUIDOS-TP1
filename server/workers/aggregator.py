@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import os
-from common.utils import create_dataframe, initialize_log, prepare_data_aggregator_consult_3
+from common.utils import cargar_eofs, create_dataframe, initialize_log, prepare_data_aggregator_consult_3
 from workers.test import enviar_mock
 from workers.communication import inicializar_comunicacion, escuchar_colas
 
@@ -13,6 +13,7 @@ AGGREGATOR = "aggregator"
 class AggregatorNode:
     def __init__(self):
         self.resultados_parciales = {}
+        self.eof_esperados = cargar_eofs()
 
     def guardar_datos(self, consulta_id, datos):
         if consulta_id not in self.resultados_parciales:
@@ -77,6 +78,7 @@ class AggregatorNode:
     
 
     async def procesar_mensajes(self, destino, consulta_id, contenido, enviar_func):
+        logging.info(f"la cantidad de eof es {self.eof_esperados}")
         if contenido.strip() == "EOF":
             logging.info(f"Consulta {consulta_id} recibió EOF")
             resultado = self.ejecutar_consulta(consulta_id)
