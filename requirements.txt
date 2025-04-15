@@ -1,4 +1,4 @@
 aio-pika
 pandas
-transformers
+#transformers
 #torch

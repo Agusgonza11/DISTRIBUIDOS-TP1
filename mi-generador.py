@@ -1,16 +1,39 @@
 import sys
 import yaml
 
+def distribuir_consultas(tipo, cantidad):
+    """Devuelve un diccionario: {nodo_index: [consultas_asignadas]}"""
+    if tipo == "filter":
+        consultas = [1, 2, 3, 4, 5]
+    elif tipo == "joiner":
+        consultas = [3, 4]
+    elif tipo == "aggregator":
+        consultas = [1, 2, 3, 4, 5]
+    elif tipo == "pnl":
+        consultas = [5]
+    else:
+        return {}
+
+    asignacion = {i: [] for i in range(1, cantidad + 1)}
+    for i, consulta in enumerate(consultas):
+        idx = (i % cantidad) + 1
+        asignacion[idx].append(consulta)
+    return asignacion
+
+
 def agregar_workers(compose, tipo, cantidad):
+    consultas_por_nodo = distribuir_consultas(tipo, int(cantidad))
     for i in range(1, int(cantidad) + 1):
         nombre = f"{tipo}{i}"
+        consultas = consultas_por_nodo.get(i, [])
         compose["services"][nombre] = {
             "container_name": nombre,
             "image": f"{tipo}:latest",
             "entrypoint": f"python3 workers/{tipo}.py",
             "environment": [
                 f"WORKER_ID={i}",
-                f"WORKER_TYPE={tipo.upper()}"
+                f"WORKER_TYPE={tipo.upper()}",
+                f"CONSULTAS={','.join(map(str, consultas))}"
             ],
             "networks": ["testing_net"],
             "depends_on": ["server", "rabbitmq"]

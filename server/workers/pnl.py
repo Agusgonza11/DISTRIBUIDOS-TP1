@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from common.utils import create_dataframe, initialize_log
 from workers.test import enviar_mock
 from workers.communication import inicializar_comunicacion, escuchar_colas
@@ -55,8 +56,10 @@ pnl = PnlNode()
 async def main():
     initialize_log("INFO")
     logging.info("Se inicializó el worker pnl")
+    consultas_str = os.getenv("CONSULTAS", "")
+    consultas = list(map(int, consultas_str.split(","))) if consultas_str else []
     await inicializar_comunicacion()
-    await escuchar_colas(PNL, pnl)
+    await escuchar_colas(PNL, pnl, consultas)
     #await enviar_mock() Mock para probar consultas
     await asyncio.Future()
 

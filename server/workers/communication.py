@@ -68,8 +68,8 @@ async def enviar_mensaje(routing_key, body):
 # ---------------------
 # GENERAL
 # ---------------------
-async def escuchar_colas(entrada, nodo):
-    for consulta_id in range(ENTRADAS[entrada], SALIDAS[entrada]):
+async def escuchar_colas(entrada, nodo, consultas):
+    for consulta_id in consultas:
         nombre_entrada = f"{entrada}_consult_{consulta_id}"
         nombre_salida = COLAS[nombre_entrada]
 

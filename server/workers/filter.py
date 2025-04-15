@@ -3,6 +3,7 @@ import logging
 from common.utils import create_dataframe, initialize_log, prepare_data_filter_consult_1
 from workers.test import enviar_mock
 from workers.communication import inicializar_comunicacion, escuchar_colas
+import os
 
 FILTER = "filter"
 
@@ -109,8 +110,10 @@ filtro = FiltroNode()
 async def main():
     initialize_log("INFO")
     logging.info("Se inicializó el worker filter")
+    consultas_str = os.getenv("CONSULTAS", "")
+    consultas = list(map(int, consultas_str.split(","))) if consultas_str else []
     await inicializar_comunicacion()
-    await escuchar_colas(FILTER, filtro)
+    await escuchar_colas(FILTER, filtro, consultas)
     await enviar_mock() #Mock para probar consultas
     await asyncio.Future()
 
