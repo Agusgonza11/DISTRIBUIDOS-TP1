@@ -81,10 +81,13 @@ class AggregatorNode:
         logging.info(f"la cantidad de eof es {self.eof_esperados}")
         if contenido.strip() == "EOF":
             logging.info(f"Consulta {consulta_id} recibió EOF")
-            resultado = self.ejecutar_consulta(consulta_id)
-            await enviar_func(destino, resultado)
-            await enviar_func(destino, "EOF")
-            return
+            self.eof_esperados[consulta_id] -= 1
+            if self.eof_esperados[consulta_id] == 0:
+                logging.info(f"Consulta {consulta_id} recibió TODOS los EOF que esperaba")
+                resultado = self.ejecutar_consulta(consulta_id)
+                await enviar_func(destino, resultado)
+                await enviar_func(destino, "EOF")
+                return
         self.guardar_datos(consulta_id, contenido)
 
 

@@ -60,7 +60,7 @@ async def main():
     consultas = list(map(int, consultas_str.split(","))) if consultas_str else []
     await inicializar_comunicacion()
     await escuchar_colas(PNL, pnl, consultas)
-    #await enviar_mock() Mock para probar consultas
+    #await enviar_mock() # Mock para probar consultas
     await asyncio.Future()
 
 asyncio.run(main())
