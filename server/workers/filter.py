@@ -11,7 +11,6 @@ FILTER = "filter"
 # -----------------------
 class FiltroNode:
     def ejecutar_consulta(self, consulta_id, datos):
-        # Acá iría la lógica específica para cada tipo de consulta
         lineas = datos.strip().split("\n")
         logging.info(f"Ejecutando consulta {consulta_id} con {len(lineas)} elementos")
         
@@ -89,6 +88,15 @@ class FiltroNode:
         csv_q5 = q5_input_df.to_csv(index=False)
         logging.info(f"lo que voy a devolver es {csv_q5}")
         return csv_q5
+    
+    async def procesar_mensajes(self, destino, consulta_id, contenido, enviar_func):
+        if contenido.strip() == "EOF":
+            logging.info(f"Consulta {consulta_id} recibió EOF")
+            await enviar_func(destino, "EOF")
+            return
+        resultado = self.ejecutar_consulta(consulta_id, contenido)
+        await enviar_func(destino, resultado)
+
     
 
 

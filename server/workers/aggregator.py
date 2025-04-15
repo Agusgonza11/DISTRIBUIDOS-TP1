@@ -10,10 +10,17 @@ AGGREGATOR = "aggregator"
 # Nodo Filtro
 # -----------------------
 class AggregatorNode:
-    def ejecutar_consulta(self, consulta_id, datos):
-        # Acá iría la lógica específica para cada tipo de consulta
-        lineas = datos.strip().split("\n")
+    def __init__(self):
+        self.resultados_parciales = {}
 
+    def guardar_datos(self, consulta_id, datos):
+        if consulta_id not in self.resultados_parciales:
+            self.resultados_parciales[consulta_id] = []
+        self.resultados_parciales[consulta_id].append(datos)
+
+    def ejecutar_consulta(self, consulta_id):
+        datos = "\n".join(self.resultados_parciales.get(consulta_id, []))
+        lineas = datos.strip().split("\n")
         logging.info(f"Ejecutando consulta {consulta_id} con {len(lineas)} elementos")
         
         match consulta_id:
@@ -67,6 +74,15 @@ class AggregatorNode:
         logging.info(f"lo que voy a devolver es {csv_q5}")
         return csv_q5
     
+
+    async def procesar_mensajes(self, destino, consulta_id, contenido, enviar_func):
+        if contenido.strip() == "EOF":
+            logging.info(f"Consulta {consulta_id} recibió EOF")
+            resultado = self.ejecutar_consulta(consulta_id)
+            await enviar_func(destino, resultado)
+            await enviar_func(destino, "EOF")
+            return
+        self.guardar_datos(consulta_id, contenido)
 
 
 # -----------------------
