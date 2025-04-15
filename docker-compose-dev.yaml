@@ -7,6 +7,8 @@ services:
     - 15672:15672
     networks:
     - testing_net
+    logging:
+      driver: "none"
   server:
     container_name: server
     image: server:latest
