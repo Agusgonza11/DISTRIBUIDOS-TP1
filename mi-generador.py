@@ -14,10 +14,18 @@ def distribuir_consultas(tipo, cantidad):
     else:
         return {}
 
-    asignacion = {i: [] for i in range(1, cantidad + 1)}
-    for i, consulta in enumerate(consultas):
-        idx = (i % cantidad) + 1
-        asignacion[idx].append(consulta)
+    cantidad = int(cantidad)
+    asignacion = {}
+
+    if len(consultas) <= cantidad:
+        for i in range(1, cantidad + 1):
+            asignacion[i] = consultas.copy()
+    else:
+        asignacion = {i: [] for i in range(1, cantidad + 1)}
+        for i, consulta in enumerate(consultas):
+            idx = (i % cantidad) + 1
+            asignacion[idx].append(consulta)
+
     return asignacion
 
 
