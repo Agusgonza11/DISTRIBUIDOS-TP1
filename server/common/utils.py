@@ -23,7 +23,7 @@ def create_dataframe(csv):
     return pd.read_csv(StringIO(csv))
 
 
-def prepare_data_filter_consult_1(data):
+def prepare_data_filter(data):
     data = create_dataframe(data)
     data['release_date'] = pd.to_datetime(data['release_date'], errors='coerce')
     return data

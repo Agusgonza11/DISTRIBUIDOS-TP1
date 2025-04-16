@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from common.utils import create_dataframe, initialize_log, prepare_data_filter_consult_1
+from common.utils import create_dataframe, initialize_log, prepare_data_filter
 from workers.test import enviar_mock
 from workers.communication import inicializar_comunicacion, escuchar_colas
 import os
@@ -31,8 +31,8 @@ class FiltroNode:
                 return []
 
     
-    def filtro_consulta_3_4(datos):
-        datos = create_dataframe(datos)
+    def filtro_consulta_3_4(self, datos):
+        datos = prepare_data_filter(datos)
         movies_arg_post_2000 = datos[
             (datos['production_countries'].str.contains('Argentina', case=False, na=False)) &
             (datos['release_date'].dt.year >= 2000)
@@ -43,7 +43,7 @@ class FiltroNode:
 
     def consulta_1(self, datos):
         logging.info("Procesando datos para consulta 1")
-        datos = prepare_data_filter_consult_1(datos)
+        datos = prepare_data_filter(datos)
         movies_argentina_españa_00s_df = datos[
             (datos['production_countries'].str.contains('Argentina', case=False, na=False)) & 
             (datos['production_countries'].str.contains('Spain', case=False, na=False)) & 

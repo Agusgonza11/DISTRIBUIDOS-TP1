@@ -33,7 +33,7 @@ class PnlNode:
         datos['sentiment'] = datos['overview'].fillna('').apply(lambda x: sentiment_analyzer(x)[0]['label'])
         csv_q5 = datos.to_csv(index=False)
         logging.info(f"lo que voy a devolver es {csv_q5}")
-        return datos
+        return csv_q5
     
     async def procesar_mensajes(self, destino, consulta_id, contenido, enviar_func):
         if contenido.strip() == "EOF":

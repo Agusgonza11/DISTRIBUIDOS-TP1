@@ -106,7 +106,7 @@ async def main():
 
     await inicializar_comunicacion()
     await escuchar_colas(AGGREGATOR, aggregator, consultas)
-    #await enviar_mock() Mock para probar consultas
+    #await enviar_mock() # Mock para probar consultas
     await asyncio.Future()
 
 asyncio.run(main())
