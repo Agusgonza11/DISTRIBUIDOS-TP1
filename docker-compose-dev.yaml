@@ -7,6 +7,8 @@ services:
     - 15672:15672
     networks:
     - testing_net
+    logging:
+      driver: "none"
   server:
     container_name: server
     image: server:latest
@@ -17,7 +19,7 @@ services:
     networks:
     - testing_net
   client:
-    container_name: client1
+    container_name: client
     image: client:latest
     entrypoint: /client
     environment:
@@ -30,22 +32,50 @@ services:
   filter1:
     container_name: filter1
     image: filter:latest
-    entrypoint: python3 /filter.py
+    entrypoint: python3 workers/filter.py
     environment:
     - WORKER_ID=1
     - WORKER_TYPE=FILTER
+    - CONSULTAS=1,5
     networks:
     - testing_net
     depends_on:
     - server
     - rabbitmq
-  joiner1:
-    container_name: joiner1
-    image: joiner:latest
-    entrypoint: python3 /joiner.py
+  filter2:
+    container_name: filter2
+    image: filter:latest
+    entrypoint: python3 workers/filter.py
     environment:
-    - WORKER_ID=1
-    - WORKER_TYPE=JOINER
+    - WORKER_ID=2
+    - WORKER_TYPE=FILTER
+    - CONSULTAS=2
+    networks:
+    - testing_net
+    depends_on:
+    - server
+    - rabbitmq
+  filter3:
+    container_name: filter3
+    image: filter:latest
+    entrypoint: python3 workers/filter.py
+    environment:
+    - WORKER_ID=3
+    - WORKER_TYPE=FILTER
+    - CONSULTAS=3
+    networks:
+    - testing_net
+    depends_on:
+    - server
+    - rabbitmq
+  filter4:
+    container_name: filter4
+    image: filter:latest
+    entrypoint: python3 workers/filter.py
+    environment:
+    - WORKER_ID=4
+    - WORKER_TYPE=FILTER
+    - CONSULTAS=4
     networks:
     - testing_net
     depends_on:
@@ -54,10 +84,24 @@ services:
   aggregator1:
     container_name: aggregator1
     image: aggregator:latest
-    entrypoint: python3 /aggregator.py
+    entrypoint: python3 workers/aggregator.py
     environment:
     - WORKER_ID=1
     - WORKER_TYPE=AGGREGATOR
+    - CONSULTAS=1,3,5
+    networks:
+    - testing_net
+    depends_on:
+    - server
+    - rabbitmq
+  aggregator2:
+    container_name: aggregator2
+    image: aggregator:latest
+    entrypoint: python3 workers/aggregator.py
+    environment:
+    - WORKER_ID=2
+    - WORKER_TYPE=AGGREGATOR
+    - CONSULTAS=2,4
     networks:
     - testing_net
     depends_on:
@@ -66,10 +110,37 @@ services:
   pnl1:
     container_name: pnl1
     image: pnl:latest
-    entrypoint: python3 /pnl.py
+    entrypoint: python3 workers/pnl.py
     environment:
     - WORKER_ID=1
     - WORKER_TYPE=PNL
+    - CONSULTAS=5
+    networks:
+    - testing_net
+    depends_on:
+    - server
+    - rabbitmq
+  pnl2:
+    container_name: pnl2
+    image: pnl:latest
+    entrypoint: python3 workers/pnl.py
+    environment:
+    - WORKER_ID=2
+    - WORKER_TYPE=PNL
+    - CONSULTAS=5
+    networks:
+    - testing_net
+    depends_on:
+    - server
+    - rabbitmq
+  pnl3:
+    container_name: pnl3
+    image: pnl:latest
+    entrypoint: python3 workers/pnl.py
+    environment:
+    - WORKER_ID=3
+    - WORKER_TYPE=PNL
+    - CONSULTAS=5
     networks:
     - testing_net
     depends_on:

@@ -1,7 +1,13 @@
 FROM python:3.11-slim
 
+COPY server /app
+
 WORKDIR /app
 
-COPY server/workers/aggregator.py .
+ENV PYTHONPATH=/app
 
-ENTRYPOINT ["python3", "aggregator.py"]
+COPY requirements.txt .
+
+RUN pip install --no-cache-dir -r requirements.txt
+
+ENTRYPOINT ["python3", "workers/aggregator.py"]

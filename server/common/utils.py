@@ -1,51 +1,59 @@
-import csv
-import datetime
-import time
+import logging
+import aio_pika # type: ignore
+import asyncio
+from io import StringIO
+import pandas as pd # type: ignore
+import os
 
 
-""" Bets storage location. """
-STORAGE_FILEPATH = "./bets.csv"
-""" Simulated winner number in the lottery contest. """
-LOTTERY_WINNER_NUMBER = 7574
+def initialize_log(logging_level):
+    """
+    Python custom logging initialization
+
+    Current timestamp is added to be able to identify in docker
+    compose logs the date when the log has arrived
+    """
+    logging.basicConfig(
+        format='%(asctime)s %(levelname)-8s %(message)s',
+        level=logging_level,
+        datefmt='%Y-%m-%d %H:%M:%S',
+    )
+
+def create_dataframe(csv):
+    return pd.read_csv(StringIO(csv))
 
 
-""" A lottery bet registry. """
-class Bet:
-    def __init__(self, agency: str, first_name: str, last_name: str, document: str, birthdate: str, number: str):
-        """
-        agency must be passed with integer format.
-        birthdate must be passed with format: 'YYYY-MM-DD'.
-        number must be passed with integer format.
-        """
-        self.agency = int(agency)
-        self.first_name = first_name
-        self.last_name = last_name
-        self.document = document
-        self.birthdate = datetime.date.fromisoformat(birthdate)
-        self.number = int(number)
+def prepare_data_filter(data):
+    data = create_dataframe(data)
+    data['release_date'] = pd.to_datetime(data['release_date'], errors='coerce')
+    return data
 
-""" Checks whether a bet won the prize or not. """
-def has_won(bet: Bet) -> bool:
-    return bet.number == LOTTERY_WINNER_NUMBER
+def prepare_data_aggregator_consult_3(min, max):
+    headers = ["id", "title", "rating"]
+    lines = [",".join(headers)]
 
-"""
-Persist the information of each bet in the STORAGE_FILEPATH file.
-Not thread-safe/process-safe.
-"""
-def store_bets(bets: list[Bet]) -> None:
-    with open(STORAGE_FILEPATH, 'a+') as file:
-        writer = csv.writer(file, quoting=csv.QUOTE_MINIMAL)
-        for bet in bets:
-            writer.writerow([bet.agency, bet.first_name, bet.last_name,
-                             bet.document, bet.birthdate, bet.number])
+    for fila in [max, min]:
+        linea = ",".join(str(fila[h]) for h in headers)
+        lines.append(linea)
 
-"""
-Loads the information all the bets in the STORAGE_FILEPATH file.
-Not thread-safe/process-safe.
-"""
-def load_bets() -> list[Bet]:
-    with open(STORAGE_FILEPATH, 'r') as file:
-        reader = csv.reader(file, quoting=csv.QUOTE_MINIMAL)
-        for row in reader:
-            yield Bet(row[0], row[1], row[2], row[3], row[4], row[5])
+    return "\n".join(lines)
 
+def cargar_eofs():
+    raw = os.getenv("EOF_ESPERADOS", "")
+    eofs = {}
+    if raw:
+        for par in raw.split(","):
+            if ":" in par:
+                k, v = par.split(":")
+                eofs[int(k)] = int(v)
+    return eofs
+
+async def esperar_conexion():
+    for i in range(10):
+        try:
+            conexion = await aio_pika.connect_robust("amqp://guest:guest@rabbitmq/")
+            return conexion
+        except Exception as e:
+            logging.warning(f"Intento {i+1}: No se pudo conectar a RabbitMQ: {e}")
+            await asyncio.sleep(2)
+    raise Exception("No se pudo conectar a RabbitMQ después de varios intentos")
