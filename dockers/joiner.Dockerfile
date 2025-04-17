@@ -1,7 +1,13 @@
 FROM python:3.11-slim
 
+COPY server /app
+
 WORKDIR /app
 
-COPY server/workers/joiner.py .
+ENV PYTHONPATH=/app
 
-ENTRYPOINT ["python3", "joiner.py"]
+COPY requirements.txt .
+
+RUN pip install --no-cache-dir -r requirements.txt
+
+ENTRYPOINT ["python3", "workers/joiner.py"]

@@ -35,7 +35,7 @@ def distribuir_consultas(tipo, cantidad):
     return asignacion
 
 
-def calcular_eofs(cant_filter, cant_joiner, cant_pnl):
+def calcular_eofs_aggregator(cant_filter, cant_joiner, cant_pnl):
     origen = {
         2: "filter",
         3: "joiner",
@@ -59,12 +59,27 @@ def calcular_eofs(cant_filter, cant_joiner, cant_pnl):
 
     return eof_por_consulta
 
+def calcular_eofs_joiner(cant_filter):
+    consultas_interes = [3, 4]
+    asignacion = distribuir_consultas("filter", cant_filter)
+
+    eof_por_consulta = {}
+    for consulta in consultas_interes:
+        cuenta = sum(1 for consultas in asignacion.values() if consulta in consultas)
+        eof_por_consulta[consulta] = cuenta
+
+    return eof_por_consulta
+
+
 def agregar_workers(compose, tipo, cantidad, cant_filter=0, cant_joiner=0, cant_pnl=0):
     consultas_por_nodo = distribuir_consultas(tipo, int(cantidad))
 
     eof_str = ""
     if tipo == "aggregator":
-        eof_dict = calcular_eofs(int(cant_filter), int(cant_joiner), int(cant_pnl))
+        eof_dict = calcular_eofs_aggregator(int(cant_filter), int(cant_joiner), int(cant_pnl))
+        eof_str = ",".join(f"{k}:{v}" for k, v in eof_dict.items())
+    if tipo == "joiner":
+        eof_dict = calcular_eofs_joiner(int(cant_filter))
         eof_str = ",".join(f"{k}:{v}" for k, v in eof_dict.items())
 
     for i in range(1, int(cantidad) + 1):
@@ -85,7 +100,8 @@ def agregar_workers(compose, tipo, cantidad, cant_filter=0, cant_joiner=0, cant_
 
         if tipo == "aggregator":
             compose["services"][nombre]["environment"].append(f"EOF_ESPERADOS={eof_str}")
-
+        if tipo == "joiner":
+            compose["services"][nombre]["environment"].append(f"EOF_ESPERADOS={eof_str}")
 
 
 def generar_yaml(cant_filter, cant_joiner, cant_aggregator, cant_pnl):
@@ -132,7 +148,7 @@ def generar_yaml(cant_filter, cant_joiner, cant_aggregator, cant_pnl):
     }
 
     agregar_workers(compose, "filter", cant_filter)
-    agregar_workers(compose, "joiner", cant_joiner)
+    agregar_workers(compose, "joiner", cant_joiner, cant_filter)
     agregar_workers(compose, "aggregator", cant_aggregator, cant_filter, cant_joiner, cant_pnl)
     agregar_workers(compose, "pnl", cant_pnl)
 
