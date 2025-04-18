@@ -1,0 +1,13 @@
+query: "argentinian-spanish-productions"
+gateway:
+  input_address: "input_gateway:5000"
+  output_address: "output_gateway:5000"
+file:
+  movies_path: "./app/movies.csv"
+  credits_path: "./app/credits.csv"
+  ratings_path: "./app/ratings.csv"
+batch:
+  max_size: 1000
+  max_amount: 8192
+log:
+  level: "INFO"
