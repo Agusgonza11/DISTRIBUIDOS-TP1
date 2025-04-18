@@ -5,12 +5,6 @@ from common.utils import esperar_conexion
 # ----------------------
 # Constantes globales
 # ----------------------
-FILTER = 1
-AGGREGATOR = 2
-PNL = 5
-JOINER = 3
-LIMITE_NODOS_1 = 6
-LIMITE_NODOS_2 = 5
 conexion = None
 canal = None
 
@@ -23,7 +17,6 @@ COLAS = {
     "filter_consult_3": "joiner_consult_3",
     "filter_consult_4": "joiner_consult_4",
     "filter_consult_5": "pnl_consult_5",
-    "aggregator_consult_1": "gateway_output",
     "aggregator_consult_2": "gateway_output",
     "aggregator_consult_3": "gateway_output",
     "aggregator_consult_4": "gateway_output",
@@ -34,19 +27,6 @@ COLAS = {
 }
 
 
-ENTRADAS = {
-    "filter": FILTER,
-    "aggregator": AGGREGATOR,
-    "pnl": PNL,
-    "joiner": JOINER,
-}
-
-SALIDAS = {
-    "filter": LIMITE_NODOS_1,
-    "aggregator": LIMITE_NODOS_1,
-    "pnl": LIMITE_NODOS_1,
-    "joiner": LIMITE_NODOS_2,
-}
 
 # ---------------------
 # GENERALES

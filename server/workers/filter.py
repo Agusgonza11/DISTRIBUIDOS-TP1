@@ -81,7 +81,6 @@ class FiltroNode:
 
     def consulta_5(self, datos):
         logging.info("Procesando datos para consulta 5")
-        # Filtra películas válidas con budget y revenue no nulos
         datos = create_dataframe(datos)
         q5_input_df = datos.copy()
         q5_input_df = q5_input_df.loc[q5_input_df['budget'] != 0]
