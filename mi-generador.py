@@ -70,6 +70,17 @@ def calcular_eofs_joiner(cant_filter):
 
     return eof_por_consulta
 
+def calcular_eofs_pnl(cant_filter):
+    consultas_interes = [5]
+    asignacion = distribuir_consultas("filter", cant_filter)
+
+    eof_por_consulta = {}
+    for consulta in consultas_interes:
+        cuenta = sum(1 for consultas in asignacion.values() if consulta in consultas)
+        eof_por_consulta[consulta] = cuenta
+
+    return eof_por_consulta
+
 
 def agregar_workers(compose, tipo, cantidad, cant_filter=0, cant_joiner=0, cant_pnl=0):
     consultas_por_nodo = distribuir_consultas(tipo, int(cantidad))
@@ -80,6 +91,9 @@ def agregar_workers(compose, tipo, cantidad, cant_filter=0, cant_joiner=0, cant_
         eof_str = ",".join(f"{k}:{v}" for k, v in eof_dict.items())
     if tipo == "joiner":
         eof_dict = calcular_eofs_joiner(int(cant_filter))
+        eof_str = ",".join(f"{k}:{v}" for k, v in eof_dict.items())
+    if tipo == "pnl":
+        eof_dict = calcular_eofs_pnl(int(cant_filter))
         eof_str = ",".join(f"{k}:{v}" for k, v in eof_dict.items())
 
     for i in range(1, int(cantidad) + 1):
@@ -101,6 +115,8 @@ def agregar_workers(compose, tipo, cantidad, cant_filter=0, cant_joiner=0, cant_
         if tipo == "aggregator":
             compose["services"][nombre]["environment"].append(f"EOF_ESPERADOS={eof_str}")
         if tipo == "joiner":
+            compose["services"][nombre]["environment"].append(f"EOF_ESPERADOS={eof_str}")
+        if tipo == "pnl":
             compose["services"][nombre]["environment"].append(f"EOF_ESPERADOS={eof_str}")
 
 
@@ -150,7 +166,7 @@ def generar_yaml(cant_filter, cant_joiner, cant_aggregator, cant_pnl):
     agregar_workers(compose, "filter", cant_filter)
     agregar_workers(compose, "joiner", cant_joiner, cant_filter)
     agregar_workers(compose, "aggregator", cant_aggregator, cant_filter, cant_joiner, cant_pnl)
-    agregar_workers(compose, "pnl", cant_pnl)
+    agregar_workers(compose, "pnl", cant_pnl, cant_filter)
 
     return compose
 

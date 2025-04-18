@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import os
-from common.utils import create_dataframe, initialize_log
+from common.utils import cargar_eofs, create_dataframe, initialize_log
 from workers.test import enviar_mock
 from workers.communication import inicializar_comunicacion, escuchar_colas
 from transformers import pipeline # type: ignore
@@ -13,6 +13,10 @@ PNL = "pnl"
 # Nodo Filtro
 # -----------------------
 class PnlNode:
+    def __init__(self):
+        self.eof_esperados = cargar_eofs()
+
+
     def ejecutar_consulta(self, consulta_id, datos):
         lineas = datos.strip().split("\n")
 
@@ -35,12 +39,15 @@ class PnlNode:
         logging.info(f"lo que voy a devolver es {csv_q5}")
         return csv_q5
     
-    async def procesar_mensajes(self, destino, consulta_id, contenido, enviar_func):
-        if contenido.strip() == "EOF":
+    async def procesar_mensajes(self, destino, consulta_id, mensaje, enviar_func):
+        if mensaje.headers.get("type") == "EOF":
             logging.info(f"Consulta {consulta_id} recibió EOF")
-            await enviar_func(destino, "EOF")
-            return
-        resultado = self.ejecutar_consulta(consulta_id, contenido)
+            self.eof_esperados[consulta_id] -= 1
+            if self.eof_esperados[consulta_id] == 0:
+                logging.info(f"Consulta {consulta_id} recibió TODOS los EOF que esperaba")
+                await enviar_func(destino, "EOF")
+                return
+        resultado = self.ejecutar_consulta(consulta_id, mensaje.body.decode('utf-8'))
         await enviar_func(destino, resultado)
 
     

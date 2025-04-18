@@ -77,9 +77,9 @@ class AggregatorNode:
         return csv_q5
     
 
-    async def procesar_mensajes(self, destino, consulta_id, contenido, enviar_func):
+    async def procesar_mensajes(self, destino, consulta_id, mensaje, enviar_func):
         logging.info(f"la cantidad de eof es {self.eof_esperados}")
-        if contenido.strip() == "EOF":
+        if mensaje.headers.get("type") == "EOF":
             logging.info(f"Consulta {consulta_id} recibió EOF")
             self.eof_esperados[consulta_id] -= 1
             if self.eof_esperados[consulta_id] == 0:
@@ -88,6 +88,7 @@ class AggregatorNode:
                 await enviar_func(destino, resultado)
                 await enviar_func(destino, "EOF")
                 return
+        contenido = mensaje.body.decode('utf-8') 
         self.guardar_datos(consulta_id, contenido)
 
 

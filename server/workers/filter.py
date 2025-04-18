@@ -90,12 +90,12 @@ class FiltroNode:
         logging.info(f"lo que voy a devolver es {csv_q5}")
         return csv_q5
     
-    async def procesar_mensajes(self, destino, consulta_id, contenido, enviar_func):
-        if contenido.strip() == "EOF":
+    async def procesar_mensajes(self, destino, consulta_id, mensaje, enviar_func):
+        if mensaje.headers.get("type") == "EOF":
             logging.info(f"Consulta {consulta_id} recibió EOF")
             await enviar_func(destino, "EOF")
             return
-        resultado = self.ejecutar_consulta(consulta_id, contenido)
+        resultado = self.ejecutar_consulta(consulta_id, mensaje.body.decode('utf-8') )
         await enviar_func(destino, resultado)
 
     

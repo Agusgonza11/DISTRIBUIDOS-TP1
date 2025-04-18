@@ -78,8 +78,7 @@ async def escuchar_colas(entrada, nodo, consultas):
 
         async def wrapper(mensaje, consulta_id=consulta_id, nombre_salida=nombre_salida):
             async with mensaje.process():
-                contenido = mensaje.body.decode('utf-8') 
-                await nodo.procesar_mensajes(nombre_salida, consulta_id, contenido, enviar_mensaje)
+                await nodo.procesar_mensajes(nombre_salida, consulta_id, mensaje, enviar_mensaje)
 
         queue = await canal.get_queue(nombre_entrada)
         await queue.consume(wrapper)
