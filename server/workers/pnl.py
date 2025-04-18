@@ -45,7 +45,7 @@ class PnlNode:
             self.eof_esperados[consulta_id] -= 1
             if self.eof_esperados[consulta_id] == 0:
                 logging.info(f"Consulta {consulta_id} recibió TODOS los EOF que esperaba")
-                await enviar_func(destino, "EOF")
+                await enviar_func(destino, "EOF", headers={"type": "EOF"})
                 return
         resultado = self.ejecutar_consulta(consulta_id, mensaje.body.decode('utf-8'))
         await enviar_func(destino, resultado)

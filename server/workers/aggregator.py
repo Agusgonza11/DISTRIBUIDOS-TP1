@@ -86,7 +86,7 @@ class AggregatorNode:
                 logging.info(f"Consulta {consulta_id} recibió TODOS los EOF que esperaba")
                 resultado = self.ejecutar_consulta(consulta_id)
                 await enviar_func(destino, resultado)
-                await enviar_func(destino, "EOF")
+                await enviar_func(destino, "EOF", headers={"type": "EOF"})
                 return
         contenido = mensaje.body.decode('utf-8') 
         self.guardar_datos(consulta_id, contenido)

@@ -48,6 +48,17 @@ def cargar_eofs():
                 eofs[int(k)] = int(v)
     return eofs
 
+def cargar_eof_a_enviar():
+    raw = os.getenv("EOF_ENVIAR")
+    eofs = {}
+    if raw:
+        for par in raw.split(","):
+            if ":" in par:
+                k, v = par.split(":")
+                eofs[int(k)] = int(v)
+    return eofs
+
+
 async def esperar_conexion():
     for i in range(10):
         try:

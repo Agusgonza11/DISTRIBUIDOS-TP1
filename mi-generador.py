@@ -52,6 +52,30 @@ def distribuir_consultas_por_nodo(cant_filter=1, cant_joiner=1, cant_aggregator=
     return distribucion
 
 
+def calcular_eof_enviar_filters(consultas_por_nodo):
+    resultado = {}
+    
+    joiners = consultas_por_nodo["joiner"]
+    pnls = consultas_por_nodo["pnl"]
+
+    # Consulta → cantidad de nodos que la atienden
+    destinos = {
+        3: sum(1 for consultas in joiners.values() if 3 in consultas),
+        4: sum(1 for consultas in joiners.values() if 4 in consultas),
+        5: sum(1 for consultas in pnls.values() if 5 in consultas)
+    }
+
+    filters = consultas_por_nodo["filter"]
+    for filter_id, consultas in filters.items():
+        filtros = {}
+        for consulta in consultas:
+            if consulta in destinos:
+                filtros[consulta] = destinos[consulta]
+        resultado[filter_id] = filtros
+
+    return resultado
+
+
 def calcular_eofs(tipo, distribucion):
     """
     Devuelve el número de EOF_ESPERADOS para el tipo de worker dado según la distribución de consultas.
@@ -102,6 +126,7 @@ def agregar_workers(compose, cant_filter=1, cant_joiner=1, cant_aggregator=1, ca
     eof_joiner = calcular_eofs("joiner", consultas_por_nodo)
     eof_pnl = calcular_eofs("pnl", consultas_por_nodo)
     eof_aggregator = calcular_eofs("aggregator", consultas_por_nodo)
+    eof_enviar_por_filter = calcular_eof_enviar_filters(consultas_por_nodo)
 
     tipos = {
         "filter": cant_filter,
@@ -131,9 +156,13 @@ def agregar_workers(compose, cant_filter=1, cant_joiner=1, cant_aggregator=1, ca
                 eof_str = ",".join(f"{k}:{v}" for k, v in eof_aggregator.items())
                 env.append(f"EOF_ESPERADOS={eof_str}")
 
-            # EOF_ENVIAR para filters que atienden la consulta 5
-            if tipo == "filter" and 5 in consultas:
-                env.append(f"EOF_ENVIAR={cant_pnl}")
+            if tipo == "filter":
+                eof_map = eof_enviar_por_filter.get(i, {})
+                if eof_map:
+                    # Ejemplo: "3:2,5:1"
+                    eof_str = ",".join(f"{k}:{v}" for k, v in eof_map.items())
+                    env.append(f"EOF_ENVIAR={eof_str}")
+
 
             # Agregar al compose
             compose["services"][nombre] = {
@@ -155,7 +184,10 @@ def generar_yaml(cant_filter, cant_joiner, cant_aggregator, cant_pnl):
                 "container_name": "rabbitmq",
                 "image": "rabbitmq:management",
                 "ports": ["15672:15672"],
-                "networks": ["testing_net"]
+                "networks": ["testing_net"],
+                "logging": {
+                    "driver": "none"
+                }
             },
             "server": {
                 "container_name": "server",

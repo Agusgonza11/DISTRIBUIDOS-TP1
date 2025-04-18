@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from common.utils import create_dataframe, initialize_log, prepare_data_filter
+from common.utils import cargar_eof_a_enviar, create_dataframe, initialize_log, prepare_data_filter
 from workers.test import enviar_mock
 from workers.communication import inicializar_comunicacion, escuchar_colas
 import os
@@ -11,6 +11,9 @@ FILTER = "filter"
 # Nodo Filtro
 # -----------------------
 class FiltroNode:
+    def __init__(self):
+        self.eof_a_enviar = cargar_eof_a_enviar()
+
     def ejecutar_consulta(self, consulta_id, datos):
         lineas = datos.strip().split("\n")
         logging.info(f"Ejecutando consulta {consulta_id} con {len(lineas)} elementos")
@@ -92,9 +95,11 @@ class FiltroNode:
     async def procesar_mensajes(self, destino, consulta_id, mensaje, enviar_func):
         if mensaje.headers.get("type") == "EOF":
             logging.info(f"Consulta {consulta_id} recibió EOF")
-            await enviar_func(destino, "EOF")
+            eof_a_enviar = self.eof.get(consulta_id, 1) if consulta_id in [3, 4, 5] else 1
+            for _ in range(eof_a_enviar):
+                await enviar_func(destino, "EOF", headers={"type": "EOF"})
             return
-        resultado = self.ejecutar_consulta(consulta_id, mensaje.body.decode('utf-8') )
+        resultado = self.ejecutar_consulta(consulta_id, mensaje.body.decode('utf-8'))
         await enviar_func(destino, resultado)
 
     

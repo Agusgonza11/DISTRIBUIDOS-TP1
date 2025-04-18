@@ -38,10 +38,10 @@ async def inicializar_comunicacion():
     await canal.set_qos(prefetch_count=1)
 
 
-async def enviar_mensaje(routing_key, body):
+async def enviar_mensaje(routing_key, body, headers=None):
     await canal.default_exchange.publish(
-        aio_pika.Message(body=body.encode()),
-        routing_key=routing_key
+        aio_pika.Message(body=body.encode(), headers=headers),
+        routing_key=routing_key,
     )
 
 
