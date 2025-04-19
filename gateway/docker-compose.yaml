@@ -1,0 +1,31 @@
+services:
+  rabbitmq:
+    image: 'rabbitmq:3-management'
+    networks:
+      - distribuidos
+    ports:
+      - "15672:15672"
+      - "5672:5672"
+    healthcheck:
+      test: [ "CMD", "rabbitmqctl", "status"]
+      interval: 5s
+      timeout: 15s
+      retries: 5
+
+  input_gateway:
+    container_name: input_gateway
+    image: gateway:latest
+    entrypoint: /input_gateway
+    environment:
+      - CLI_LOG_LEVEL=DEBUG
+    networks:
+      - distribuidos
+    depends_on:
+      - rabbitmq
+
+networks:
+  distribuidos:
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.25.125.0/24

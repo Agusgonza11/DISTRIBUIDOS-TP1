@@ -1,4 +1,4 @@
-query: "argentinian-spanish-productions"
+query: "ARGENTINIAN-SPANISH-PRODUCTIONS"
 gateway:
   input_address: "input_gateway:5000"
   output_address: "output_gateway:5000"

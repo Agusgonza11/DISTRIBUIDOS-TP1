@@ -15,7 +15,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 	"tp1-sistemas-distribuidos/internal/config"
 )
@@ -90,8 +89,14 @@ func (c *Client) sendMovies() error {
 	var currentBatch []*Movie
 	var currentBatchID int
 	var batchSizeBytes int
+	c.logger.Infof("Starting to send")
 
 	for {
+		// FIXME delete this, is testing purpose only
+		if currentBatchID == 50 {
+			break
+		}
+
 		line, err := reader.Read()
 		if err != nil {
 			if errors.Is(err, io.EOF) {
@@ -164,13 +169,13 @@ func (c *Client) processArgentinianSpanishProductions(ctx context.Context) {
 		return
 	}
 
-	wg := sync.WaitGroup{}
-	wg.Add(1)
+	//wg := sync.WaitGroup{}
+	//wg.Add(1)
 
-	go func() {
-		defer wg.Done()
-		c.handleResults(ctx)
-	}()
+	//go func() {
+	//defer wg.Done()
+	//c.handleResults(ctx)
+	//}()
 
 	err = c.sendMovies()
 	if err != nil {
@@ -230,12 +235,16 @@ func (c *Client) sendEOF() error {
 		return fmt.Errorf(errMessage)
 	}
 
+	c.logger.Infof("Waiting for EOF ACK")
+
 	response, err := c.readMessage(c.conn)
 	if err != nil {
 		errMessage := fmt.Sprintf("error reading EOF message: %v", err)
 		c.logger.Errorf(errMessage)
 		return fmt.Errorf(errMessage)
 	}
+
+	c.logger.Infof("Received EOF response: %v", response)
 
 	if EndOfFileACK != strings.TrimSpace(response) {
 		errMessage := fmt.Sprintf("expected message ACK '%s', got '%s'", EndOfFileACK, response)
@@ -267,6 +276,8 @@ func (c *Client) sendMoviesBatch(movies []*Movie, query string, batchID int) err
 		return fmt.Errorf(errMessage)
 	}
 
+	c.logger.Infof("batch response ACK: %s", response)
+
 	expectedACK := fmt.Sprintf(MoviesACK, batchID)
 	if expectedACK != strings.TrimSpace(response) {
 		errMessage := fmt.Sprintf("expected message ACK '%s', got '%s'", expectedACK, response)
@@ -293,7 +304,7 @@ func (c *Client) buildMoviesBatchMessage(movies []*Movie, query string, batchID 
 		))
 	}
 
-	return fmt.Sprintf("%s,%d\n%s", query, batchID, sb.String())
+	return fmt.Sprintf("%s,movies,%d\n%s", query, batchID, sb.String())
 }
 
 func (c *Client) addMessageLengthPrefix(message []byte) []byte {

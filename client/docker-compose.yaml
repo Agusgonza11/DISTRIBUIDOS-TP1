@@ -10,3 +10,9 @@ services:
       - ./data/movies.csv:/app/movies.csv
       - ./data/ratings.csv:/app/ratings.csv
       - ./data/credits.csv:/app/credits.csv
+    networks:
+      - gateway_distribuidos
+
+networks:
+  gateway_distribuidos:
+    external: true

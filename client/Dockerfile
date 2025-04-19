@@ -10,5 +10,6 @@ RUN chmod +x bin/client
 FROM busybox:latest
 COPY --from=builder /build/bin/client /client
 COPY ./config/config.yaml /config.yaml
+RUN mkdir -p /app/data
 
 ENTRYPOINT ["/client"]

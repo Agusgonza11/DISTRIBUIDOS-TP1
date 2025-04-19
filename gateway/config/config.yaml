@@ -1,0 +1,13 @@
+gateway:
+  address: ":5000"
+log:
+  level: "INFO"
+
+rabbitmq:
+  address: "amqp://michael:secret@localhost:5672"
+  filter_queues:
+    argentinian-spanish-productions: "filter_consult_1"
+    top-investing-countries: "filter_consult_2"
+    top-argentinian-movies-by-rating: "filter_consult_3"
+    top-argentinian-actors: "filter_consult_4"
+    sentiment-analysis: "filter_consult_5"
