@@ -15,7 +15,10 @@ class JoinerNode:
         self.resultados_parciales = {}
         self.shutdown_event = asyncio.Event()
         self.eof_esperados = cargar_eofs()
-
+        self.termino_credits = False
+        self.termino_movies = False
+        self.termino_ratings = False
+        
     def guardar_csv(self, csv, datos):
         #Aca deberia guardar en base de datos
         pass
@@ -68,18 +71,24 @@ class JoinerNode:
             self.eof_esperados[consulta_id] -= 1
             if self.eof_esperados[consulta_id] == 0:
                 logging.info(f"Consulta {consulta_id} recibió TODOS los EOF que esperaba")
-                await enviar_func(destino, "EOF")
-                self.shutdown_event.set()
+                self.termino_movies = True
                 return
+        if mensaje.headers.get("EOF_RATINGS") == True:
+            self.termino_ratings = True
+        if mensaje.headers.get("EOF_CREDITS") == True:
+            self.termino_credits = True
         if mensaje.headers.get("type") == "RATINGS":
             self.guardar_csv("ratings", mensaje.body.decode('utf-8'))
         if mensaje.headers.get("type") == "CREDITS":
             self.guardar_csv("credits", mensaje.body.decode('utf-8'))
         if mensaje.headers.get("type") == "MOVIES":
             self.guardar_datos(consulta_id, mensaje.body.decode('utf-8'))
-        if self.puede_enviar():
+        if self.termino_movies:
             resultado = self.ejecutar_consulta(consulta_id)
             await enviar_func(destino, resultado)
+        if self.termino_credits and self.termino_ratings and self.termino_movies:
+            await enviar_func(destino, "EOF")
+            self.shutdown_event.set()
 
 
 # -----------------------
