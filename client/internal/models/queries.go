@@ -1,4 +1,4 @@
-package internal
+package models
 
 const (
 	QueryArgentinaEsp                 string = "ARGENTINIAN-SPANISH-PRODUCTIONS"  // Consulta 1
@@ -7,10 +7,3 @@ const (
 	QueryTopArgentinianActors         string = "TOP-ARGENTINIAN-ACTORS"           // Consulta 4
 	QuerySentimentAnalysis                   = "SENTIMENT-ANALYSIS"               // Consulta 5
 )
-
-const ClientIDMessage = "CLIENT_ID"
-const EndOfFileMessage = "EOF"
-
-const MoviesACK = "MOVIES_ACK:%d"
-const ResultACK = "RESULT_ACK"
-const EndOfFileACK = "EOF_ACK"

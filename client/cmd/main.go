@@ -7,7 +7,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
-	"tp1-sistemas-distribuidos/internal"
+	"tp1-sistemas-distribuidos/internal/client"
 	"tp1-sistemas-distribuidos/internal/config"
 
 	"github.com/op/go-logging"
@@ -40,18 +40,20 @@ func main() {
 	}
 
 	config := config.Config{
-		InputGatewayAddress:  v.GetString("gateway.input_address"),
-		OutputGatewayAddress: v.GetString("gateway.output_address"),
-		MoviesFilePath:       v.GetString("file.movies_path"),
-		RatingsFilePath:      v.GetString("file.ratings_path"),
-		CreditsFilePath:      v.GetString("file.credits_path"),
-		BatchSize:            v.GetInt("batch.max_size"),
-		BatchLimitAmount:     batchLimitAmount,
+		InputMoviesGatewayAddress:  v.GetString("gateway.input_movies_address"),
+		InputCreditsGatewayAddress: v.GetString("gateway.input_credits_address"),
+		InputRatingsGatewayAddress: v.GetString("gateway.input_ratings_address"),
+		OutputGatewayAddress:       v.GetString("gateway.output_address"),
+		MoviesFilePath:             v.GetString("file.movies_path"),
+		RatingsFilePath:            v.GetString("file.ratings_path"),
+		CreditsFilePath:            v.GetString("file.credits_path"),
+		BatchSize:                  v.GetInt("batch.max_size"),
+		BatchLimitAmount:           batchLimitAmount,
 	}
 
 	query := v.GetString("query")
 
-	client := internal.NewClient(config, logging.MustGetLogger("client"))
+	client := client.NewClient(config, logging.MustGetLogger("client"))
 
 	client.ProcessQuery(ctx, query)
 }
@@ -74,7 +76,9 @@ func InitConfig() (*viper.Viper, error) {
 
 	// Add env variables supported
 	v.BindEnv("query")
-	v.BindEnv("gateway", "input_address")
+	v.BindEnv("gateway.input_movies_address")
+	v.BindEnv("gateway.input_credits_address")
+	v.BindEnv("gateway.input_ratings_address")
 	v.BindEnv("gateway", "output_address")
 	v.BindEnv("file", "movies_path")
 	v.BindEnv("file", "ratings_path")
@@ -121,9 +125,11 @@ func InitLogger(logLevel string) error {
 // For debugging purposes only
 func PrintConfig(logger *logging.Logger, v *viper.Viper) {
 	logger.Infof(
-		"action: config | result: success | input_server_address: %s | output_server_address: %s | log_level: %s | movies_file_path: %s "+
-			"| ratings_file_path: %s | credits_file_path: %s | query: %s | batch_max_size: %d | batch_max_amount: %d",
-		v.GetString("gateway.input_address"),
+		"action: config | result: success | input_movies_address: %s | input_credits_address: %s | input_ratings_address: %s | output_server_address: %s | log_level: %s | "+
+			"movies_file_path: %s | ratings_file_path: %s | credits_file_path: %s | query: %s | batch_max_size: %d | batch_max_amount: %d",
+		v.GetString("gateway.input_movies_address"),
+		v.GetString("gateway.input_credits_address"),
+		v.GetString("gateway.input_ratings_address"),
 		v.GetString("gateway.output_address"),
 		v.GetString("log.level"),
 		v.GetString("file.movies_path"),

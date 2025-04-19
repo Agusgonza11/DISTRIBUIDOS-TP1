@@ -7,10 +7,11 @@ services:
       - "15672:15672"
       - "5672:5672"
     healthcheck:
-      test: [ "CMD", "rabbitmqctl", "status"]
+      test: rabbitmq-diagnostics check_port_connectivity
       interval: 5s
-      timeout: 15s
-      retries: 5
+      timeout: 3s
+      retries: 10
+      start_period: 50s
 
   input_gateway:
     container_name: input_gateway
@@ -18,9 +19,16 @@ services:
     entrypoint: /input_gateway
     environment:
       - CLI_LOG_LEVEL=DEBUG
+    ports:
+      - "5000:5000"  # Movies
+      - "5001:5001"  # Credits
+      - "5002:5002"  # Ratings
     networks:
       - distribuidos
     depends_on:
+      rabbitmq:
+        condition: service_healthy
+    links:
       - rabbitmq
 
 networks:
@@ -28,4 +36,4 @@ networks:
     ipam:
       driver: default
       config:
-        - subnet: 172.25.125.0/24
+        - subnet: 172.25.126.0/24

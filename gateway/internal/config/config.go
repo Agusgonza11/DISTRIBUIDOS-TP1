@@ -1,8 +1,10 @@
 package config
 
 type Config struct {
-	Address  string
-	RabbitMQ RabbitMQConfig
+	MoviesAddress  string
+	CreditsAddress string
+	RatingsAddress string
+	RabbitMQ       RabbitMQConfig
 }
 
 type RabbitMQConfig struct {

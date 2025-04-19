@@ -1,6 +1,8 @@
 query: "ARGENTINIAN-SPANISH-PRODUCTIONS"
 gateway:
-  input_address: "input_gateway:5000"
+  input_movies_address: "input_gateway:5000"
+  input_credits_address: "input_gateway:5001"
+  input_ratings_address: "input_gateway:5002"
   output_address: "output_gateway:5000"
 file:
   movies_path: "./app/movies.csv"

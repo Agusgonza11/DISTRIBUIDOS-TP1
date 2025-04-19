@@ -7,8 +7,8 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
-	"tp1-sistemas-distribuidos/internal"
 	"tp1-sistemas-distribuidos/internal/config"
+	"tp1-sistemas-distribuidos/internal/input_gateway"
 
 	"github.com/op/go-logging"
 	"github.com/spf13/viper"
@@ -40,7 +40,9 @@ func main() {
 	}()
 
 	config := config.Config{
-		Address: v.GetString("gateway.address"),
+		MoviesAddress:  v.GetString("gateway.movies_address"),
+		CreditsAddress: v.GetString("gateway.credits_address"),
+		RatingsAddress: v.GetString("gateway.ratings_address"),
 		RabbitMQ: config.RabbitMQConfig{
 			Address: v.GetString("rabbitmq.address"),
 			FilterQueues: map[string]string{
@@ -53,7 +55,7 @@ func main() {
 		},
 	}
 
-	gateway, err := internal.NewGateway(config, logging.MustGetLogger("gateway"))
+	gateway, err := input_gateway.NewGateway(config, logging.MustGetLogger("gateway"))
 	if err != nil {
 		log.Criticalf("Error starting gateway: %s", err)
 		os.Exit(1)
@@ -79,7 +81,9 @@ func InitConfig() (*viper.Viper, error) {
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
 	// Add env variables supported
-	v.BindEnv("gateway", "address")
+	v.BindEnv("gateway.movies_address")
+	v.BindEnv("gateway.credits_address")
+	v.BindEnv("gateway.ratings_address")
 	v.BindEnv("log", "level")
 	v.BindEnv("rabbitmq.address")
 	v.BindEnv("rabbitmq.filter_queues.argentinian-spanish-productions")
@@ -125,8 +129,10 @@ func InitLogger(logLevel string) error {
 // For debugging purposes only
 func PrintConfig(logger *logging.Logger, v *viper.Viper) {
 	logger.Infof(
-		"action: config | result: success | gateway address: %s | log_level: %s | rabbitmq address: %s",
-		v.GetString("gateway.address"),
+		"action: config | result: success | movies_address: %s | credits_address: %s | ratings_address: %s | log_level: %s | rabbitmq address: %s",
+		v.GetString("gateway.movies_address"),
+		v.GetString("gateway.credits_address"),
+		v.GetString("gateway.ratings_address"),
 		v.GetString("log.level"),
 		v.GetString("rabbitmq.address"),
 	)

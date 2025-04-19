@@ -1,10 +1,12 @@
 gateway:
-  address: ":5000"
+  movies_address: ":5000"
+  credits_address: ":5001"
+  ratings_address: ":5002"
 log:
   level: "INFO"
 
 rabbitmq:
-  address: "amqp://michael:secret@localhost:5672"
+  address: "amqp://guest:guest@rabbitmq:5672/"
   filter_queues:
     argentinian-spanish-productions: "filter_consult_1"
     top-investing-countries: "filter_consult_2"
