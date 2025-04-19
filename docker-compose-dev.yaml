@@ -8,7 +8,7 @@ services:
     networks:
     - testing_net
     logging:
-      driver: "none"
+      driver: none
   server:
     container_name: server
     image: server:latest
@@ -36,46 +36,22 @@ services:
     environment:
     - WORKER_ID=1
     - WORKER_TYPE=FILTER
-    - CONSULTAS=1,5
+    - CONSULTAS=1,2,3,4,5
+    - EOF_ENVIAR=3:1,4:1,5:1
     networks:
     - testing_net
     depends_on:
     - server
     - rabbitmq
-  filter2:
-    container_name: filter2
-    image: filter:latest
-    entrypoint: python3 workers/filter.py
+  joiner1:
+    container_name: joiner1
+    image: joiner:latest
+    entrypoint: python3 workers/joiner.py
     environment:
-    - WORKER_ID=2
-    - WORKER_TYPE=FILTER
-    - CONSULTAS=2
-    networks:
-    - testing_net
-    depends_on:
-    - server
-    - rabbitmq
-  filter3:
-    container_name: filter3
-    image: filter:latest
-    entrypoint: python3 workers/filter.py
-    environment:
-    - WORKER_ID=3
-    - WORKER_TYPE=FILTER
-    - CONSULTAS=3
-    networks:
-    - testing_net
-    depends_on:
-    - server
-    - rabbitmq
-  filter4:
-    container_name: filter4
-    image: filter:latest
-    entrypoint: python3 workers/filter.py
-    environment:
-    - WORKER_ID=4
-    - WORKER_TYPE=FILTER
-    - CONSULTAS=4
+    - WORKER_ID=1
+    - WORKER_TYPE=JOINER
+    - CONSULTAS=3,4
+    - EOF_ESPERADOS=3:1,4:1
     networks:
     - testing_net
     depends_on:
@@ -88,20 +64,8 @@ services:
     environment:
     - WORKER_ID=1
     - WORKER_TYPE=AGGREGATOR
-    - CONSULTAS=1,3,5
-    networks:
-    - testing_net
-    depends_on:
-    - server
-    - rabbitmq
-  aggregator2:
-    container_name: aggregator2
-    image: aggregator:latest
-    entrypoint: python3 workers/aggregator.py
-    environment:
-    - WORKER_ID=2
-    - WORKER_TYPE=AGGREGATOR
-    - CONSULTAS=2,4
+    - CONSULTAS=2,3,4,5
+    - EOF_ESPERADOS=2:1,3:1,4:1,5:1
     networks:
     - testing_net
     depends_on:
@@ -115,32 +79,7 @@ services:
     - WORKER_ID=1
     - WORKER_TYPE=PNL
     - CONSULTAS=5
-    networks:
-    - testing_net
-    depends_on:
-    - server
-    - rabbitmq
-  pnl2:
-    container_name: pnl2
-    image: pnl:latest
-    entrypoint: python3 workers/pnl.py
-    environment:
-    - WORKER_ID=2
-    - WORKER_TYPE=PNL
-    - CONSULTAS=5
-    networks:
-    - testing_net
-    depends_on:
-    - server
-    - rabbitmq
-  pnl3:
-    container_name: pnl3
-    image: pnl:latest
-    entrypoint: python3 workers/pnl.py
-    environment:
-    - WORKER_ID=3
-    - WORKER_TYPE=PNL
-    - CONSULTAS=5
+    - EOF_ESPERADOS=5:1
     networks:
     - testing_net
     depends_on:

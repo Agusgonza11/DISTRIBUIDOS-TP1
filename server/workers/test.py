@@ -2,7 +2,7 @@ import asyncio
 import aio_pika # type: ignore
 import logging
 
-QUEUE_NAME = "filter_consult_2"
+QUEUE_NAME = "filter_consult_3"
 
 async def enviar_mock():
     logging.basicConfig(level=logging.INFO)
@@ -21,16 +21,21 @@ async def enviar_mock():
         "5,Tetro,\"['Drama', 'Mystery']\",2009-05-14,\"The story of two brothers, artists, and their estranged family.\",\"['Argentina', 'Spain']\",\"['English', 'Spanish']\",5000000,2600000\n"
     )
 
-    # Enviar el batch como texto plano CSV
     await channel.default_exchange.publish(
-        aio_pika.Message(body=contenido_csv.encode()),
+        aio_pika.Message(
+            body=contenido_csv.encode(),
+            headers={"type": "CONSULT"}
+        ),
         routing_key=QUEUE_NAME,
     )
-    logging.info("Enviado batch CSV")
+    logging.info("Enviado batch CSV con header type=CONSULT")
 
-    # Enviar EOF
+    # Enviar EOF con header type="EOF"
     await channel.default_exchange.publish(
-        aio_pika.Message(body=b"EOF"),
+        aio_pika.Message(
+            body=b"EOF",
+            headers={"type": "EOF"}
+        ),
         routing_key=QUEUE_NAME,
     )
     logging.info("Enviado EOF")
