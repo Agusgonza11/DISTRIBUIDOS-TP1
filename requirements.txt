@@ -1,5 +1,6 @@
 aio-pika
 pandas
+psycopg2-binary 
 # Para consulta 5
 #transformers
 #torch

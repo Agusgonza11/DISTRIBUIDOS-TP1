@@ -189,6 +189,19 @@ def generar_yaml(cant_filter, cant_joiner, cant_aggregator, cant_pnl):
                     "driver": "none"
                 }
             },
+            "postgres": {
+                "container_name": "postgres",
+                "image": "postgres:15",
+                "environment": [
+                    "POSTGRES_USER=user",
+                    "POSTGRES_PASSWORD=password",
+                    "POSTGRES_DB=datos"
+                ],
+                "volumes": [
+                  "./server/db/init.sql:/docker-entrypoint-initdb.d/init.sql"
+                ],   
+                "networks": ["testing_net"],
+            },
             "server": {
                 "container_name": "server",
                 "image": "server:latest",
@@ -197,7 +210,8 @@ def generar_yaml(cant_filter, cant_joiner, cant_aggregator, cant_pnl):
                     "PYTHONUNBUFFERED=1",
                     "LOGGING_LEVEL=DEBUG"
                 ],
-                "networks": ["testing_net"]
+                "networks": ["testing_net"],
+                "depends_on": ["postgres"],
             },
             "client": {
                 "container_name": "client",
@@ -209,7 +223,7 @@ def generar_yaml(cant_filter, cant_joiner, cant_aggregator, cant_pnl):
                 ],
                 "networks": ["testing_net"],
                 "depends_on": ["server"]
-            }
+            },
         },
         "networks": {
             "testing_net": {

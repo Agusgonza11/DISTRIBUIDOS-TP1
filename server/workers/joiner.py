@@ -1,9 +1,11 @@
 import asyncio
 import logging
 import os
+import pandas as pd
 from common.utils import cargar_eofs, create_dataframe, initialize_log, prepare_data_aggregator_consult_3
 from workers.test import enviar_mock
 from workers.communication import inicializar_comunicacion, escuchar_colas
+from db.db_client import DBClient
 
 JOINER = "joiner"
 
@@ -15,15 +17,22 @@ class JoinerNode:
         self.resultados_parciales = {}
         self.shutdown_event = asyncio.Event()
         self.eof_esperados = cargar_eofs()
+        self.movies_eof_recibido = False
+        self.db_client = DBClient()
 
     def guardar_csv(self, csv, datos):
         #Aca deberia guardar en base de datos
-        pass
+        self.db_client.insertar_csv(csv, datos)
 
     def puede_enviar(self):
         #Aca deberia ser una funcion que decida cuando puede enviar al nodo siguiente el resultado
         #Quiza esperar una cierta cantidad de info hay que ver
-        True
+        return self.movies_eof_recibido
+    
+    def preparar_movies_para_join(self, consulta_id):
+        self.movies_eof_recibido = True
+        df = create_dataframe("".join(self.resultados_parciales[consulta_id])) 
+        self.resultados_parciales = df 
 
     def guardar_datos(self, consulta_id, datos):
         if consulta_id not in self.resultados_parciales:
@@ -48,16 +57,18 @@ class JoinerNode:
     def consulta_3(self, datos):
         logging.info("Procesando datos para consulta 3")
         datos = create_dataframe(datos)
-        #Consulta 3 Tomas
-        csv_q3 = datos.to_csv(index=False)
+        datos.rename(columns={"movieId": "id"}, inplace=True)
+        datos_merged = datos.merge(self.resultados_parciales, on="id")
+        csv_q3 = datos_merged.to_csv(index=False)
         logging.info(f"lo que voy a devolver es {csv_q3}")
         return csv_q3
 
     def consulta_4(self, datos):
         logging.info("Procesando datos para consulta 4")
         datos = create_dataframe(datos)
-        #Consulta 4 Tomas
-        csv_q4 = datos.to_csv(index=False)
+        datos.rename(columns={"movieId": "id"}, inplace=True)
+        datos_merged = datos.merge(self.resultados_parciales, on="id")
+        csv_q4 = datos_merged.to_csv(index=False)
         logging.info(f"lo que voy a devolver es {csv_q4}")
         return csv_q4
 
@@ -66,6 +77,8 @@ class JoinerNode:
         if mensaje.headers.get("type") == "EOF":
             logging.info(f"Consulta {consulta_id} recibió EOF")
             self.eof_esperados[consulta_id] -= 1
+            if not self.movies_eof_recibido: 
+                self.preparar_movies_para_join(consulta_id)
             if self.eof_esperados[consulta_id] == 0:
                 logging.info(f"Consulta {consulta_id} recibió TODOS los EOF que esperaba")
                 await enviar_func(destino, "EOF")
@@ -75,7 +88,7 @@ class JoinerNode:
             self.guardar_csv("ratings", mensaje.body.decode('utf-8'))
         if mensaje.headers.get("type") == "CREDITS":
             self.guardar_csv("credits", mensaje.body.decode('utf-8'))
-        if mensaje.headers.get("type") == "MOVIES":
+        if mensaje.headers.get("type") == "MOVIES" and not self.movies_eof_recibido:
             self.guardar_datos(consulta_id, mensaje.body.decode('utf-8'))
         if self.puede_enviar():
             resultado = self.ejecutar_consulta(consulta_id)
