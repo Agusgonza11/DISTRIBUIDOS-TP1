@@ -4,12 +4,13 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"github.com/streadway/amqp"
 	"io"
 	"net"
 	"strings"
-	"tp1-sistemas-distribuidos/internal/models"
-	"tp1-sistemas-distribuidos/internal/utils"
+	"tp1-sistemas-distribuidos/gateway/internal/models"
+	"tp1-sistemas-distribuidos/gateway/internal/utils"
+
+	"github.com/streadway/amqp"
 )
 
 func (g *Gateway) moviesHandler(conn net.Conn) {
@@ -17,10 +18,7 @@ func (g *Gateway) moviesHandler(conn net.Conn) {
 
 	reader := bufio.NewReader(conn)
 
-	for {
-		if !g.running {
-			break
-		}
+	for g.running {
 
 		response, err := utils.ReadMessage(reader)
 		if err != nil {

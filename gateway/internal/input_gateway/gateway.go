@@ -3,11 +3,12 @@ package input_gateway
 import (
 	"context"
 	"fmt"
-	"github.com/op/go-logging"
-	"github.com/streadway/amqp"
 	"net"
 	"sync"
-	"tp1-sistemas-distribuidos/internal/config"
+	"tp1-sistemas-distribuidos/gateway/internal/config"
+
+	"github.com/op/go-logging"
+	"github.com/streadway/amqp"
 )
 
 type Gateway struct {
@@ -19,7 +20,7 @@ type Gateway struct {
 }
 
 func NewGateway(config config.Config, logger *logging.Logger) (*Gateway, error) {
-	conn, err := amqp.Dial(config.RabbitMQ.Address)
+	conn, err := amqp.Dial("amqp://guest:guest@rabbitmq/")
 	if err != nil {
 		return nil, err
 	}

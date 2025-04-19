@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/op/go-logging"
 	goIO "io"
 	"log"
 	"net"
@@ -14,9 +13,11 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"tp1-sistemas-distribuidos/internal/config"
-	"tp1-sistemas-distribuidos/internal/models"
-	io "tp1-sistemas-distribuidos/internal/utils"
+	"tp1-sistemas-distribuidos/client/internal/config"
+	"tp1-sistemas-distribuidos/client/internal/models"
+	io "tp1-sistemas-distribuidos/client/internal/utils"
+
+	"github.com/op/go-logging"
 )
 
 type Client struct {
@@ -198,7 +199,7 @@ func (c *Client) sendEOF() error {
 	if err != nil {
 		errMessage := fmt.Sprintf("error writing EOF message: %v", err)
 		c.logger.Errorf(errMessage)
-		return fmt.Errorf(errMessage)
+		return errors.New(errMessage)
 	}
 
 	c.logger.Infof("Waiting for EOF ACK")
@@ -207,7 +208,7 @@ func (c *Client) sendEOF() error {
 	if err != nil {
 		errMessage := fmt.Sprintf("error reading EOF message: %v", err)
 		c.logger.Errorf(errMessage)
-		return fmt.Errorf(errMessage)
+		return errors.New(errMessage)
 	}
 
 	c.logger.Infof("Received EOF response: %v", response)
@@ -215,7 +216,7 @@ func (c *Client) sendEOF() error {
 	if EndOfFileACK != strings.TrimSpace(response) {
 		errMessage := fmt.Sprintf("expected message ACK '%s', got '%s'", EndOfFileACK, response)
 		c.logger.Errorf(errMessage)
-		return fmt.Errorf(errMessage)
+		return errors.New(errMessage)
 	}
 
 	return nil
@@ -232,14 +233,14 @@ func (c *Client) sendMoviesBatch(movies []*models.Movie, query string, batchID i
 	if err != nil {
 		errMessage := fmt.Sprintf("error writing batch message: %v", err)
 		c.logger.Errorf(errMessage)
-		return fmt.Errorf(errMessage)
+		return errors.New(errMessage)
 	}
 
 	response, err := io.ReadMessage(c.conns["movies"])
 	if err != nil {
 		errMessage := fmt.Sprintf("error reading batch ACK: %v", err)
 		c.logger.Errorf(errMessage)
-		return fmt.Errorf(errMessage)
+		return errors.New(errMessage)
 	}
 
 	c.logger.Infof("batch response ACK: %s", response)
@@ -248,7 +249,7 @@ func (c *Client) sendMoviesBatch(movies []*models.Movie, query string, batchID i
 	if expectedACK != strings.TrimSpace(response) {
 		errMessage := fmt.Sprintf("expected message ACK '%s', got '%s'", expectedACK, response)
 		c.logger.Errorf(errMessage)
-		return fmt.Errorf(errMessage)
+		return errors.New(errMessage)
 	}
 
 	return nil

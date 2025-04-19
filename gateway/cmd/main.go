@@ -7,8 +7,8 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
-	"tp1-sistemas-distribuidos/internal/config"
-	"tp1-sistemas-distribuidos/internal/input_gateway"
+	"tp1-sistemas-distribuidos/gateway/internal/config"
+	"tp1-sistemas-distribuidos/gateway/internal/input_gateway"
 
 	"github.com/op/go-logging"
 	"github.com/spf13/viper"
@@ -95,7 +95,7 @@ func InitConfig() (*viper.Viper, error) {
 	// does not exists then ReadInConfig will fail but configuration
 	// can be loaded from the environment variables so we shouldn't
 	// return an error in that case
-	v.SetConfigFile("./config.yaml")
+	v.SetConfigFile("./gateway_config.yaml")
 	if err := v.ReadInConfig(); err != nil {
 		fmt.Printf("Configuration could not be read from config file. Using env variables instead")
 	}
