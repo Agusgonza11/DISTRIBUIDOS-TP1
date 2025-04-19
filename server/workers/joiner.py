@@ -10,13 +10,22 @@ JOINER = "joiner"
 # -----------------------
 # Nodo Filtro
 # -----------------------
-class AggregatorNode:
+class JoinerNode:
     def __init__(self):
         self.resultados_parciales = {}
+        self.shutdown_event = asyncio.Event()
         self.eof_esperados = cargar_eofs()
 
+    def guardar_csv(self, csv, datos):
+        #Aca deberia guardar en base de datos
+        pass
+
+    def puede_enviar(self):
+        #Aca deberia ser una funcion que decida cuando puede enviar al nodo siguiente el resultado
+        #Quiza esperar una cierta cantidad de info hay que ver
+        True
+
     def guardar_datos(self, consulta_id, datos):
-        #Tomas aca guardar en memoria y base de datos
         if consulta_id not in self.resultados_parciales:
             self.resultados_parciales[consulta_id] = []
         self.resultados_parciales[consulta_id].append(datos)
@@ -54,24 +63,30 @@ class AggregatorNode:
 
     
     async def procesar_mensajes(self, destino, consulta_id, mensaje, enviar_func):
-        logging.info(f"la cantidad de eof es {self.eof_esperados}")
         if mensaje.headers.get("type") == "EOF":
             logging.info(f"Consulta {consulta_id} recibió EOF")
             self.eof_esperados[consulta_id] -= 1
             if self.eof_esperados[consulta_id] == 0:
                 logging.info(f"Consulta {consulta_id} recibió TODOS los EOF que esperaba")
-                resultado = self.ejecutar_consulta(consulta_id)
-                await enviar_func(destino, "EOF", headers={"type": "EOF"})
                 await enviar_func(destino, "EOF")
+                self.shutdown_event.set()
                 return
-        self.guardar_datos(consulta_id, mensaje.body.decode('utf-8'))
+        if mensaje.headers.get("type") == "RATINGS":
+            self.guardar_csv("ratings", mensaje.body.decode('utf-8'))
+        if mensaje.headers.get("type") == "CREDITS":
+            self.guardar_csv("credits", mensaje.body.decode('utf-8'))
+        if mensaje.headers.get("type") == "MOVIES":
+            self.guardar_datos(consulta_id, mensaje.body.decode('utf-8'))
+        if self.puede_enviar():
+            resultado = self.ejecutar_consulta(consulta_id)
+            await enviar_func(destino, resultado)
 
 
 # -----------------------
 # Ejecutando nodo aggregator
 # -----------------------
 
-aggregator = AggregatorNode()
+joiner = JoinerNode()
 
 
 async def main():
@@ -81,9 +96,10 @@ async def main():
     consultas = list(map(int, consultas_str.split(","))) if consultas_str else []
 
     await inicializar_comunicacion()
-    await escuchar_colas(JOINER, aggregator, consultas)
+    await escuchar_colas(JOINER, joiner, consultas)
     #await enviar_mock() # Mock para probar consultas
-    await asyncio.Future()
+    await joiner.shutdown_event.wait()
+    logging.info("Shutdown del nodo joiner")
 
 asyncio.run(main())
 

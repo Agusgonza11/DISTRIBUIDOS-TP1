@@ -15,6 +15,7 @@ PNL = "pnl"
 class PnlNode:
     def __init__(self):
         self.eof_esperados = cargar_eofs()
+        self.shutdown_event = asyncio.Event()
 
 
     def ejecutar_consulta(self, consulta_id, datos):
@@ -46,6 +47,7 @@ class PnlNode:
             if self.eof_esperados[consulta_id] == 0:
                 logging.info(f"Consulta {consulta_id} recibió TODOS los EOF que esperaba")
                 await enviar_func(destino, "EOF", headers={"type": "EOF"})
+                self.shutdown_event.set()
                 return
         resultado = self.ejecutar_consulta(consulta_id, mensaje.body.decode('utf-8'))
         await enviar_func(destino, resultado)
@@ -68,7 +70,8 @@ async def main():
     await inicializar_comunicacion()
     await escuchar_colas(PNL, pnl, consultas)
     #await enviar_mock() # Mock para probar consultas
-    await asyncio.Future()
+    await pnl.shutdown_event.wait()
+    logging.info("Shutdown del nodo pnl")
 
 asyncio.run(main())
 

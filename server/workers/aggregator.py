@@ -13,6 +13,7 @@ AGGREGATOR = "aggregator"
 class AggregatorNode:
     def __init__(self):
         self.resultados_parciales = {}
+        self.shutdown_event = asyncio.Event()
         self.eof_esperados = cargar_eofs()
 
     def guardar_datos(self, consulta_id, datos):
@@ -78,15 +79,14 @@ class AggregatorNode:
     
 
     async def procesar_mensajes(self, destino, consulta_id, mensaje, enviar_func):
-        logging.info(f"la cantidad de eof es {self.eof_esperados}")
         if mensaje.headers.get("type") == "EOF":
             logging.info(f"Consulta {consulta_id} recibió EOF")
             self.eof_esperados[consulta_id] -= 1
             if self.eof_esperados[consulta_id] == 0:
                 logging.info(f"Consulta {consulta_id} recibió TODOS los EOF que esperaba")
                 resultado = self.ejecutar_consulta(consulta_id)
-                await enviar_func(destino, resultado)
-                await enviar_func(destino, "EOF", headers={"type": "EOF"})
+                await enviar_func(destino, resultado, headers={"type": "RESULT"})
+                self.shutdown_event.set()
                 return
         contenido = mensaje.body.decode('utf-8') 
         self.guardar_datos(consulta_id, contenido)
@@ -108,7 +108,8 @@ async def main():
     await inicializar_comunicacion()
     await escuchar_colas(AGGREGATOR, aggregator, consultas)
     #await enviar_mock() # Mock para probar consultas
-    await asyncio.Future()
+    await aggregator.shutdown_event.wait()
+    logging.info("Shutdown del nodo aggregator")
 
 asyncio.run(main())
 

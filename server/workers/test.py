@@ -2,7 +2,7 @@ import asyncio
 import aio_pika # type: ignore
 import logging
 
-QUEUE_NAME = "filter_consult_2"
+QUEUE_NAME = "filter_consult_3"
 
 async def enviar_mock():
     logging.basicConfig(level=logging.INFO)

@@ -13,6 +13,8 @@ FILTER = "filter"
 class FiltroNode:
     def __init__(self):
         self.eof_a_enviar = cargar_eof_a_enviar()
+        self.shutdown_event = asyncio.Event()
+
 
     def ejecutar_consulta(self, consulta_id, datos):
         lineas = datos.strip().split("\n")
@@ -95,12 +97,14 @@ class FiltroNode:
     async def procesar_mensajes(self, destino, consulta_id, mensaje, enviar_func):
         if mensaje.headers.get("type") == "EOF":
             logging.info(f"Consulta {consulta_id} recibió EOF")
-            eof_a_enviar = self.eof.get(consulta_id, 1) if consulta_id in [3, 4, 5] else 1
+            eof_a_enviar = self.eof_a_enviar.get(consulta_id, 1) if consulta_id in [3, 4, 5] else 1
             for _ in range(eof_a_enviar):
                 await enviar_func(destino, "EOF", headers={"type": "EOF"})
+            self.shutdown_event.set()
             return
         resultado = self.ejecutar_consulta(consulta_id, mensaje.body.decode('utf-8'))
-        await enviar_func(destino, resultado)
+        headers = {"type": "MOVIES"} if consulta_id in [3, 4] else None
+        await enviar_func(destino, resultado, headers=headers)
 
     
 
@@ -119,7 +123,8 @@ async def main():
     await inicializar_comunicacion()
     await escuchar_colas(FILTER, filtro, consultas)
     await enviar_mock() #Mock para probar consultas
-    await asyncio.Future()
+    await filtro.shutdown_event.wait()
+    logging.info("Shutdown del nodo filtro")
 
 asyncio.run(main())
 
