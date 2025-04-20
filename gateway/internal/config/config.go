@@ -1,13 +1,19 @@
 package config
 
-type Config struct {
+type InputGatewayConfig struct {
 	MoviesAddress  string
 	CreditsAddress string
 	RatingsAddress string
 	RabbitMQ       RabbitMQConfig
 }
 
+type OutputGatewayConfig struct {
+	Address  string
+	RabbitMQ RabbitMQConfig
+}
+
 type RabbitMQConfig struct {
-	Address      string
-	FilterQueues map[string]string
+	Address         string
+	FilterQueues    map[string]string
+	OutputQueueName string
 }

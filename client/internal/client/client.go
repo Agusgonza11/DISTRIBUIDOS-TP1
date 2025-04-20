@@ -12,6 +12,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"tp1-sistemas-distribuidos/client/internal/config"
 	"tp1-sistemas-distribuidos/client/internal/models"
@@ -30,6 +31,7 @@ type Client struct {
 
 func NewClient(config config.Config, logger *logging.Logger) *Client {
 	return &Client{
+		id:     "TESTING",
 		config: config,
 		logger: logger,
 		conns:  make(map[string]net.Conn),
@@ -144,12 +146,20 @@ func (c *Client) processArgentinianSpanishProductions(ctx context.Context) {
 		return
 	}
 
-	err = c.sendMovies()
-	if err != nil {
-		return
-	}
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		c.sendMovies()
+	}()
 
-	return
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		c.handleResults(ctx)
+	}()
+
+	wg.Wait()
 }
 
 func (c *Client) handleResults(ctx context.Context) {
@@ -167,9 +177,11 @@ func (c *Client) handleResults(ctx context.Context) {
 		}
 	}()
 
+	c.logger.Infof("Connected to output gateway at address: %s", c.config.OutputGatewayAddress)
+
 	message := []byte(fmt.Sprintf("%s,%s", ClientIDMessage, c.id))
 
-	err = io.WriteMessage(c.conns["movies"], message)
+	err = io.WriteMessage(conn, message)
 	if err != nil {
 		return
 	}
@@ -185,7 +197,7 @@ func (c *Client) handleResults(ctx context.Context) {
 			break
 		}
 
-		err = io.WriteMessage(c.conns["movies"], []byte(ResultACK))
+		err = io.WriteMessage(conn, []byte(ResultACK))
 		if err != nil {
 			return
 		}
@@ -243,7 +255,7 @@ func (c *Client) sendMoviesBatch(movies []*models.Movie, query string, batchID i
 		return errors.New(errMessage)
 	}
 
-	c.logger.Infof("batch response ACK: %s", response)
+	// c.logger.Infof("batch response ACK: %s", response)
 
 	expectedACK := fmt.Sprintf(MoviesACK, batchID)
 	if expectedACK != strings.TrimSpace(response) {

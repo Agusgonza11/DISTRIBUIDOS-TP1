@@ -17,7 +17,8 @@ build: deps
 
 docker-image:
 	docker build -f ./dockers/server.Dockerfile -t "server:latest" .
-	docker build -f ./dockers/gateway.Dockerfile -t "gateway:latest" .
+	docker build -f ./dockers/input_gateway.Dockerfile -t "input_gateway:latest" .
+	docker build -f ./dockers/output_gateway.Dockerfile -t "output_gateway:latest" .
 	docker build -f ./dockers/filter.Dockerfile -t filter:latest .
 	docker build -f ./dockers/joiner.Dockerfile -t joiner:latest .
 	docker build -f ./dockers/aggregator.Dockerfile -t aggregator:latest .

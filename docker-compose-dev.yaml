@@ -37,9 +37,10 @@ services:
     depends_on:
     - server
     - input_gateway
+    - output_gateway
   input_gateway:
     container_name: input_gateway
-    image: gateway:latest
+    image: input_gateway:latest
     entrypoint: /input_gateway
     environment:
       - CLI_LOG_LEVEL=DEBUG
@@ -47,6 +48,21 @@ services:
       - "5000:5000"  # Movies
       - "5001:5001"  # Credits
       - "5002:5002"  # Ratings
+    networks:
+      - testing_net
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    links:
+      - rabbitmq
+  output_gateway:
+    container_name: output_gateway
+    image: output_gateway:latest
+    entrypoint: /output_gateway
+    environment:
+      - CLI_LOG_LEVEL=DEBUG
+    ports:
+      - "6000:6000"
     networks:
       - testing_net
     depends_on:

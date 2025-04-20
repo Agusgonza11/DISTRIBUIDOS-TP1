@@ -12,15 +12,15 @@ import (
 )
 
 type Gateway struct {
-	config  config.Config
+	config  config.InputGatewayConfig
 	running bool
 	// TODO agregar running mutex
 	amqpChannel *amqp.Channel
 	logger      *logging.Logger
 }
 
-func NewGateway(config config.Config, logger *logging.Logger) (*Gateway, error) {
-	conn, err := amqp.Dial("amqp://guest:guest@rabbitmq/")
+func NewGateway(config config.InputGatewayConfig, logger *logging.Logger) (*Gateway, error) {
+	conn, err := amqp.Dial(config.RabbitMQ.Address)
 	if err != nil {
 		return nil, err
 	}
