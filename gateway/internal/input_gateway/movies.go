@@ -2,6 +2,8 @@ package input_gateway
 
 import (
 	"bufio"
+	"bytes"
+	"encoding/csv"
 	"errors"
 	"fmt"
 	"io"
@@ -55,7 +57,21 @@ func (g *Gateway) moviesHandler(conn net.Conn) {
 				return
 			}
 
-			var sb strings.Builder
+			var buf bytes.Buffer
+			csvWriter := csv.NewWriter(&buf)
+			csvWriter.Comma = ','
+			ab := []string{
+				"id",
+				"title",
+				"genres",
+				"production_countries",
+				"release_date",
+			}
+
+			if err := csvWriter.Write(ab); err != nil {
+				g.logger.Errorf("CSV write error: %v", err)
+				continue
+			}
 
 			for _, line := range lines[1:] {
 				if strings.TrimSpace(line) == "" {
@@ -73,13 +89,34 @@ func (g *Gateway) moviesHandler(conn net.Conn) {
 				productionCountries := elements[6]
 				releaseDate := elements[7]
 
-				formattedLine := fmt.Sprintf("%s|%s|%s|%s|%s\n", id, title, genres, productionCountries, releaseDate)
-				sb.WriteString(formattedLine)
+				if id == "" || strings.TrimSpace(title) == "" || genres == "" || productionCountries == "" || releaseDate == "" {
+					continue
+				}
+
+				record := []string{
+					id,
+					title,
+					genres,
+					productionCountries,
+					releaseDate,
+				}
+
+				if err := csvWriter.Write(record); err != nil {
+					g.logger.Errorf("CSV write error: %v", err)
+					continue
+				}
 			}
 
-			clientID := splittedHeader[2]
+			csvWriter.Flush()
+			if err := csvWriter.Error(); err != nil {
+				g.logger.Errorf("CSV flush error: %v", err)
+				return
+			}
 
-			body := []byte(fmt.Sprintf("%s\n%s", clientID, sb.String()))
+			// clientID := splittedHeader[2]
+
+			// body := []byte(fmt.Sprintf("%s\n%s", clientID, sb.String()))
+			body := []byte(buf.Bytes())
 
 			err = g.amqpChannel.Publish(
 				"",

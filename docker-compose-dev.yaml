@@ -66,8 +66,11 @@ services:
     networks:
     - testing_net
     depends_on:
-    - server
-    - rabbitmq
+      server:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+
   joiner1:
     container_name: joiner1
     image: joiner:latest
@@ -80,8 +83,10 @@ services:
     networks:
     - testing_net
     depends_on:
-    - server
-    - rabbitmq
+      server:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
   aggregator1:
     container_name: aggregator1
     image: aggregator:latest
@@ -94,8 +99,10 @@ services:
     networks:
     - testing_net
     depends_on:
-    - server
-    - rabbitmq
+      server:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
   pnl1:
     container_name: pnl1
     image: pnl:latest
@@ -108,8 +115,10 @@ services:
     networks:
     - testing_net
     depends_on:
-    - server
-    - rabbitmq
+      server:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
 networks:
   testing_net:
     ipam:
