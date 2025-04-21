@@ -1,6 +1,7 @@
 import aio_pika # type: ignore
 import logging
-from common.utils import esperar_conexion
+from common.utils import create_body, esperar_conexion, puede_enviar
+
 
 # ----------------------
 # Constantes globales
@@ -39,10 +40,16 @@ async def inicializar_comunicacion():
 
 
 async def enviar_mensaje(routing_key, body, headers=None):
-    await canal.default_exchange.publish(
-        aio_pika.Message(body=body.encode(), headers=headers),
-        routing_key=routing_key,
-    )
+    if puede_enviar(body):
+        logging.info(f"Lo que voy a enviar es {body}")
+        await canal.default_exchange.publish(
+            aio_pika.Message(body=create_body(body).encode(), headers=headers),
+            routing_key=routing_key,
+        )
+    else:
+        logging.info("No se enviará el mensaje: body vacío")
+
+
 
 
 # ---------------------
