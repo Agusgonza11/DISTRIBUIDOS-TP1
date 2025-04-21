@@ -58,30 +58,26 @@ class JoinerNode:
 
         ratings = self.db_client.obtener_ratings()
         if not ratings:
-            return
+            return False
 
         ratings_df = pd.DataFrame(ratings, columns=["id", "rating"])
         ratings_df.rename(columns={"movieId": "id"}, inplace=True)
 
-        datos_merged = movies_df.merge(ratings_df, on="id")
+        return movies_df.merge(ratings_df, on="id")
            
-        return datos_merged.to_csv(index=False)
-
     def consulta_4(self, datos):
         logging.info("Procesando datos para consulta 4")
         movies_df = create_dataframe(datos)
 
         credits = self.db_client.obtener_credits()
         if not credits:
-            return
+            return False
 
         credits_df = pd.DataFrame(credits, columns=["id", "cast"])
         credits_df.rename(columns={"movieId": "id"}, inplace=True)
 
-        datos_merged = movies_df.merge(credits_df, on="id")
+        return movies_df.merge(credits_df, on="id")
            
-        return datos_merged.to_csv(index=False)
-    
     async def procesar_mensajes(self, destino, consulta_id, mensaje, enviar_func):
         if mensaje.headers.get("type") == "EOF":
             logging.info(f"Consulta {consulta_id} recibió EOF")
