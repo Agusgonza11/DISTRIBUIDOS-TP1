@@ -55,7 +55,7 @@ func (c *Client) ProcessQuery(ctx context.Context, query string) {
 	}
 }
 
-func (c *Client) sendMovies() error {
+func (c *Client) sendMovies(query string) error {
 	file, err := os.Open(c.config.MoviesFilePath)
 	if err != nil {
 		log.Fatal(err)
@@ -90,7 +90,7 @@ func (c *Client) sendMovies() error {
 		movieSize, _ := json.Marshal(movie)
 
 		if len(currentBatch) >= c.config.BatchSize || batchSizeBytes+len(movieSize) > c.config.BatchLimitAmount {
-			if err := c.sendMoviesBatch(currentBatch, models.QueryArgentinaEsp, currentBatchID); err != nil {
+			if err := c.sendMoviesBatch(currentBatch, query, currentBatchID); err != nil {
 				c.logger.Errorf("failed trying to send movies batch: %v", err)
 				return err
 			}
@@ -104,12 +104,138 @@ func (c *Client) sendMovies() error {
 		batchSizeBytes += len(movieSize)
 	}
 
-	if err := c.sendMoviesBatch(currentBatch, models.QueryArgentinaEsp, currentBatchID); err != nil {
+	if err := c.sendMoviesBatch(currentBatch, query, currentBatchID); err != nil {
 		c.logger.Errorf("failed trying to send movies batch: %v", err)
 		return err
 	}
 
-	err = c.sendEOF()
+	err = c.sendEOF(models.MoviesService)
+	if err != nil {
+		c.logger.Errorf("failed trying to send EOF message: %v", err)
+		return err
+	}
+
+	return nil
+}
+
+func (c *Client) sendCredits(query string) error {
+	file, err := os.Open(c.config.CreditsFilePath)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+
+	io.IgnoreFirstCSVLine(reader)
+
+	var currentBatch []*models.Credit
+	var currentBatchID int
+	var batchSizeBytes int
+
+	c.logger.Infof("Starting to send")
+
+	for {
+		line, err := reader.Read()
+		if err != nil {
+			if errors.Is(err, goIO.EOF) {
+				c.logger.Infof("reached end of file")
+				break
+			}
+
+			c.logger.Infof("failed trying to read file: %v", err)
+			continue
+		}
+
+		credit := c.mapCreditFromCSVLine(line)
+
+		creditSize, _ := json.Marshal(credit)
+
+		if len(currentBatch) >= c.config.BatchSize || batchSizeBytes+len(creditSize) > c.config.BatchLimitAmount {
+			if err := c.sendCreditsBatch(currentBatch, query, currentBatchID); err != nil {
+				c.logger.Errorf("failed trying to send credits batch: %v", err)
+				return err
+			}
+
+			currentBatch = []*models.Credit{}
+			batchSizeBytes = 0
+			currentBatchID++
+		}
+
+		currentBatch = append(currentBatch, credit)
+		batchSizeBytes += len(creditSize)
+	}
+
+	if err := c.sendCreditsBatch(currentBatch, query, currentBatchID); err != nil {
+		c.logger.Errorf("failed trying to send credits batch: %v", err)
+		return err
+	}
+
+	err = c.sendEOF(models.CreditsService)
+	if err != nil {
+		c.logger.Errorf("failed trying to send EOF message: %v", err)
+		return err
+	}
+
+	return nil
+}
+
+func (c *Client) sendRatings(query string) error {
+	file, err := os.Open(c.config.RatingsFilePath)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+
+	io.IgnoreFirstCSVLine(reader)
+
+	var currentBatch []*models.Rating
+	var currentBatchID int
+	var batchSizeBytes int
+
+	c.logger.Infof("Starting to send")
+
+	for {
+		line, err := reader.Read()
+		if err != nil {
+			if errors.Is(err, goIO.EOF) {
+				c.logger.Infof("reached end of file")
+				break
+			}
+
+			c.logger.Infof("failed trying to read file: %v", err)
+			continue
+		}
+
+		rating := c.mapRatingFromCSVLine(line)
+
+		creditSize, _ := json.Marshal(rating)
+
+		if len(currentBatch) >= c.config.BatchSize || batchSizeBytes+len(creditSize) > c.config.BatchLimitAmount {
+			if err := c.sendRatingsBatch(currentBatch, query, currentBatchID); err != nil {
+				c.logger.Errorf("failed trying to send ratings batch: %v", err)
+				return err
+			}
+
+			currentBatch = []*models.Rating{}
+			batchSizeBytes = 0
+			currentBatchID++
+		}
+
+		currentBatch = append(currentBatch, rating)
+		batchSizeBytes += len(creditSize)
+	}
+
+	if err := c.sendRatingsBatch(currentBatch, query, currentBatchID); err != nil {
+		c.logger.Errorf("failed trying to send ratings batch: %v", err)
+		return err
+	}
+
+	err = c.sendEOF(models.CreditsService)
 	if err != nil {
 		c.logger.Errorf("failed trying to send EOF message: %v", err)
 		return err
@@ -150,7 +276,7 @@ func (c *Client) processArgentinianSpanishProductions(ctx context.Context) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		c.sendMovies()
+		c.sendMovies(models.QueryArgentinaEsp)
 	}()
 
 	wg.Add(1)
@@ -161,6 +287,141 @@ func (c *Client) processArgentinianSpanishProductions(ctx context.Context) {
 
 	wg.Wait()
 }
+
+func (c *Client) processTopInvestingCountries(ctx context.Context) {
+	err := c.connectToGateway(ctx)
+	if err != nil {
+		c.logger.Errorf("failed trying to connect to input gateway: %v", err)
+		return
+	}
+
+	defer c.closeConn()
+
+	err = c.createOutputFile(models.QueryTopInvestors)
+	if err != nil {
+		return
+	}
+
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		c.sendMovies(models.QueryTopInvestors)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		c.handleResults(ctx)
+	}()
+
+	wg.Wait()
+}
+
+func (c *Client) processTopArgentinianMoviesByRating(ctx context.Context) {
+	err := c.connectToGateway(ctx)
+	if err != nil {
+		c.logger.Errorf("failed trying to connect to input gateway: %v", err)
+		return
+	}
+
+	defer c.closeConn()
+
+	err = c.createOutputFile(models.QueryTopArgentinianMoviesByRating)
+	if err != nil {
+		return
+	}
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		c.handleResults(ctx)
+	}()
+
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		c.sendMovies(models.QueryTopArgentinianMoviesByRating)
+	}()
+
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		c.sendRatings(models.QueryTopArgentinianMoviesByRating)
+	}()
+
+	wg.Wait()
+}
+
+func (c *Client) processTopArgentinianActors(ctx context.Context) {
+	err := c.connectToGateway(ctx)
+	if err != nil {
+		c.logger.Errorf("failed trying to connect to input gateway: %v", err)
+		return
+	}
+
+	defer c.closeConn()
+
+	err = c.createOutputFile(models.QueryTopArgentinianActors)
+	if err != nil {
+		return
+	}
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		c.handleResults(ctx)
+	}()
+
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		c.sendMovies(models.QueryTopArgentinianActors)
+	}()
+
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		c.sendCredits(models.QueryTopArgentinianActors)
+	}()
+
+	wg.Wait()
+}
+
+func (c *Client) processSentimentAnalysis(ctx context.Context) {
+	err := c.connectToGateway(ctx)
+	if err != nil {
+		c.logger.Errorf("failed trying to connect to input gateway: %v", err)
+		return
+	}
+
+	defer c.closeConn()
+
+	err = c.createOutputFile(models.QuerySentimentAnalysis)
+	if err != nil {
+		return
+	}
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		c.handleResults(ctx)
+	}()
+
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		c.sendMovies(models.QuerySentimentAnalysis)
+	}()
+
+	wg.Wait()
+}
+
 
 func (c *Client) handleResults(ctx context.Context) {
 	dialer := net.Dialer{}
@@ -197,6 +458,9 @@ func (c *Client) handleResults(ctx context.Context) {
 			break
 		}
 
+		// Verificar a que consulta corresponde el mensaje, y escribir el archivo correspondiente **no por default**
+		// Output file deberia ser un map[query]*os.File, y escribir el que llegue en el mensaje aca
+
 		err = io.WriteMessage(conn, []byte(ResultACK))
 		if err != nil {
 			return
@@ -206,8 +470,8 @@ func (c *Client) handleResults(ctx context.Context) {
 	}
 }
 
-func (c *Client) sendEOF() error {
-	err := io.WriteMessage(c.conns["movies"], []byte(fmt.Sprintf("%s,%s", EndOfFileMessage, c.id)))
+func (c *Client) sendEOF(service string) error {
+	err := io.WriteMessage(c.conns[service], []byte(fmt.Sprintf("%s,%s", EndOfFileMessage, c.id)))
 	if err != nil {
 		errMessage := fmt.Sprintf("error writing EOF message: %v", err)
 		c.logger.Errorf(errMessage)
@@ -216,7 +480,7 @@ func (c *Client) sendEOF() error {
 
 	c.logger.Infof("Waiting for EOF ACK")
 
-	response, err := io.ReadMessage(c.conns["movies"])
+	response, err := io.ReadMessage(c.conns[service])
 	if err != nil {
 		errMessage := fmt.Sprintf("error reading EOF message: %v", err)
 		c.logger.Errorf(errMessage)
@@ -234,28 +498,26 @@ func (c *Client) sendEOF() error {
 	return nil
 }
 
-func (c *Client) sendMoviesBatch(movies []*models.Movie, query string, batchID int) error {
-	if len(movies) == 0 {
+func (c *Client) sendMoviesBatch(batch []*models.Movie, query string, batchID int) error {
+	if len(batch) == 0 {
 		return nil
 	}
 
-	message := []byte(c.buildMoviesBatchMessage(movies, query, batchID))
+	message := c.buildMoviesBatchMessage(batch, query, batchID)
 
-	err := io.WriteMessage(c.conns["movies"], message)
+	err := io.WriteMessage(c.conns[models.MoviesService], []byte(message))
 	if err != nil {
 		errMessage := fmt.Sprintf("error writing batch message: %v", err)
 		c.logger.Errorf(errMessage)
 		return errors.New(errMessage)
 	}
 
-	response, err := io.ReadMessage(c.conns["movies"])
+	response, err := io.ReadMessage(c.conns[models.MoviesService])
 	if err != nil {
 		errMessage := fmt.Sprintf("error reading batch ACK: %v", err)
 		c.logger.Errorf(errMessage)
 		return errors.New(errMessage)
 	}
-
-	// c.logger.Infof("batch response ACK: %s", response)
 
 	expectedACK := fmt.Sprintf(MoviesACK, batchID)
 	if expectedACK != strings.TrimSpace(response) {
@@ -267,23 +529,66 @@ func (c *Client) sendMoviesBatch(movies []*models.Movie, query string, batchID i
 	return nil
 }
 
-func (c *Client) buildMoviesBatchMessage(movies []*models.Movie, query string, batchID int) string {
-	var sb strings.Builder
-
-	for _, movie := range movies {
-		sb.WriteString(fmt.Sprintf("%d|%s|%s|%d|%d|%s|%s|%s\n",
-			movie.ID,
-			movie.Title,
-			movie.Overview,
-			movie.Budget,
-			movie.Revenue,
-			movie.Genres,
-			movie.ProductionCountries,
-			movie.ReleaseDate,
-		))
+func (c *Client) sendCreditsBatch(batch []*models.Credit, query string, batchID int) error {
+	if len(batch) == 0 {
+		return nil
 	}
 
-	return fmt.Sprintf("%s,movies,%s,%d\n%s", query, c.id, batchID, sb.String())
+	message := c.buildCreditsBatchMessage(batch, query, batchID)
+
+	err := io.WriteMessage(c.conns[models.CreditsService], []byte(message))
+	if err != nil {
+		errMessage := fmt.Sprintf("error writing batch message: %v", err)
+		c.logger.Errorf(errMessage)
+		return errors.New(errMessage)
+	}
+
+	response, err := io.ReadMessage(c.conns[models.CreditsService])
+	if err != nil {
+		errMessage := fmt.Sprintf("error reading batch ACK: %v", err)
+		c.logger.Errorf(errMessage)
+		return errors.New(errMessage)
+	}
+
+	expectedACK := fmt.Sprintf(CreditsACK, batchID)
+	if expectedACK != strings.TrimSpace(response) {
+		errMessage := fmt.Sprintf("expected message ACK '%s', got '%s'", expectedACK, response)
+		c.logger.Errorf(errMessage)
+		return errors.New(errMessage)
+	}
+
+	return nil
+}
+
+func (c *Client) sendRatingsBatch(batch []*models.Rating, query string, batchID int) error {
+	if len(batch) == 0 {
+		return nil
+	}
+
+	message := c.buildRatingsBatchMessage(batch, query, batchID)
+
+	err := io.WriteMessage(c.conns[models.RatingsService], []byte(message))
+	if err != nil {
+		errMessage := fmt.Sprintf("error writing batch message: %v", err)
+		c.logger.Errorf(errMessage)
+		return errors.New(errMessage)
+	}
+
+	response, err := io.ReadMessage(c.conns[models.RatingsService])
+	if err != nil {
+		errMessage := fmt.Sprintf("error reading batch ACK: %v", err)
+		c.logger.Errorf(errMessage)
+		return errors.New(errMessage)
+	}
+
+	expectedACK := fmt.Sprintf(RatingsACK, batchID)
+	if expectedACK != strings.TrimSpace(response) {
+		errMessage := fmt.Sprintf("expected message ACK '%s', got '%s'", expectedACK, response)
+		c.logger.Errorf(errMessage)
+		return errors.New(errMessage)
+	}
+
+	return nil
 }
 
 func (c *Client) mapMovieFromCSVLine(line []string) *models.Movie {
@@ -303,27 +608,30 @@ func (c *Client) mapMovieFromCSVLine(line []string) *models.Movie {
 	}
 }
 
-func (c *Client) processTopInvestingCountries(ctx context.Context) {
-	time.Sleep(time.Hour)
+func (c *Client) mapRatingFromCSVLine(line []string) *models.Rating {
+	movieId, _ := strconv.Atoi(line[models.RatingsMovieIDColumn])
+	rating, _ := strconv.ParseFloat(line[models.RatingColumn], 64)
+
+	return &models.Rating{
+		ID:     movieId,
+		Rating: rating,
+	}
 }
 
-func (c *Client) processTopArgentinianMoviesByRating(ctx context.Context) {
-	time.Sleep(time.Hour)
-}
+func (c *Client) mapCreditFromCSVLine(line []string) *models.Credit {
+	id, _ := strconv.Atoi(line[models.CreditsMovieIDColumn])
 
-func (c *Client) processTopArgentinianActors(ctx context.Context) {
-	time.Sleep(time.Hour)
-}
-
-func (c *Client) processSentimentAnalysis(ctx context.Context) {
-	time.Sleep(time.Hour)
+	return &models.Credit{
+		ID:   id,
+		Cast: line[models.CastColumn],
+	}
 }
 
 func (c *Client) connectToGateway(ctx context.Context) error {
 	addresses := map[string]string{
-		"movies":  c.config.InputMoviesGatewayAddress,
-		"credits": c.config.InputCreditsGatewayAddress,
-		"ratings": c.config.InputRatingsGatewayAddress,
+		models.MoviesService:  c.config.InputMoviesGatewayAddress,
+		models.CreditsService: c.config.InputCreditsGatewayAddress,
+		models.RatingsService: c.config.InputRatingsGatewayAddress,
 	}
 
 	for service, gatewayAddress := range addresses {
@@ -348,3 +656,168 @@ func (c *Client) closeConn() {
 		}
 	}
 }
+
+func (c *Client) buildMoviesBatchMessage(movies []*models.Movie, query string, batchID int) string {
+	var sb strings.Builder
+
+	for _, movie := range movies {
+		sb.WriteString(fmt.Sprintf("%d|%s|%s|%d|%d|%s|%s|%s\n",
+			movie.ID,
+			movie.Title,
+			movie.Overview,
+			movie.Budget,
+			movie.Revenue,
+			movie.Genres,
+			movie.ProductionCountries,
+			movie.ReleaseDate,
+		))
+	}
+
+	return fmt.Sprintf("%s,movies,%s,%d\n%s", query, c.id, batchID, sb.String())
+}
+
+func (c *Client) buildCreditsBatchMessage(credits []*models.Credit, query string, batchID int) string {
+	var sb strings.Builder
+
+	for _, credit := range credits {
+		sb.WriteString(fmt.Sprintf("%d|%s\n", credit.ID, credit.Cast))
+	}
+
+	return fmt.Sprintf("%s,credits,%s,%d\n%s", query, c.id, batchID, sb.String())
+}
+
+func (c *Client) buildRatingsBatchMessage(ratings []*models.Rating, query string, batchID int) string {
+	var sb strings.Builder
+
+	for _, rating := range ratings {
+		sb.WriteString(fmt.Sprintf("%d|%f\n", rating.ID, rating.Rating))
+	}
+
+	return fmt.Sprintf("%s,ratings,%s,%d\n%s", query, c.id, batchID, sb.String())
+}
+
+func convertToInterfaceSlice[T any](input []*T) []interface{} {
+	result := make([]interface{}, len(input))
+	for i, v := range input {
+		result[i] = v
+	}
+	return result
+}
+
+//func sendData[T any](
+//	filePath string,
+//	mapFunc func([]string) *T,
+//	sendBatchFunc func([]interface{}, string, string, int) error,
+//	eofFunc func(string) error,
+//	service string,
+//	query string,
+//	batchSize int,
+//	batchLimitAmount int,
+//	logger *logging.Logger) error {
+//	file, err := os.Open(filePath)
+//	if err != nil {
+//		log.Fatal(err)
+//	}
+//
+//	defer file.Close()
+//
+//	reader := csv.NewReader(file)
+//	io.IgnoreFirstCSVLine(reader)
+//
+//	var currentBatch []*T
+//	var currentBatchID int
+//	var batchSizeBytes int
+//
+//	logger.Infof("Starting to send %s", service)
+//
+//	for {
+//		line, err := reader.Read()
+//		if err != nil {
+//			if errors.Is(err, goIO.EOF) {
+//				logger.Infof("Reached end of file")
+//				break
+//			}
+//
+//			logger.Infof("Failed trying to read file: %v", err)
+//			continue
+//		}
+//
+//		item := mapFunc(line)
+//
+//		itemSize, _ := json.Marshal(item)
+//
+//		if len(currentBatch) >= batchSize || batchSizeBytes+len(itemSize) > batchLimitAmount {
+//			if err := sendBatchFunc(convertToInterfaceSlice(currentBatch), service, query, currentBatchID); err != nil {
+//				logger.Errorf("Failed trying to send %s batch: %v", service, err)
+//				return err
+//			}
+//
+//			currentBatch = []*T{}
+//			batchSizeBytes = 0
+//			currentBatchID++
+//		}
+//
+//		currentBatch = append(currentBatch, item)
+//		batchSizeBytes += len(itemSize)
+//	}
+//
+//	if err := sendBatchFunc(convertToInterfaceSlice(currentBatch), service, query, currentBatchID); err != nil {
+//		logger.Errorf("Failed trying to send %s batch: %v", service, err)
+//		return err
+//	}
+//
+//	err = eofFunc(service)
+//	if err != nil {
+//		logger.Errorf("Failed trying to send EOF message: %v", err)
+//		return err
+//	}
+//
+//	return nil
+//}
+//var batchMappingByService = map[string]func(interface{}, string, string, int) string{
+//	models.MoviesService:  buildMoviesBatchMessage,
+//	models.CreditsService: buildCreditsBatchMessage,
+//	models.RatingsService: buildRatingsBatchMessage,
+//}
+
+//func (c *Client) sendMovies(query string) error {
+//return sendData(
+//c.config.MoviesFilePath,
+//c.mapMovieFromCSVLine,
+//c.sendBatch,
+//c.sendEOF,
+//models.MoviesService,
+//query,
+//c.config.BatchSize,
+//c.config.BatchLimitAmount,
+//c.logger,
+//)
+//}
+
+//	func (c *Client) sendRatings(query string) error {
+//		return sendData(
+//			c.config.RatingsFilePath,
+//			c.mapRatingFromCSVLine,
+//			c.sendBatch,
+//			c.sendEOF,
+//			models.RatingsService,
+//			query,
+//			c.config.BatchSize,
+//			c.config.BatchLimitAmount,
+//			c.logger,
+//		)
+//	}
+//
+//	func (c *Client) sendCredits(query string) error {
+//		return sendData(
+//			c.config.CreditsFilePath,
+//			c.mapCreditFromCSVLine,
+//			c.sendBatch,
+//			c.sendEOF,
+//			models.CreditsService,
+//			query,
+//			c.config.BatchSize,
+//			c.config.BatchLimitAmount,
+//			c.logger,
+//		)
+//	}

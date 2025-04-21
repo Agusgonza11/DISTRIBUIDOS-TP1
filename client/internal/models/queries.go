@@ -7,3 +7,9 @@ const (
 	QueryTopArgentinianActors         string = "TOP-ARGENTINIAN-ACTORS"           // Consulta 4
 	QuerySentimentAnalysis                   = "SENTIMENT-ANALYSIS"               // Consulta 5
 )
+
+const (
+	MoviesService  string = "MOVIES"
+	CreditsService string = "CREDITS"
+	RatingsService string = "RATINGS"
+)
