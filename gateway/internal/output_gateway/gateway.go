@@ -169,14 +169,9 @@ func (g *Gateway) listenRabbitMQ(ctx context.Context) {
 				return
 			}
 
-			parts := strings.SplitN(string(msg.Body), "|", 2)
-			if len(parts) != 2 {
-				g.logger.Warningf("invalid message format: %s", msg.Body)
-				continue
-			}
+			clientID := msg.Headers["Client-ID"].(string)
 
-			clientID := parts[0]
-			message := parts[1]
+			message := fmt.Sprintf("%s\n%s", msg.Headers["Query"], string(msg.Body))
 
 			g.clientsMutex.RLock()
 			conn, exists := g.clients[clientID]

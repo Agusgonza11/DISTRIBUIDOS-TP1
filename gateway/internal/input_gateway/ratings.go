@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-func (g *Gateway) buildMoviesMessage(lines []string) ([]byte, error) {
+func (g *Gateway) buildRatingsMessage(lines []string) ([]byte, error) {
 	var buf bytes.Buffer
 
 	csvWriter := csv.NewWriter(&buf)
@@ -14,10 +14,7 @@ func (g *Gateway) buildMoviesMessage(lines []string) ([]byte, error) {
 
 	columns := []string{
 		"id",
-		"title",
-		"genres",
-		"production_countries",
-		"release_date",
+		"rating",
 	}
 
 	if err := csvWriter.Write(columns); err != nil {
@@ -35,21 +32,15 @@ func (g *Gateway) buildMoviesMessage(lines []string) ([]byte, error) {
 		}
 
 		id := elements[0]
-		title := elements[1]
-		genres := elements[5]
-		productionCountries := elements[6]
-		releaseDate := elements[7]
+		rating := elements[1]
 
-		if id == "" || strings.TrimSpace(title) == "" || genres == "" || productionCountries == "" || releaseDate == "" {
+		if id == "" || rating == "" {
 			continue
 		}
 
 		record := []string{
 			id,
-			title,
-			genres,
-			productionCountries,
-			releaseDate,
+			rating,
 		}
 
 		if err := csvWriter.Write(record); err != nil {

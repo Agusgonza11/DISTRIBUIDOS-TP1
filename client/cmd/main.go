@@ -51,11 +51,11 @@ func main() {
 		BatchLimitAmount:           batchLimitAmount,
 	}
 
-	query := v.GetString("query")
+	queries := v.GetStringSlice("queries")
 
 	client := client.NewClient(config, logging.MustGetLogger("client"))
 
-	client.ProcessQuery(ctx, query)
+	client.ProcessQuery(ctx, queries)
 }
 
 // InitConfig Function that uses viper library to parse configuration parameters.

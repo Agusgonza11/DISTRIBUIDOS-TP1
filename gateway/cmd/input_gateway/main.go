@@ -46,11 +46,11 @@ func main() {
 		RabbitMQ: config.RabbitMQConfig{
 			Address: v.GetString("rabbitmq.address"),
 			FilterQueues: map[string]string{
-				"argentinian-spanish-productions":  v.GetString("rabbitmq.filter_queues.argentinian-spanish-productions"),
-				"top-investing-countries":          v.GetString("rabbitmq.filter_queues.top-investing-countries"),
-				"top-argentinian-movies-by-rating": v.GetString("rabbitmq.filter_queues.top-argentinian-movies-by-rating"),
-				"top-argentinian-actors":           v.GetString("rabbitmq.filter_queues.top-argentinian-actors"),
-				"sentiment-analysis":               v.GetString("rabbitmq.filter_queues.sentiment-analysis"),
+				"ARGENTINIAN-SPANISH-PRODUCTIONS":  v.GetString("rabbitmq.filter_queues.argentinian-spanish-productions"),
+				"TOP-INVESTING-COUNTRIES":          v.GetString("rabbitmq.filter_queues.top-investing-countries"),
+				"TOP-ARGENTINIAN-MOVIES-BY-RATING": v.GetString("rabbitmq.filter_queues.top-argentinian-movies-by-rating"),
+				"TOP-ARGENTINIAN-ACTORS":           v.GetString("rabbitmq.filter_queues.top-argentinian-actors"),
+				"SENTIMENT-ANALYSIS":               v.GetString("rabbitmq.filter_queues.sentiment-analysis"),
 			},
 		},
 	}

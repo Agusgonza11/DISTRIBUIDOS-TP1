@@ -13,7 +13,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 	"tp1-sistemas-distribuidos/client/internal/config"
 	"tp1-sistemas-distribuidos/client/internal/models"
 	io "tp1-sistemas-distribuidos/client/internal/utils"
@@ -22,36 +21,39 @@ import (
 )
 
 type Client struct {
-	id         string
-	config     config.Config
-	conns      map[string]net.Conn
-	outputFile *os.File
-	logger     *logging.Logger
+	id          string
+	config      config.Config
+	conns       map[string]net.Conn
+	outputFiles map[string]*os.File
+	logger      *logging.Logger
 }
 
 func NewClient(config config.Config, logger *logging.Logger) *Client {
 	return &Client{
-		id:     "TESTING",
-		config: config,
-		logger: logger,
-		conns:  make(map[string]net.Conn),
+		id:          "TESTING",
+		config:      config,
+		logger:      logger,
+		conns:       make(map[string]net.Conn),
+		outputFiles: make(map[string]*os.File),
 	}
 }
 
-func (c *Client) ProcessQuery(ctx context.Context, query string) {
-	switch query {
-	case models.QueryArgentinaEsp:
-		c.processArgentinianSpanishProductions(ctx)
-	case models.QueryTopInvestors:
-		c.processTopInvestingCountries(ctx)
-	case models.QueryTopArgentinianMoviesByRating:
-		c.processTopArgentinianMoviesByRating(ctx)
-	case models.QueryTopArgentinianActors:
-		c.processTopArgentinianActors(ctx)
-	case models.QuerySentimentAnalysis:
-		c.processSentimentAnalysis(ctx)
-	default:
-		c.logger.Infof("unknown query type: %v", query)
+func (c *Client) ProcessQuery(ctx context.Context, queries []string) {
+	for _, query := range queries {
+		switch query {
+		case models.QueryArgentinaEsp:
+			c.processArgentinianSpanishProductions(ctx)
+		case models.QueryTopInvestors:
+			c.processTopInvestingCountries(ctx)
+		case models.QueryTopArgentinianMoviesByRating:
+			c.processTopArgentinianMoviesByRating(ctx)
+		case models.QueryTopArgentinianActors:
+			c.processTopArgentinianActors(ctx)
+		case models.QuerySentimentAnalysis:
+			c.processSentimentAnalysis(ctx)
+		default:
+			c.logger.Infof("unknown query type: %v", query)
+		}
 	}
 }
 
@@ -253,7 +255,7 @@ func (c *Client) createOutputFile(query string) error {
 		return err
 	}
 
-	c.outputFile = file
+	c.outputFiles[query] = file
 
 	return nil
 }
@@ -332,20 +334,20 @@ func (c *Client) processTopArgentinianMoviesByRating(ctx context.Context) {
 		return
 	}
 
+	wg := sync.WaitGroup{}
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		c.handleResults(ctx)
 	}()
 
-	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		c.sendMovies(models.QueryTopArgentinianMoviesByRating)
 	}()
 
-	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -369,20 +371,20 @@ func (c *Client) processTopArgentinianActors(ctx context.Context) {
 		return
 	}
 
+	wg := sync.WaitGroup{}
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		c.handleResults(ctx)
 	}()
 
-	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		c.sendMovies(models.QueryTopArgentinianActors)
 	}()
 
-	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -406,13 +408,14 @@ func (c *Client) processSentimentAnalysis(ctx context.Context) {
 		return
 	}
 
+	wg := sync.WaitGroup{}
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		c.handleResults(ctx)
 	}()
 
-	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -421,7 +424,6 @@ func (c *Client) processSentimentAnalysis(ctx context.Context) {
 
 	wg.Wait()
 }
-
 
 func (c *Client) handleResults(ctx context.Context) {
 	dialer := net.Dialer{}
@@ -454,19 +456,23 @@ func (c *Client) handleResults(ctx context.Context) {
 			return
 		}
 
-		if response == EndOfFileMessage {
-			break
+		lines := strings.Split(response, "\n")
+		if len(lines) < 1 {
+			continue
 		}
 
-		// Verificar a que consulta corresponde el mensaje, y escribir el archivo correspondiente **no por default**
-		// Output file deberia ser un map[query]*os.File, y escribir el que llegue en el mensaje aca
+		query := lines[0]
+
+		if strings.TrimSpace(lines[1]) == EndOfFileMessage {
+			break
+		}
 
 		err = io.WriteMessage(conn, []byte(ResultACK))
 		if err != nil {
 			return
 		}
 
-		io.WriteFile(c.outputFile, response)
+		io.WriteFile(c.outputFiles[query], strings.Join(lines[1:], ""))
 	}
 }
 
