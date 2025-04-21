@@ -83,9 +83,9 @@ class JoinerNode:
             self.guardar_datos(consulta_id, mensaje.body.decode('utf-8'))
         if self.termino_movies:
             resultado = self.ejecutar_consulta(consulta_id)
-            await enviar_func(destino, resultado)
+            await enviar_func(destino, resultado, headers={"Query": consulta_id, "ClientID": mensaje.headers.get("ClientID")})
         if self.termino_credits and self.termino_ratings and self.termino_movies:
-            await enviar_func(destino, "EOF", headers={"type": "EOF"})
+            await enviar_func(destino, "EOF", headers={"type": "EOF", "Query": consulta_id, "ClientID": mensaje.headers.get("ClientID")})
             self.shutdown_event.set()
 
 

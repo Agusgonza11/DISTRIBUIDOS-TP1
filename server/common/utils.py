@@ -24,14 +24,15 @@ def create_dataframe(csv):
 
 def create_body(body):
     if isinstance(body, pd.DataFrame):
-        body = body.to_csv(index=False)
+        return body.to_csv(index=False)
     else:
         return body
 
 def puede_enviar(body):
-    if (isinstance(body, pd.DataFrame) and body.empty) or not body:
-        return False
-    return True
+    if isinstance(body, pd.DataFrame):
+        return not body.empty
+    return bool(body)
+
 
 def prepare_data_filter(data):
     data = create_dataframe(data)

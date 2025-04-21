@@ -87,7 +87,7 @@ class AggregatorNode:
             if self.eof_esperados[consulta_id] == 0:
                 logging.info(f"Consulta {consulta_id} recibió TODOS los EOF que esperaba")
                 resultado = self.ejecutar_consulta(consulta_id)
-                await enviar_func(destino, resultado, headers={"type": "RESULT"})
+                await enviar_func(destino, resultado, headers={"type": "RESULT", "Query": consulta_id, "ClientID": mensaje.headers.get("ClientID")})
                 self.shutdown_event.set()
                 return
         contenido = mensaje.body.decode('utf-8') 

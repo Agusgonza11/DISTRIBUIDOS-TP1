@@ -1,7 +1,6 @@
 import aio_pika # type: ignore
 import logging
 from common.utils import create_body, esperar_conexion, puede_enviar
-import pandas as pd # type: ignore
 
 
 # ----------------------
@@ -48,7 +47,7 @@ async def enviar_mensaje(routing_key, body, headers=None):
             routing_key=routing_key,
         )
     else:
-        logging.info("No se enviará el mensaje: body vacío o DataFrame sin datos")
+        logging.info("No se enviará el mensaje: body vacío")
 
 
 
