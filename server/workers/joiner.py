@@ -1,9 +1,11 @@
 import asyncio
 import logging
 import os
+import pandas as pd
 from common.utils import cargar_eofs, create_dataframe, initialize_log, prepare_data_aggregator_consult_3
 from workers.test import enviar_mock
 from workers.communication import inicializar_comunicacion, escuchar_colas
+from db.db_client import DBClient
 
 JOINER = "joiner"
 
@@ -18,10 +20,10 @@ class JoinerNode:
         self.termino_credits = False
         self.termino_movies = False
         self.termino_ratings = False
+        self.db_client = DBClient()
 
     def guardar_csv(self, csv, datos):
-        #Aca deberia guardar en base de datos
-        pass
+        self.db_client.guardar_csv(csv, datos.split('\n', 1)[1])
 
     def puede_enviar(self):
         #Aca deberia ser una funcion que decida cuando puede enviar al nodo siguiente el resultado
@@ -52,16 +54,33 @@ class JoinerNode:
 
     def consulta_3(self, datos):
         logging.info("Procesando datos para consulta 3")
-        datos = create_dataframe(datos)
-        #Consulta 3 Tomas
-        return datos
+        movies_df = create_dataframe(datos)
+
+        ratings = self.db_client.obtener_ratings()
+        if not ratings:
+            return
+
+        ratings_df = pd.DataFrame(ratings, columns=["id", "rating"])
+        ratings_df.rename(columns={"movieId": "id"}, inplace=True)
+
+        datos_merged = movies_df.merge(ratings_df, on="id")
+           
+        return datos_merged.to_csv(index=False)
 
     def consulta_4(self, datos):
         logging.info("Procesando datos para consulta 4")
-        datos = create_dataframe(datos)
-        #Consulta 4 Tomas
-        return datos
+        movies_df = create_dataframe(datos)
 
+        credits = self.db_client.obtener_credits()
+        if not credits:
+            return
+
+        credits_df = pd.DataFrame(credits, columns=["id", "cast"])
+        credits_df.rename(columns={"movieId": "id"}, inplace=True)
+
+        datos_merged = movies_df.merge(credits_df, on="id")
+           
+        return datos_merged.to_csv(index=False)
     
     async def procesar_mensajes(self, destino, consulta_id, mensaje, enviar_func):
         if mensaje.headers.get("type") == "EOF":
