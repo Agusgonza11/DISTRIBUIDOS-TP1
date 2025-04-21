@@ -22,6 +22,16 @@ def initialize_log(logging_level):
 def create_dataframe(csv):
     return pd.read_csv(StringIO(csv))
 
+def create_body(body):
+    if isinstance(body, pd.DataFrame):
+        body = body.to_csv(index=False)
+    else:
+        return body
+
+def puede_enviar(body):
+    if (isinstance(body, pd.DataFrame) and body.empty) or not body:
+        return False
+    return True
 
 def prepare_data_filter(data):
     data = create_dataframe(data)

@@ -35,6 +35,8 @@ class JoinerNode:
 
     def ejecutar_consulta(self, consulta_id):
         datos = "\n".join(self.resultados_parciales.get(consulta_id, []))
+        if datos == "":
+            return False
         lineas = datos.strip().split("\n")
         logging.info(f"Ejecutando consulta {consulta_id} con {len(lineas)} elementos")
         
@@ -52,17 +54,13 @@ class JoinerNode:
         logging.info("Procesando datos para consulta 3")
         datos = create_dataframe(datos)
         #Consulta 3 Tomas
-        csv_q3 = datos.to_csv(index=False)
-        logging.info(f"lo que voy a devolver es {csv_q3}")
-        return csv_q3
+        return datos
 
     def consulta_4(self, datos):
         logging.info("Procesando datos para consulta 4")
         datos = create_dataframe(datos)
         #Consulta 4 Tomas
-        csv_q4 = datos.to_csv(index=False)
-        logging.info(f"lo que voy a devolver es {csv_q4}")
-        return csv_q4
+        return datos
 
     
     async def procesar_mensajes(self, destino, consulta_id, mensaje, enviar_func):
@@ -87,7 +85,7 @@ class JoinerNode:
             resultado = self.ejecutar_consulta(consulta_id)
             await enviar_func(destino, resultado)
         if self.termino_credits and self.termino_ratings and self.termino_movies:
-            await enviar_func(destino, "EOF")
+            await enviar_func(destino, "EOF", headers={"type": "EOF"})
             self.shutdown_event.set()
 
 

@@ -23,6 +23,8 @@ class AggregatorNode:
 
     def ejecutar_consulta(self, consulta_id):
         datos = "\n".join(self.resultados_parciales.get(consulta_id, []))
+        if datos == "":
+            return None
         lineas = datos.strip().split("\n")
         logging.info(f"Ejecutando consulta {consulta_id} con {len(lineas)} elementos")
         

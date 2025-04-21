@@ -36,9 +36,7 @@ class PnlNode:
         datos = create_dataframe(datos)
         sentiment_analyzer = pipeline('sentiment-analysis', model='distilbert-base-uncased-finetuned-sst-2-english')
         datos['sentiment'] = datos['overview'].fillna('').apply(lambda x: sentiment_analyzer(x)[0]['label'])
-        csv_q5 = datos.to_csv(index=False)
-        logging.info(f"lo que voy a devolver es {csv_q5}")
-        return csv_q5
+        return datos
     
     async def procesar_mensajes(self, destino, consulta_id, mensaje, enviar_func):
         if mensaje.headers.get("type") == "EOF":
