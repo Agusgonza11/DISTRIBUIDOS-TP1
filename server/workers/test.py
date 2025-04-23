@@ -2,7 +2,7 @@ import asyncio
 import aio_pika # type: ignore
 import logging
 
-QUEUE_NAME = "filter_consult_3"
+QUEUE_NAME = "filter_consult_2"
 
 async def enviar_mock():
     logging.basicConfig(level=logging.INFO)
@@ -24,7 +24,7 @@ async def enviar_mock():
     await channel.default_exchange.publish(
         aio_pika.Message(
             body=contenido_csv.encode(),
-            headers={"type": "CONSULT"}
+            headers={"type": "CONSULT", "Query": 2, "ClientID": 1}
         ),
         routing_key=QUEUE_NAME,
     )
@@ -34,7 +34,7 @@ async def enviar_mock():
     await channel.default_exchange.publish(
         aio_pika.Message(
             body=b"EOF",
-            headers={"type": "EOF"}
+            headers={"type": "EOF", "Query": 2, "ClientID": 1}
         ),
         routing_key=QUEUE_NAME,
     )
