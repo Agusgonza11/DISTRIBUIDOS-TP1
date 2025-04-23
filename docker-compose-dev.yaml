@@ -2,13 +2,18 @@ name: tp0
 services:
   rabbitmq:
     container_name: rabbitmq
-    image: rabbitmq:management
-    ports:
-    - 15672:15672
+    image: 'rabbitmq:3-management'
     networks:
-    - testing_net
-    logging:
-      driver: none
+      - testing_net
+    ports:
+      - "15672:15672"
+      - "5672:5672"
+    healthcheck:
+      test: rabbitmq-diagnostics check_port_connectivity
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 50s
   server:
     container_name: server
     image: server:latest
@@ -23,12 +28,48 @@ services:
     image: client:latest
     entrypoint: /client
     environment:
-    - CLI_ID=1
-    - CLI_LOG_LEVEL=DEBUG
+      - CLI_ID=1
+      - CLI_LOG_LEVEL=DEBUG
+    volumes:
+      - ./client/data:/app/data
     networks:
-    - testing_net
+      - testing_net
     depends_on:
     - server
+    - input_gateway
+    - output_gateway
+  input_gateway:
+    container_name: input_gateway
+    image: input_gateway:latest
+    entrypoint: /input_gateway
+    environment:
+      - CLI_LOG_LEVEL=DEBUG
+    ports:
+      - "5000:5000"  # Movies
+      - "5001:5001"  # Credits
+      - "5002:5002"  # Ratings
+    networks:
+      - testing_net
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    links:
+      - rabbitmq
+  output_gateway:
+    container_name: output_gateway
+    image: output_gateway:latest
+    entrypoint: /output_gateway
+    environment:
+      - CLI_LOG_LEVEL=DEBUG
+    ports:
+      - "6000:6000"
+    networks:
+      - testing_net
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    links:
+      - rabbitmq
   filter1:
     container_name: filter1
     image: filter:latest
@@ -41,8 +82,11 @@ services:
     networks:
     - testing_net
     depends_on:
-    - server
-    - rabbitmq
+      server:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+
   joiner1:
     container_name: joiner1
     image: joiner:latest
@@ -55,8 +99,10 @@ services:
     networks:
     - testing_net
     depends_on:
-    - server
-    - rabbitmq
+      server:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
   aggregator1:
     container_name: aggregator1
     image: aggregator:latest
@@ -69,8 +115,10 @@ services:
     networks:
     - testing_net
     depends_on:
-    - server
-    - rabbitmq
+      server:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
   pnl1:
     container_name: pnl1
     image: pnl:latest
@@ -83,8 +131,10 @@ services:
     networks:
     - testing_net
     depends_on:
-    - server
-    - rabbitmq
+      server:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
 networks:
   testing_net:
     ipam:

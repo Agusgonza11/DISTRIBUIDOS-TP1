@@ -1,0 +1,18 @@
+gateway:
+  movies_address: ":5000"
+  credits_address: ":5001"
+  ratings_address: ":5002"
+log:
+  level: "INFO"
+
+rabbitmq:
+  address: "amqp://guest:guest@rabbitmq/"
+  filter_queues:
+    argentinian-spanish-productions: "filter_consult_1"
+    top-investing-countries: "filter_consult_2"
+    top-argentinian-movies-by-rating: "filter_consult_3"
+    top-argentinian-actors: "filter_consult_4"
+    sentiment-analysis: "filter_consult_5"
+  join_queues:
+    top-argentinian-movies-by-rating: "joiner_consult_3"
+    top-argentinian-actors: "joiner_consult_4"

@@ -171,22 +171,31 @@ def agregar_workers(compose, cant_filter=1, cant_joiner=1, cant_aggregator=1, ca
                 "entrypoint": f"python3 workers/{tipo}.py",
                 "environment": env,
                 "networks": ["testing_net"],
-                "depends_on": ["server", "rabbitmq"]
+                "depends_on": {
+                        "server": {"condition": "service_started"},
+                        "rabbitmq": {"condition": "service_healthy"}
+                }
             }
 
 
 def generar_yaml(cant_filter, cant_joiner, cant_aggregator, cant_pnl):
     """Genera un docker-compose.yaml"""
+    consultas_por_nodo = distribuir_consultas_por_nodo(cant_filter, cant_joiner, cant_aggregator, cant_pnl)
+    
     compose = {
         "name": "tp0",
         "services": {
             "rabbitmq": {
                 "container_name": "rabbitmq",
-                "image": "rabbitmq:management",
-                "ports": ["15672:15672"],
+                "image": "rabbitmq:3-management",
                 "networks": ["testing_net"],
-                "logging": {
-                    "driver": "none"
+                "ports": ["15672:15672", "5672:5672"],
+                "healthcheck": {
+                    "test": "rabbitmq-diagnostics check_port_connectivity",
+                    "interval": "5s",
+                    "timeout": "3s",
+                    "retries": 10,
+                    "start_period": "50s"
                 }
             },
             "server": {
@@ -207,8 +216,38 @@ def generar_yaml(cant_filter, cant_joiner, cant_aggregator, cant_pnl):
                     "CLI_ID=1",
                     "CLI_LOG_LEVEL=DEBUG"
                 ],
+                "volumes": ["./client/data:/app/data"],
                 "networks": ["testing_net"],
-                "depends_on": ["server"]
+                "depends_on": ["server", "input_gateway", "output_gateway"]
+            },
+            "input_gateway": {
+                "container_name": "input_gateway",
+                "image": "input_gateway:latest",
+                "entrypoint": "/input_gateway",
+                "environment": [
+                    "CLI_LOG_LEVEL=DEBUG",
+                    *construir_env_input_gateway(consultas_por_nodo)
+                ],
+                "ports": ["5000:5000", "5001:5001", "5002:5002"],
+                "networks": ["testing_net"],
+                "depends_on": {
+                    "rabbitmq": {"condition": "service_healthy"}
+                },
+                "links": ["rabbitmq"]
+            },
+            "output_gateway": {
+                "container_name": "output_gateway",
+                "image": "output_gateway:latest",
+                "entrypoint": "/output_gateway",
+                "environment": [
+                    "CLI_LOG_LEVEL=DEBUG"
+                ],
+                "ports": ["6000:6000"],
+                "networks": ["testing_net"],
+                "depends_on": {
+                    "rabbitmq": {"condition": "service_healthy"}
+                },
+                "links": ["rabbitmq"]
             }
         },
         "networks": {
@@ -224,6 +263,37 @@ def generar_yaml(cant_filter, cant_joiner, cant_aggregator, cant_pnl):
     agregar_workers(compose, cant_filter, cant_joiner, cant_aggregator, cant_pnl)
 
     return compose
+
+def construir_env_input_gateway(consultas_por_nodo):
+    archivo_por_consulta = {
+        1: ["movies"],
+        2: ["movies"],
+        3: ["movies", "ratings"],
+        4: ["movies", "credits"],
+        5: ["movies"]
+    }
+    
+    consultas_filter = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
+    consultas_join = {3: 0, 4: 0}
+    
+    for node, consultas in consultas_por_nodo["filter"].items():
+        for consulta in consultas:
+            consultas_filter[consulta] += 1
+    for node, consultas in consultas_por_nodo["joiner"].items():
+        for consulta in consultas:
+            consultas_join[consulta] += 1
+
+    envs = []
+    
+    for numero_consulta, cantidad_nodos in consultas_filter.items():
+        nombre_env = "CONSULTA_" + str(numero_consulta) + "_FILTER"
+        envs.append(f"{nombre_env}={cantidad_nodos}")
+        
+    for numero_consulta, cantidad_nodos in consultas_join.items():
+        nombre_env = "CONSULTA_" + str(numero_consulta) + "_JOIN"
+        envs.append(f"{nombre_env}={cantidad_nodos}")
+
+    return envs
 
 def generar_docker_compose(nombre_archivo, cant_filter, cant_joiner, cant_aggregator, cant_pnl):
     compose = generar_yaml(int(cant_filter), int(cant_joiner), int(cant_aggregator), int(cant_pnl))

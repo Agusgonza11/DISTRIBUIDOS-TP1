@@ -1,0 +1,11 @@
+# Mac
+**.DS_Store
+
+# Executables
+bin/
+
+data/
+
+vendor/
+
+**.idea
