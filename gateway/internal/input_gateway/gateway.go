@@ -150,7 +150,7 @@ func (g *Gateway) handleMessage(
 			return
 		}
 
-		queueName, exists := g.config.RabbitMQ.FilterQueues[messageType]
+		queueName, exists := g.getQueueNameByQuery(messageType, splittedHeader[1])
 		if !exists {
 			g.logger.Errorf("QUEUE NOT FOUND")
 			return
@@ -180,6 +180,39 @@ func (g *Gateway) handleMessage(
 			g.logger.Errorf("failed trying to publish message: %v", err)
 			return
 		}
+	}
+}
+
+func (g *Gateway) getQueueNameByQuery(query string, file string) (string, bool) {
+	switch file {
+	case "movies":
+		switch query {
+		case QueryArgentinaEsp, QueryTopInvestors,
+			QueryTopArgentinianMoviesByRating,
+			QueryTopArgentinianActors, QuerySentimentAnalysis:
+			queueName, found := g.config.RabbitMQ.FilterQueues[query]
+			return queueName, found
+		default:
+			return "", false
+		}
+	case "credits":
+		switch query {
+		case QueryTopArgentinianActors:
+			queueName, found := g.config.RabbitMQ.JoinQueues[query]
+			return queueName, found
+		default:
+			return "", false
+		}
+	case "ratings":
+		switch query {
+		case QueryTopArgentinianMoviesByRating:
+			queueName, found := g.config.RabbitMQ.JoinQueues[query]
+			return queueName, found
+		default:
+			return "", false
+		}
+	default:
+		return "", false
 	}
 }
 

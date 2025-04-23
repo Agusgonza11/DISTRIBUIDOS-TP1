@@ -52,6 +52,10 @@ func main() {
 				"TOP-ARGENTINIAN-ACTORS":           v.GetString("rabbitmq.filter_queues.top-argentinian-actors"),
 				"SENTIMENT-ANALYSIS":               v.GetString("rabbitmq.filter_queues.sentiment-analysis"),
 			},
+			JoinQueues: map[string]string{
+				"TOP-ARGENTINIAN-MOVIES-BY-RATING": v.GetString("rabbitmq.join_queues.top-argentinian-movies-by-rating"),
+				"TOP-ARGENTINIAN-ACTORS":           v.GetString("rabbitmq.join_queues.top-argentinian-actors"),
+			},
 		},
 	}
 
@@ -91,6 +95,8 @@ func InitConfig() (*viper.Viper, error) {
 	v.BindEnv("rabbitmq.filter_queues.top-argentinian-movies-by-rating")
 	v.BindEnv("rabbitmq.filter_queues.top-argentinian-actors")
 	v.BindEnv("rabbitmq.filter_queues.sentiment-analysis")
+	v.BindEnv("rabbitmq.join_queues.top-argentinian-movies-by-rating")
+	v.BindEnv("rabbitmq.join_queues.top-argentinian-actors")
 	// Try to read configuration from config file. If config file
 	// does not exists then ReadInConfig will fail but configuration
 	// can be loaded from the environment variables so we shouldn't
@@ -140,5 +146,10 @@ func PrintConfig(logger *logging.Logger, v *viper.Viper) {
 	filterQueues := v.GetStringMapString("rabbitmq.filter_queues")
 	for key, queue := range filterQueues {
 		logger.Infof("filter queue: %s | queue name: %s", key, queue)
+	}
+
+	joinQueues := v.GetStringMapString("rabbitmq.join_queues")
+	for key, queue := range joinQueues {
+		logger.Infof("join queue: %s | queue name: %s", key, queue)
 	}
 }

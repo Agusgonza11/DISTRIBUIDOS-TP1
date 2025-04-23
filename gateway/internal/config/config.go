@@ -15,5 +15,6 @@ type OutputGatewayConfig struct {
 type RabbitMQConfig struct {
 	Address         string
 	FilterQueues    map[string]string
+	JoinQueues      map[string]string
 	OutputQueueName string
 }
