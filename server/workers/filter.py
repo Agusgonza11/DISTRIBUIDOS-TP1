@@ -86,15 +86,17 @@ class FiltroNode:
     
     async def procesar_mensajes(self, destino, consulta_id, mensaje, enviar_func):
         if mensaje.headers.get("type") == "EOF":
-            logging.info(f"Consulta {consulta_id} recibió EOF")
+            logging.info(f"Consulta {consulta_id} recibió EOF con clientID")
             eof_a_enviar = self.eof_a_enviar.get(consulta_id, 1) if consulta_id in [3, 4, 5] else 1
             for _ in range(eof_a_enviar):
                 await enviar_func(destino, "EOF", headers={"type": "EOF","Query": consulta_id, "ClientID": mensaje.headers.get("ClientID")})
             self.shutdown_event.set()
             return
         resultado = self.ejecutar_consulta(consulta_id, mensaje.body.decode('utf-8'))
-        headers = {"type": "MOVIES", "Query": consulta_id, "ClientID": mensaje.headers.get("ClientID")} if consulta_id in [3, 4] else None
+        headers = {"Query": consulta_id, "ClientID": mensaje.headers.get("ClientID")}
+        if consulta_id in [3, 4]: headers["type"] = "MOVIES"
         await enviar_func(destino, resultado, headers=headers)
+
 
     
 

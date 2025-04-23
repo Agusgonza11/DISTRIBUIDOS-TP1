@@ -168,6 +168,7 @@ func (g *Gateway) listenRabbitMQ(ctx context.Context) {
 				g.logger.Warning("rabbitMQ channel closed")
 				return
 			}
+			fmt.Printf("Headers received: %#v\n", msg.Headers)
 
 			clientID := msg.Headers["ClientID"].(string)
 

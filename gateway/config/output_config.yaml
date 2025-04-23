@@ -2,6 +2,6 @@ gateway:
   address: ":6000"
 rabbitmq:
   address: "amqp://guest:guest@rabbitmq/"
-  output_queue_name: "output"
+  output_queue_name: "gateway_output"
 log:
   level: "INFO"
