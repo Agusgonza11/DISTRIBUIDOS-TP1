@@ -111,7 +111,7 @@ func (c *Client) sendMovies(query string) error {
 		return err
 	}
 
-	err = c.sendEOF(models.MoviesService)
+	err = c.sendEOF(query, models.MoviesService)
 	if err != nil {
 		c.logger.Errorf("failed trying to send EOF message: %v", err)
 		return err
@@ -174,7 +174,7 @@ func (c *Client) sendCredits(query string) error {
 		return err
 	}
 
-	err = c.sendEOF(models.CreditsService)
+	err = c.sendEOF(query, models.CreditsService)
 	if err != nil {
 		c.logger.Errorf("failed trying to send EOF message: %v", err)
 		return err
@@ -237,7 +237,7 @@ func (c *Client) sendRatings(query string) error {
 		return err
 	}
 
-	err = c.sendEOF(models.CreditsService)
+	err = c.sendEOF(query, models.CreditsService)
 	if err != nil {
 		c.logger.Errorf("failed trying to send EOF message: %v", err)
 		return err
@@ -476,8 +476,8 @@ func (c *Client) handleResults(ctx context.Context) {
 	}
 }
 
-func (c *Client) sendEOF(service string) error {
-	err := io.WriteMessage(c.conns[service], []byte(fmt.Sprintf("%s,%s", EndOfFileMessage, c.id)))
+func (c *Client) sendEOF(query string, service string) error {
+	err := io.WriteMessage(c.conns[service], []byte(fmt.Sprintf("%s,%s,%s,%s", query, service, c.id, EndOfFileMessage)))
 	if err != nil {
 		errMessage := fmt.Sprintf("error writing EOF message: %v", err)
 		c.logger.Errorf(errMessage)
@@ -679,7 +679,7 @@ func (c *Client) buildMoviesBatchMessage(movies []*models.Movie, query string, b
 		))
 	}
 
-	return fmt.Sprintf("%s,movies,%s,%d\n%s", query, c.id, batchID, sb.String())
+	return fmt.Sprintf("%s,MOVIES,%s,%d\n%s", query, c.id, batchID, sb.String())
 }
 
 func (c *Client) buildCreditsBatchMessage(credits []*models.Credit, query string, batchID int) string {
@@ -689,7 +689,7 @@ func (c *Client) buildCreditsBatchMessage(credits []*models.Credit, query string
 		sb.WriteString(fmt.Sprintf("%d|%s\n", credit.ID, credit.Cast))
 	}
 
-	return fmt.Sprintf("%s,credits,%s,%d\n%s", query, c.id, batchID, sb.String())
+	return fmt.Sprintf("%s,CREDITS,%s,%d\n%s", query, c.id, batchID, sb.String())
 }
 
 func (c *Client) buildRatingsBatchMessage(ratings []*models.Rating, query string, batchID int) string {
@@ -699,7 +699,7 @@ func (c *Client) buildRatingsBatchMessage(ratings []*models.Rating, query string
 		sb.WriteString(fmt.Sprintf("%d|%f\n", rating.ID, rating.Rating))
 	}
 
-	return fmt.Sprintf("%s,ratings,%s,%d\n%s", query, c.id, batchID, sb.String())
+	return fmt.Sprintf("%s,RATINGS,%s,%d\n%s", query, c.id, batchID, sb.String())
 }
 
 func convertToInterfaceSlice[T any](input []*T) []interface{} {

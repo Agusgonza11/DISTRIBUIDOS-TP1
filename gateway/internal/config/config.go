@@ -5,6 +5,7 @@ type InputGatewayConfig struct {
 	CreditsAddress string
 	RatingsAddress string
 	RabbitMQ       RabbitMQConfig
+	EOFsCount      map[string]int
 }
 
 type OutputGatewayConfig struct {

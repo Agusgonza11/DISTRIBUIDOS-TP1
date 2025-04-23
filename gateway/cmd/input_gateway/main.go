@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"tp1-sistemas-distribuidos/gateway/internal/config"
@@ -56,6 +58,15 @@ func main() {
 				"TOP-ARGENTINIAN-MOVIES-BY-RATING": v.GetString("rabbitmq.join_queues.top-argentinian-movies-by-rating"),
 				"TOP-ARGENTINIAN-ACTORS":           v.GetString("rabbitmq.join_queues.top-argentinian-actors"),
 			},
+		},
+		EOFsCount: map[string]int{
+			"CONSULTA_1_FILTER": castToInt(os.Getenv("CONSULTA_1_FILTER")),
+			"CONSULTA_2_FILTER": castToInt(os.Getenv("CONSULTA_2_FILTER")),
+			"CONSULTA_3_FILTER": castToInt(os.Getenv("CONSULTA_3_FILTER")),
+			"CONSULTA_4_FILTER": castToInt(os.Getenv("CONSULTA_4_FILTER")),
+			"CONSULTA_5_FILTER": castToInt(os.Getenv("CONSULTA_5_FILTER")),
+			"CONSULTA_3_JOIN":   castToInt(os.Getenv("CONSULTA_3_JOIN")),
+			"CONSULTA_4_JOIN":   castToInt(os.Getenv("CONSULTA_4_JOIN")),
 		},
 	}
 
@@ -152,4 +163,13 @@ func PrintConfig(logger *logging.Logger, v *viper.Viper) {
 	for key, queue := range joinQueues {
 		logger.Infof("join queue: %s | queue name: %s", key, queue)
 	}
+}
+
+func castToInt(s string) int {
+	val, err := strconv.Atoi(s)
+	if err != nil {
+		log.Printf("Error al convertir '%s' a int: %v", s, err)
+		return 0 // En caso de error, se retorna 0 como valor predeterminado
+	}
+	return val
 }

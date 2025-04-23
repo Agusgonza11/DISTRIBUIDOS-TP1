@@ -169,7 +169,7 @@ func (g *Gateway) listenRabbitMQ(ctx context.Context) {
 				return
 			}
 
-			clientID := msg.Headers["Client-ID"].(string)
+			clientID := msg.Headers["ClientID"].(string)
 
 			message := fmt.Sprintf("%s\n%s", msg.Headers["Query"], string(msg.Body))
 
