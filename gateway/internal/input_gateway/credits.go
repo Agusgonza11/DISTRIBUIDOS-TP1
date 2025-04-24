@@ -27,7 +27,7 @@ func (g *Gateway) buildCreditsMessage(lines []string, _ string) ([]byte, error) 
 		}
 
 		elements := strings.Split(line, "|")
-		if len(elements) < 8 {
+		if len(elements) < 2 {
 			continue
 		}
 

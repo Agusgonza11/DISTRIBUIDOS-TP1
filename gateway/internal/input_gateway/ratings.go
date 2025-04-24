@@ -22,12 +22,13 @@ func (g *Gateway) buildRatingsMessage(lines []string, _ string) ([]byte, error) 
 	}
 
 	for _, line := range lines {
+
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
 
 		elements := strings.Split(line, "|")
-		if len(elements) < 8 {
+		if len(elements) < 2 {
 			continue
 		}
 
@@ -42,7 +43,6 @@ func (g *Gateway) buildRatingsMessage(lines []string, _ string) ([]byte, error) 
 			id,
 			rating,
 		}
-		g.logger.Infof("batche enviado: %s\n")
 		if err := csvWriter.Write(record); err != nil {
 			continue
 		}

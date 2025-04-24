@@ -28,7 +28,6 @@ class JoinerNode:
 
     def guardar_csv(self, csv, datos):
         cuerpo = datos.split('\n', 1)[1]
-        logging.info(f"entro a guardar {csv} los datos {datos} y cuerpo {cuerpo}")
         self.db_client.guardar_csv(csv, cuerpo)
         lineas = cuerpo.strip().split("\n")
         self.lineas_csv[csv] += len(lineas)
