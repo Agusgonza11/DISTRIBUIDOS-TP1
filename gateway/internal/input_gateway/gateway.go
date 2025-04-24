@@ -18,11 +18,11 @@ import (
 )
 
 type Gateway struct {
-	config  config.InputGatewayConfig
-	running bool
-	// TODO agregar running mutex
-	amqpChannel *amqp.Channel
-	logger      *logging.Logger
+	config       config.InputGatewayConfig
+	running      bool
+	runningMutex sync.RWMutex
+	amqpChannel  *amqp.Channel
+	logger       *logging.Logger
 }
 
 func NewGateway(config config.InputGatewayConfig, logger *logging.Logger) (*Gateway, error) {
@@ -111,7 +111,7 @@ func (g *Gateway) handleMessage(
 
 	reader := bufio.NewReader(conn)
 
-	for g.running {
+	for g.isRunning() {
 		response, err := utils.ReadMessage(reader)
 		if err != nil {
 			if !errors.Is(err, io.EOF) {
@@ -177,7 +177,7 @@ func (g *Gateway) handleCommonMessage(
 			Headers: map[string]interface{}{
 				"Query":    query,
 				"ClientID": clientID,
-				"type": file,
+				"type":     file,
 			},
 			ContentType: "text/plain; charset=utf-8",
 			Body:        body,
@@ -314,10 +314,10 @@ func (g *Gateway) getEOFHeaderByQuery(query string, file string) string {
 }
 
 func (g *Gateway) acceptConnections(listener net.Listener, messageBuilderFunc func([]string, string) ([]byte, error)) {
-	for g.running {
+	for g.isRunning() {
 		conn, err := listener.Accept()
 		if err != nil {
-			if g.running {
+			if g.isRunning() {
 				g.logger.Errorf("failed to accept connection: %v", err)
 			}
 
@@ -330,5 +330,17 @@ func (g *Gateway) acceptConnections(listener net.Listener, messageBuilderFunc fu
 func (g *Gateway) gracefulShutdown(ctx context.Context, listener net.Listener) {
 	<-ctx.Done()
 	listener.Close()
+	g.stopRunning()
+}
+
+func (g *Gateway) isRunning() bool {
+	g.runningMutex.RLock()
+	defer g.runningMutex.RUnlock()
+	return g.running
+}
+
+func (g *Gateway) stopRunning() {
+	g.runningMutex.Lock()
+	defer g.runningMutex.Unlock()
 	g.running = false
 }
