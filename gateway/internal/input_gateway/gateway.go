@@ -177,7 +177,7 @@ func (g *Gateway) handleCommonMessage(
 			Headers: map[string]interface{}{
 				"Query":    query,
 				"ClientID": clientID,
-				"type": file,
+				"type":     file,
 			},
 			ContentType: "text/plain; charset=utf-8",
 			Body:        body,
@@ -212,7 +212,8 @@ func (g *Gateway) handleEOFMessage(conn net.Conn, queueName, query, file, client
 				Headers: map[string]interface{}{
 					"Query":    query,
 					"ClientID": clientID,
-					"type":     eofHeader,
+					"type":     "EOF",
+					eofHeader:  true,
 				},
 				ContentType: "text/plain; charset=utf-8",
 			},
