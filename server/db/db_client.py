@@ -49,13 +49,13 @@ class DBClient:
 
     def _create_tables(self):
         create_ratings_table = """
-            CREATE TABLE ratings (
+            CREATE TABLE IF NOT EXISTS ratings (
                 movie_id INTEGER,
                 rating FLOAT
             );
         """
         create_credits_table = """
-            CREATE TABLE credits (
+            CREATE TABLE IF NOT EXISTS credits (
                 movie_id INTEGER PRIMARY KEY,
                 cast_list TEXT[]
             );
