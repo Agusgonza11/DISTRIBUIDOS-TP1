@@ -27,9 +27,8 @@ class JoinerNode:
 
 
     def guardar_csv(self, csv, datos):
-        logging.info(f"entro a guardar {csv} los datos {datos}")
-
         cuerpo = datos.split('\n', 1)[1]
+        logging.info(f"entro a guardar {csv} los datos {datos} y cuerpo {cuerpo}")
         self.db_client.guardar_csv(csv, cuerpo)
         lineas = cuerpo.strip().split("\n")
         self.lineas_csv[csv] += len(lineas)
@@ -84,15 +83,22 @@ class JoinerNode:
 
     def consulta_4(self, datos):
         logging.info("Procesando datos para consulta 4")
-        #Consulta 4 Tomas
-        return datos
+
+        credits = self.db_client.obtener_credits()
+        if not credits:
+            return False
+
+        credits_df = pd.DataFrame(credits, columns=["id", "cast"])
+        credits_df.rename(columns={"movieId": "id"}, inplace=True)
+
+        return datos.merge(credits_df, on="id")
     
     def consulta_completa(self, consulta_id):
         match consulta_id:
             case 3:
-                return self.termino_credits and self.termino_movies
-            case 4:
                 return self.termino_ratings and self.termino_movies
+            case 4:
+                return self.termino_credits and self.termino_movies
             case _:
                 return self.termino_movies
 
@@ -108,10 +114,8 @@ class JoinerNode:
                 self.termino_movies = True
                 return
         if mensaje.headers.get("EOF_RATINGS"):
-            logging.info("recibe el eof ratings")
             self.termino_ratings = True
         if mensaje.headers.get("EOF_CREDITS"):
-            logging.info("recibe el eof credits")
             self.termino_credits = True
         if mensaje.headers.get("type") == "RATINGS":
             self.guardar_csv("ratings", mensaje.body.decode('utf-8'))
@@ -129,7 +133,7 @@ class JoinerNode:
 
 
 # -----------------------
-# Ejecutando nodo aggregator
+# Ejecutando nodo joiner
 # -----------------------
 
 joiner = JoinerNode()

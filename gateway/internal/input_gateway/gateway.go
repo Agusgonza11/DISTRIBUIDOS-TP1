@@ -177,6 +177,7 @@ func (g *Gateway) handleCommonMessage(
 			Headers: map[string]interface{}{
 				"Query":    query,
 				"ClientID": clientID,
+				"type": file,
 			},
 			ContentType: "text/plain; charset=utf-8",
 			Body:        body,
