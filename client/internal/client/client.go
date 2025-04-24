@@ -706,7 +706,7 @@ func (c *Client) buildRatingsBatchMessage(ratings []*models.Rating, query string
 	return fmt.Sprintf("%s,RATINGS,%s,%d\n%s", query, c.id, batchID, sb.String())
 }
 
-func (c *Client) gracefulShutdown(ctx context.Context, listener net.Listener) {
+func (c *Client) gracefulShutdown(ctx context.Context) {
 	<-ctx.Done()
 	for _, conn := range c.conns {
 		conn.Close()
