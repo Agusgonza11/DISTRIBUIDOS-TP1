@@ -8,14 +8,30 @@ services:
     ports:
     - 15672:15672
     - 5672:5672
-    logging:
-      driver: none
     healthcheck:
       test: rabbitmq-diagnostics check_port_connectivity
       interval: 5s
       timeout: 3s
       retries: 10
       start_period: 50s
+    logging:
+      driver: none
+  postgres:
+    container_name: postgres
+    image: postgres:15
+    environment:
+    - POSTGRES_USER=user
+    - POSTGRES_PASSWORD=password
+    - POSTGRES_DB=datos
+    networks:
+    - testing_net
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -U user -d datos
+      interval: 5s
+      retries: 5
+      timeout: 5s
   server:
     container_name: server
     image: server:latest
@@ -25,6 +41,9 @@ services:
     - LOGGING_LEVEL=DEBUG
     networks:
     - testing_net
+    depends_on:
+      postgres:
+        condition: service_healthy
   client:
     container_name: client
     image: client:latest

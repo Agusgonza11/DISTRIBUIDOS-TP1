@@ -8,7 +8,7 @@ from workers.communication import inicializar_comunicacion, escuchar_colas
 AGGREGATOR = "aggregator"
 
 # -----------------------
-# Nodo Filtro
+# Nodo Aggregator
 # -----------------------
 class AggregatorNode:
     def __init__(self):

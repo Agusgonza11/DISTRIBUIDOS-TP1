@@ -10,7 +10,7 @@ import time
 PNL = "pnl"
 
 # -----------------------
-# Nodo Filtro
+# Nodo PNL
 # -----------------------
 class PnlNode:
     def __init__(self):
