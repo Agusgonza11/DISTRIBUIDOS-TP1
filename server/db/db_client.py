@@ -1,6 +1,8 @@
 import psycopg2
 import logging
 from io import StringIO
+import ast
+import csv as csv_reader
 
 class DBClient:
 
@@ -23,8 +25,27 @@ class DBClient:
                 logging.error(f"No se pudo conectar a PostgreSQL: {e}")
 
     def guardar_csv(self, nombre_tabla, datos_csv):
+        logging.info(f"CAST {datos_csv}")
+        if nombre_tabla == "credits":
+            self.guardar_credits(datos_csv)
+        else:
+            buffer = StringIO(datos_csv.strip())
+            self.cur.copy_from(buffer, nombre_tabla, sep=",")
+            self.conn.commit()
+
+    def guardar_credits(self, datos_csv):
         buffer = StringIO(datos_csv.strip())
-        self.cur.copy_from(buffer, nombre_tabla, sep=",")
+        reader = csv_reader.reader(buffer)
+        for movie_id, cast_str, in reader:
+            try:
+                actores = ast.literal_eval(cast_str)
+                for actor in actores:
+                    self.cur.execute(
+                        "INSERT INTO credits (movie_id, actor) VALUES (%s, %s);",
+                        (int(movie_id), actor['name'])
+                    )
+            except Exception as e:
+                logging.warning(f"Error procesando fila con movie_id={movie_id}: {e}")
         self.conn.commit()
 
     def obtener_ratings(self):
@@ -48,8 +69,8 @@ class DBClient:
         """
         create_credits_table = """
             CREATE TABLE credits (
-                movie_id INTEGER PRIMARY KEY,
-                cast_list TEXT[]
+                movie_id INTEGER,
+                actor TEXT
             );
         """
         self.cur.execute(create_ratings_table)
