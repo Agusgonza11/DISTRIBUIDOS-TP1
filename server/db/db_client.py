@@ -42,7 +42,7 @@ class DBClient:
     def _create_tables(self):
         create_ratings_table = """
             CREATE TABLE ratings (
-                movie_id INTEGER PRIMARY KEY,
+                movie_id INTEGER,
                 rating FLOAT
             );
         """
