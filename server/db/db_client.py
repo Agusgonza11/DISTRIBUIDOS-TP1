@@ -1,8 +1,8 @@
-import psycopg2
+import psycopg2 # type: ignore
 import logging
 from io import StringIO
-import ast
-import csv as csv_reader
+
+from common.utils import create_dataframe, dictionary_to_list, list_to_string
 
 class DBClient:
 
@@ -24,28 +24,15 @@ class DBClient:
             except Exception as e:
                 logging.error(f"No se pudo conectar a PostgreSQL: {e}")
 
-    def guardar_csv(self, nombre_tabla, datos_csv):
-        logging.info(f"CAST {datos_csv}")
-        if nombre_tabla == "credits":
-            self.guardar_credits(datos_csv)
-        else:
-            buffer = StringIO(datos_csv.strip())
-            self.cur.copy_from(buffer, nombre_tabla, sep=",")
-            self.conn.commit()
 
-    def guardar_credits(self, datos_csv):
+    def guardar_csv(self, nombre_tabla, datos_csv):
+        if nombre_tabla == "credits":
+            dataframe = create_dataframe(datos_csv)
+            dataframe.columns = ['id', 'cast']
+            dataframe['cast'] = dataframe['cast'].apply(lambda x: list_to_string(dictionary_to_list(x)))
+            datos_csv = dataframe.to_csv(index=False, header=False)
         buffer = StringIO(datos_csv.strip())
-        reader = csv_reader.reader(buffer)
-        for movie_id, cast_str, in reader:
-            try:
-                actores = ast.literal_eval(cast_str)
-                for actor in actores:
-                    self.cur.execute(
-                        "INSERT INTO credits (movie_id, actor) VALUES (%s, %s);",
-                        (int(movie_id), actor['name'])
-                    )
-            except Exception as e:
-                logging.warning(f"Error procesando fila con movie_id={movie_id}: {e}")
+        self.cur.copy_from(buffer, nombre_tabla, sep=",")
         self.conn.commit()
 
     def obtener_ratings(self):
@@ -69,8 +56,8 @@ class DBClient:
         """
         create_credits_table = """
             CREATE TABLE credits (
-                movie_id INTEGER,
-                actor TEXT
+                movie_id INTEGER PRIMARY KEY,
+                cast_list TEXT[]
             );
         """
         self.cur.execute(create_ratings_table)

@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import os
-from common.utils import cargar_eofs, concat_data, create_dataframe, initialize_log, prepare_data_aggregator_consult_3
+from common.utils import cargar_eofs, concat_data, create_dataframe, dictionary_to_list, initialize_log, prepare_data_aggregator_consult_3
 from workers.test import enviar_mock
 from workers.communication import inicializar_comunicacion, escuchar_colas
 from db.db_client import DBClient
@@ -24,7 +24,8 @@ class JoinerNode:
         self.db_client = DBClient()
         self.lineas_csv = {"ratings": 0, "credits": 0}
         self.umbral_envio_3 = 10000
-        self.umbral_envio_4 = 10000
+        self.umbral_envio_4 = 1000
+        self.datos_4 = []
 
 
     def guardar_csv(self, csv, datos):
@@ -51,6 +52,11 @@ class JoinerNode:
         if consulta_id not in self.resultados_parciales:
             self.resultados_parciales[consulta_id] = []
         self.resultados_parciales[consulta_id].append(create_dataframe(datos))
+
+    def guardar_datos_temporal(self, datos):
+        self.datos_4.append(create_dataframe(datos))
+        self.lineas_csv["credits"] += len(datos)
+
 
     def ejecutar_consulta(self, consulta_id):
         datos = self.resultados_parciales.get(consulta_id, [])
@@ -82,15 +88,19 @@ class JoinerNode:
 
     def consulta_4(self, datos):
         logging.info("Procesando datos para consulta 4")
+        credits = concat_data(self.datos_4)
+        credits.columns = ['id', 'cast']
+        credits['cast'] = credits['cast'].apply(dictionary_to_list)
 
-        credits = self.db_client.obtener_credits()
-        if not credits:
+        #credits = self.db_client.obtener_credits()
+        if credits.empty:
             return False
+        credits.rename(columns={"movieId": "id"}, inplace=True)
+        return datos.merge(credits, on="id")
+        #credits_df = pd.DataFrame(credits, columns=["id", "cast"])
+        #credits_df.rename(columns={"movieId": "id"}, inplace=True)
+        #return datos.merge(credits_df, on="id")
 
-        credits_df = pd.DataFrame(credits, columns=["id", "cast"])
-        credits_df.rename(columns={"movieId": "id"}, inplace=True)
-
-        return datos.merge(credits_df, on="id")
     
     def consulta_completa(self, consulta_id):
         match consulta_id:
@@ -111,15 +121,16 @@ class JoinerNode:
             if self.eof_esperados[consulta_id] == 0:
                 logging.info(f"Consulta {consulta_id} recibió TODOS los EOF que esperaba")
                 self.termino_movies = True
-                return
-        if mensaje.headers.get("EOF_RATINGS"):
+        if mensaje.headers.get("type") == "EOF_RATINGS":
+            logging.info(f"Recibi todos los ratings")
             self.termino_ratings = True
-        if mensaje.headers.get("EOF_CREDITS"):
+        if mensaje.headers.get("type") == "EOF_CREDITS":
+            logging.info(f"Recibi todos los credits")
             self.termino_credits = True
         if mensaje.headers.get("type") == "RATINGS":
             self.guardar_csv("ratings", mensaje.body.decode('utf-8'))
         if mensaje.headers.get("type") == "CREDITS":
-            self.guardar_csv("credits", mensaje.body.decode('utf-8'))
+            self.guardar_datos_temporal(mensaje.body.decode('utf-8'))
         if mensaje.headers.get("type") == "MOVIES":
             self.guardar_datos(consulta_id, mensaje.body.decode('utf-8'))
         if self.termino_movies and self.puede_enviar(consulta_id):

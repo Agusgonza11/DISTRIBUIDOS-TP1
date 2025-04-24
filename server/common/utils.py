@@ -1,3 +1,4 @@
+import ast
 import logging
 import aio_pika # type: ignore
 import asyncio
@@ -81,3 +82,15 @@ async def esperar_conexion():
             logging.warning(f"Intento {i+1}: No se pudo conectar a RabbitMQ: {e}")
             await asyncio.sleep(2)
     raise Exception("No se pudo conectar a RabbitMQ después de varios intentos")
+
+
+def dictionary_to_list(dictionary_str):
+    try:
+        dictionary_list = ast.literal_eval(dictionary_str)  
+        return [data['name'] for data in dictionary_list]  
+    except (ValueError, SyntaxError):
+        return [] 
+    
+def list_to_string(row):
+    escaped = [item.replace('"', '\\"').replace(',', '\\,').replace('{', '\\{').replace('}', '\\}') for item in row]
+    return '{' + ','.join(escaped) + '}'

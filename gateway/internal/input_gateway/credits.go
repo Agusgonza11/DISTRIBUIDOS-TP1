@@ -42,6 +42,7 @@ func (g *Gateway) buildCreditsMessage(lines []string, _ string) ([]byte, error) 
 			id,
 			cast,
 		}
+		//g.logger.Infof("Lo que voy a enviar es %s", record)
 		if err := csvWriter.Write(record); err != nil {
 			continue
 		}
