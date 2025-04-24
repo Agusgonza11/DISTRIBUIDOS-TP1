@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import os
-from common.utils import cargar_eofs, create_dataframe, initialize_log, prepare_data_aggregator_consult_3
+from common.utils import cargar_eofs, concat_data, create_dataframe, initialize_log, prepare_data_aggregator_consult_3
 from workers.test import enviar_mock
 from workers.communication import inicializar_comunicacion, escuchar_colas
 
@@ -31,14 +31,15 @@ class JoinerNode:
     def guardar_datos(self, consulta_id, datos):
         if consulta_id not in self.resultados_parciales:
             self.resultados_parciales[consulta_id] = []
-        self.resultados_parciales[consulta_id].append(datos)
+        self.resultados_parciales[consulta_id].append(create_dataframe(datos))
 
     def ejecutar_consulta(self, consulta_id):
-        datos = "\n".join(self.resultados_parciales.get(consulta_id, []))
-        if datos == "":
+        datos = self.resultados_parciales.get(consulta_id, [])
+        if not datos:
             return False
-        lineas = datos.strip().split("\n")
-        logging.info(f"Ejecutando consulta {consulta_id} con {len(lineas)} elementos")
+
+        datos = concat_data(datos)
+        logging.info(f"Ejecutando consulta {consulta_id} con {len(datos)} elementos")      
         
         match consulta_id:
             case 3:

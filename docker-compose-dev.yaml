@@ -2,12 +2,14 @@ name: tp0
 services:
   rabbitmq:
     container_name: rabbitmq
-    image: 'rabbitmq:3-management'
+    image: rabbitmq:3-management
     networks:
-      - testing_net
+    - testing_net
     ports:
-      - "15672:15672"
-      - "5672:5672"
+    - 15672:15672
+    - 5672:5672
+    logging:
+      driver: none
     healthcheck:
       test: rabbitmq-diagnostics check_port_connectivity
       interval: 5s
@@ -28,12 +30,12 @@ services:
     image: client:latest
     entrypoint: /client
     environment:
-      - CLI_ID=1
-      - CLI_LOG_LEVEL=DEBUG
+    - CLI_ID=1
+    - CLI_LOG_LEVEL=DEBUG
     volumes:
-      - ./client/data:/app/data
+    - ./client/data:/app/data
     networks:
-      - testing_net
+    - testing_net
     depends_on:
     - server
     - input_gateway
@@ -43,33 +45,41 @@ services:
     image: input_gateway:latest
     entrypoint: /input_gateway
     environment:
-      - CLI_LOG_LEVEL=DEBUG
+    - CLI_LOG_LEVEL=DEBUG
+    - CONSULTA_1_FILTER=1
+    - CONSULTA_2_FILTER=1
+    - CONSULTA_3_FILTER=1
+    - CONSULTA_4_FILTER=1
+    - CONSULTA_5_FILTER=1
+    - CONSULTA_3_JOIN=1
+    - CONSULTA_4_JOIN=1
     ports:
-      - "5000:5000"  # Movies
-      - "5001:5001"  # Credits
-      - "5002:5002"  # Ratings
+    - 5000:5000
+    - 5001:5001
+    - 5002:5002
     networks:
-      - testing_net
+    - testing_net
     depends_on:
       rabbitmq:
         condition: service_healthy
     links:
-      - rabbitmq
+    - rabbitmq
   output_gateway:
     container_name: output_gateway
     image: output_gateway:latest
     entrypoint: /output_gateway
     environment:
-      - CLI_LOG_LEVEL=DEBUG
+    - CLI_LOG_LEVEL=DEBUG
+    - CONSULTA_1_EOF_COUNT=1
     ports:
-      - "6000:6000"
+    - 6000:6000
     networks:
-      - testing_net
+    - testing_net
     depends_on:
       rabbitmq:
         condition: service_healthy
     links:
-      - rabbitmq
+    - rabbitmq
   filter1:
     container_name: filter1
     image: filter:latest
@@ -86,7 +96,6 @@ services:
         condition: service_started
       rabbitmq:
         condition: service_healthy
-
   joiner1:
     container_name: joiner1
     image: joiner:latest

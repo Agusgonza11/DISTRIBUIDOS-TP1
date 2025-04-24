@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import os
-from common.utils import cargar_eofs, create_dataframe, initialize_log, prepare_data_aggregator_consult_3
+from common.utils import cargar_eofs, concat_data, create_dataframe, initialize_log, prepare_data_aggregator_consult_3
 from workers.test import enviar_mock
 from workers.communication import inicializar_comunicacion, escuchar_colas
 
@@ -19,15 +19,15 @@ class AggregatorNode:
     def guardar_datos(self, consulta_id, datos):
         if consulta_id not in self.resultados_parciales:
             self.resultados_parciales[consulta_id] = []
-        self.resultados_parciales[consulta_id].append(datos)
+        self.resultados_parciales[consulta_id].append(create_dataframe(datos))
 
     def ejecutar_consulta(self, consulta_id):
-        datos = "\n".join(self.resultados_parciales.get(consulta_id, []))
-        if datos == "":
+        datos = self.resultados_parciales.get(consulta_id, [])
+        if not datos:
             return False
-        lineas = datos.strip().split("\n")
-        logging.info(f"Ejecutando consulta {consulta_id} con {len(lineas)} elementos")
-        
+
+        datos = concat_data(datos)
+        logging.info(f"Ejecutando consulta {consulta_id} con {len(datos)} elementos")        
         match consulta_id:
             case 2:
                 return self.consulta_2(datos)
@@ -44,40 +44,29 @@ class AggregatorNode:
 
     def consulta_2(self, datos):
         logging.info("Procesando datos para consulta 2")
-        datos = create_dataframe(datos)
         investment_by_country = datos.groupby('country')['budget'].sum().sort_values(ascending=False)
-        top_5_countries = investment_by_country.head(5)
-        csv_q2 = top_5_countries.to_csv(index=False)
-        logging.info(f"lo que voy a devolver es {csv_q2}")
-        return csv_q2
+        top_5_countries = investment_by_country.head(5).reset_index()
+        return top_5_countries
 
     def consulta_3(self, datos):
         logging.info("Procesando datos para consulta 3")
-        datos = create_dataframe(datos)
         mean_ratings = datos.groupby(["id", "title"])['rating'].mean().reset_index()
         max_rated = mean_ratings.iloc[mean_ratings['rating'].idxmax()]
         min_rated = mean_ratings.iloc[mean_ratings['rating'].idxmin()]
-        csv_q3 = prepare_data_aggregator_consult_3(min_rated, max_rated)
-        logging.info(f"lo que voy a devolver es {csv_q3}")
-        return csv_q3
+        result = prepare_data_aggregator_consult_3(min_rated, max_rated)
+        return result
 
     def consulta_4(self, datos):
         logging.info("Procesando datos para consulta 4")
-        datos = create_dataframe(datos)
         actor_counts = datos.groupby("name").count().reset_index().rename(columns={"id": "count"})
         top_10_actors = actor_counts.nlargest(10, 'count')
-        csv_q4 = top_10_actors.to_csv(index=False)
-        logging.info(f"lo que voy a devolver es {csv_q4}")
-        return csv_q4
+        return top_10_actors
 
     def consulta_5(self, datos):
         logging.info("Procesando datos para consulta 5")
-        datos = create_dataframe(datos)
         datos["rate_revenue_budget"] = datos["revenue"] / datos["budget"]
-        average_rate_by_sentiment = datos.groupby("sentiment")["rate_revenue_budget"].mean()
-        csv_q5 = average_rate_by_sentiment.to_csv(index=False)
-        logging.info(f"lo que voy a devolver es {csv_q5}")
-        return csv_q5
+        average_rate_by_sentiment = datos.groupby("sentiment")["rate_revenue_budget"].mean().reset_index()
+        return average_rate_by_sentiment
     
 
     async def procesar_mensajes(self, destino, consulta_id, mensaje, enviar_func):

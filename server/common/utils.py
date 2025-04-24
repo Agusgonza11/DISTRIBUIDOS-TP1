@@ -33,6 +33,9 @@ def puede_enviar(body):
         return not body.empty
     return bool(body)
 
+def concat_data(data):
+    return pd.concat(data, ignore_index=True)
+
 
 def prepare_data_filter(data):
     data = create_dataframe(data)
@@ -41,13 +44,12 @@ def prepare_data_filter(data):
 
 def prepare_data_aggregator_consult_3(min, max):
     headers = ["id", "title", "rating"]
-    lines = [",".join(headers)]
+    data = [
+        {**{h: max[h] for h in headers}, "tipo": "max"},
+        {**{h: min[h] for h in headers}, "tipo": "min"}
+    ]
+    return pd.DataFrame(data)
 
-    for fila in [max, min]:
-        linea = ",".join(str(fila[h]) for h in headers)
-        lines.append(linea)
-
-    return "\n".join(lines)
 
 def cargar_eofs():
     raw = os.getenv("EOF_ESPERADOS", "")
