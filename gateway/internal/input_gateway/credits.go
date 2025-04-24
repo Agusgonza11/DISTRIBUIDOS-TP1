@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-func (g *Gateway) buildCreditsMessage(lines []string) ([]byte, error) {
+func (g *Gateway) buildCreditsMessage(lines []string, _ string) ([]byte, error) {
 	var buf bytes.Buffer
 
 	csvWriter := csv.NewWriter(&buf)

@@ -1,4 +1,4 @@
-queries: ["ARGENTINIAN-SPANISH-PRODUCTIONS"]
+queries: ["SENTIMENT-ANALYSIS"]
 gateway:
   input_movies_address: "input_gateway:5000"
   input_credits_address: "input_gateway:5001"

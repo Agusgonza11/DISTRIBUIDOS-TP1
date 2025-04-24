@@ -215,9 +215,9 @@ func (c *Client) sendRatings(query string) error {
 
 		rating := c.mapRatingFromCSVLine(line)
 
-		creditSize, _ := json.Marshal(rating)
+		ratingSize, _ := json.Marshal(rating)
 
-		if len(currentBatch) >= c.config.BatchSize || batchSizeBytes+len(creditSize) > c.config.BatchLimitAmount {
+		if len(currentBatch) >= c.config.BatchSize || batchSizeBytes+len(ratingSize) > c.config.BatchLimitAmount {
 			if err := c.sendRatingsBatch(currentBatch, query, currentBatchID); err != nil {
 				c.logger.Errorf("failed trying to send ratings batch: %v", err)
 				return err
@@ -229,7 +229,7 @@ func (c *Client) sendRatings(query string) error {
 		}
 
 		currentBatch = append(currentBatch, rating)
-		batchSizeBytes += len(creditSize)
+		batchSizeBytes += len(ratingSize)
 	}
 
 	if err := c.sendRatingsBatch(currentBatch, query, currentBatchID); err != nil {
@@ -237,7 +237,7 @@ func (c *Client) sendRatings(query string) error {
 		return err
 	}
 
-	err = c.sendEOF(query, models.CreditsService)
+	err = c.sendEOF(query, models.RatingsService)
 	if err != nil {
 		c.logger.Errorf("failed trying to send EOF message: %v", err)
 		return err
@@ -464,6 +464,7 @@ func (c *Client) handleResults(ctx context.Context) {
 		query := lines[0]
 
 		if strings.TrimSpace(lines[1]) == EndOfFileMessage {
+			c.logger.Infof("Query %s received successfully!", query)
 			break
 		}
 

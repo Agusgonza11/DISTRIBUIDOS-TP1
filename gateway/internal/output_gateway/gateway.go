@@ -7,6 +7,8 @@ import (
 	"fmt"
 	goIO "io"
 	"net"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"tp1-sistemas-distribuidos/gateway/internal/config"
@@ -21,6 +23,7 @@ type Gateway struct {
 	amqpChannel  *amqp.Channel
 	clients      map[string]net.Conn
 	clientsMutex sync.RWMutex
+	eofByClient  map[string]int
 	running      bool
 	runningMutex sync.RWMutex
 	logger       *logging.Logger
@@ -52,6 +55,7 @@ func NewGateway(config config.OutputGatewayConfig, logger *logging.Logger) (*Gat
 	return &Gateway{
 		config:      config,
 		amqpChannel: channel,
+		eofByClient: make(map[string]int),
 		clients:     make(map[string]net.Conn),
 		running:     true,
 		logger:      logger,
@@ -170,10 +174,20 @@ func (g *Gateway) listenRabbitMQ(ctx context.Context) {
 			}
 
 			if len(msg.Headers) == 0 {
+				g.logger.Info("---- Filtering message due to empty headers ----")
 				continue
 			}
 
 			clientID := msg.Headers["ClientID"].(string)
+
+			g.clientsMutex.RLock()
+			conn, exists := g.clients[clientID]
+			g.clientsMutex.RUnlock()
+
+			if !exists {
+				g.logger.Warningf("client %s not connected", clientID)
+				continue
+			}
 
 			body := strings.Split(string(msg.Body), "\n")
 			body = body[1:]
@@ -187,20 +201,21 @@ func (g *Gateway) listenRabbitMQ(ctx context.Context) {
 				queryInt = v
 			}
 
+			messageType := msg.Headers["type"]
+			if messageType != nil {
+				isEOF := messageType.(string) == "EOF"
+				if isEOF {
+					g.logger.Info("---- Sending EOF message ----")
+					g.handleEOFMessage(conn, clientID, g.mapQueryNumberToString(queryInt))
+					continue
+				}
+			}
+
 			bodyStr := strings.Join(body, "\n")
 
 			message := fmt.Sprintf("%s\n%s", g.mapQueryNumberToString(queryInt), bodyStr)
 			g.logger.Info("---- Message ----")
 			g.logger.Infof("Sending body: %s\n", string(message))
-
-			g.clientsMutex.RLock()
-			conn, exists := g.clients[clientID]
-			g.clientsMutex.RUnlock()
-
-			if !exists {
-				g.logger.Warningf("client %s not connected", clientID)
-				continue
-			}
 
 			err := io.WriteMessage(conn, []byte(message))
 			if err != nil {
@@ -220,6 +235,33 @@ func (g *Gateway) listenRabbitMQ(ctx context.Context) {
 				g.logger.Infof("Query result delivered succesfully to client: %s", clientID)
 			}
 		}
+	}
+}
+
+func (g *Gateway) handleEOFMessage(conn net.Conn, clientID string, query string) {
+	if query == QueryArgentinaEsp {
+		key := fmt.Sprintf("%s-%s", clientID, query)
+		if count, exists := g.eofByClient[key]; exists {
+			if count > 1 {
+				g.eofByClient[key]--
+				g.logger.Infof("receive EOF from client %s waiting %d more to send to client", clientID, count)
+				return
+			}
+
+			g.logger.Infof("receive EOF from client %s sending to client...", clientID)
+
+			delete(g.eofByClient, key)
+		} else {
+			eofsCount, _ := strconv.Atoi(os.Getenv("CONSULTA_1_EOF_COUNT"))
+			g.logger.Infof("setting EOF count to %d", eofsCount)
+
+			g.eofByClient[key] = eofsCount - 1
+		}
+	}
+
+	err := io.WriteMessage(conn, []byte(fmt.Sprintf("%s\n%s", query, "EOF")))
+	if err != nil {
+		g.logger.Errorf("failed to send message to %s: %v", clientID, err)
 	}
 }
 

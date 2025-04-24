@@ -240,7 +240,8 @@ def generar_yaml(cant_filter, cant_joiner, cant_aggregator, cant_pnl):
                 "image": "output_gateway:latest",
                 "entrypoint": "/output_gateway",
                 "environment": [
-                    "CLI_LOG_LEVEL=DEBUG"
+                    "CLI_LOG_LEVEL=DEBUG",
+                    *construir_env_output_gateway(consultas_por_nodo)
                 ],
                 "ports": ["6000:6000"],
                 "networks": ["testing_net"],
@@ -292,6 +293,22 @@ def construir_env_input_gateway(consultas_por_nodo):
     for numero_consulta, cantidad_nodos in consultas_join.items():
         nombre_env = "CONSULTA_" + str(numero_consulta) + "_JOIN"
         envs.append(f"{nombre_env}={cantidad_nodos}")
+
+    return envs
+
+
+def construir_env_output_gateway(consultas_por_nodo):
+    count_consulta_1 = 0
+    
+    for node, consultas in consultas_por_nodo["filter"].items():
+        for consulta in consultas:
+            if consulta == 1:
+                count_consulta_1 += 1
+
+    envs = []
+    
+    nombre_env = "CONSULTA_1_EOF_COUNT"
+    envs.append(f"{nombre_env}={count_consulta_1}")
 
     return envs
 

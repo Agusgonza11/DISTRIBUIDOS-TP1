@@ -61,7 +61,7 @@ func NewGateway(config config.InputGatewayConfig, logger *logging.Logger) (*Gate
 func (g *Gateway) Start(ctx context.Context) {
 	addresses := map[string]struct {
 		address            string
-		messageBuilderFunc func([]string) ([]byte, error)
+		messageBuilderFunc func([]string, string) ([]byte, error)
 	}{
 		"movies": {
 			address:            g.config.MoviesAddress,
@@ -105,7 +105,7 @@ func (g *Gateway) Start(ctx context.Context) {
 
 func (g *Gateway) handleMessage(
 	conn net.Conn,
-	messageBuilderFunc func([]string) ([]byte, error),
+	messageBuilderFunc func([]string, string) ([]byte, error),
 ) {
 	defer conn.Close()
 
@@ -152,7 +152,7 @@ func (g *Gateway) handleCommonMessage(
 	conn net.Conn,
 	queueName, query, file, batchID, clientID string,
 	lines []string,
-	messageBuilderFunc func([]string) ([]byte, error),
+	messageBuilderFunc func([]string, string) ([]byte, error),
 ) {
 	g.logger.Infof(fmt.Sprintf("%s_ACK:%s", batchID, file))
 
@@ -162,7 +162,7 @@ func (g *Gateway) handleCommonMessage(
 		return
 	}
 
-	body, err := messageBuilderFunc(lines[1:])
+	body, err := messageBuilderFunc(lines[1:], query)
 	if err != nil {
 		g.logger.Errorf("error trying to build message: %v", err)
 		return
@@ -312,7 +312,7 @@ func (g *Gateway) getEOFHeaderByQuery(query string, file string) string {
 	}
 }
 
-func (g *Gateway) acceptConnections(listener net.Listener, messageBuilderFunc func([]string) ([]byte, error)) {
+func (g *Gateway) acceptConnections(listener net.Listener, messageBuilderFunc func([]string, string) ([]byte, error)) {
 	for g.running {
 		conn, err := listener.Accept()
 		if err != nil {
