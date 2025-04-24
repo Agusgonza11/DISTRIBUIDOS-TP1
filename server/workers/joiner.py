@@ -74,7 +74,6 @@ class JoinerNode:
         ratings = self.db_client.obtener_ratings()
         if not ratings:
             return False
-        logging.info(f"BUSCAMOS RATINGS y obtuvimos {ratings}")
 
         ratings_df = pd.DataFrame(ratings, columns=["id", "rating"])
         ratings_df.rename(columns={"movieId": "id"}, inplace=True)

@@ -42,7 +42,7 @@ func (g *Gateway) buildRatingsMessage(lines []string, _ string) ([]byte, error) 
 			id,
 			rating,
 		}
-
+		g.logger.Infof("batche enviado: %s\n")
 		if err := csvWriter.Write(record); err != nil {
 			continue
 		}

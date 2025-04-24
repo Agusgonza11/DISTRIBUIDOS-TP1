@@ -573,6 +573,7 @@ func (c *Client) sendRatingsBatch(batch []*models.Rating, query string, batchID 
 	}
 
 	message := c.buildRatingsBatchMessage(batch, query, batchID)
+	c.logger.Infof("Mensaje que envio: %s\n")
 
 	err := io.WriteMessage(c.conns[models.RatingsService], []byte(message))
 	if err != nil {
