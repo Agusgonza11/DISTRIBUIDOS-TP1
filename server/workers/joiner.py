@@ -4,6 +4,7 @@ import os
 from common.utils import cargar_eofs, concat_data, create_dataframe, initialize_log, prepare_data_aggregator_consult_3
 from workers.test import enviar_mock
 from workers.communication import inicializar_comunicacion, escuchar_colas
+from db.db_client import DBClient
 
 JOINER = "joiner"
 
@@ -18,6 +19,7 @@ class JoinerNode:
         self.termino_credits = False
         self.termino_movies = False
         self.termino_ratings = False
+        self.db_client = DBClient()
 
     def guardar_csv(self, csv, datos):
         if csv == "RATINGS":

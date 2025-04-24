@@ -198,6 +198,22 @@ def generar_yaml(cant_filter, cant_joiner, cant_aggregator, cant_pnl):
                     "start_period": "50s"
                 }
             },
+            "postgres": {
+                "container_name": "postgres",
+                "image": "postgres:15",
+                "environment": [
+                    "POSTGRES_USER=user",
+                    "POSTGRES_PASSWORD=password",
+                    "POSTGRES_DB=datos"
+                ],
+                "networks": ["testing_net"],
+                "healthcheck": {
+                    "test": ["CMD-SHELL", "pg_isready -U user -d datos"],
+                    "interval": "5s",
+                    "retries": 5,
+                    "timeout": "5s"
+                }
+            },
             "server": {
                 "container_name": "server",
                 "image": "server:latest",
@@ -206,7 +222,12 @@ def generar_yaml(cant_filter, cant_joiner, cant_aggregator, cant_pnl):
                     "PYTHONUNBUFFERED=1",
                     "LOGGING_LEVEL=DEBUG"
                 ],
-                "networks": ["testing_net"]
+                "networks": ["testing_net"],
+                "depends_on": {
+                    "postgres": {
+                        "condition": "service_healthy"
+                    }
+                } 
             },
             "client": {
                 "container_name": "client",
