@@ -472,7 +472,7 @@ func (c *Client) handleResults(ctx context.Context) {
 			return
 		}
 
-		io.WriteFile(c.outputFiles[query], strings.Join(lines[1:], ""))
+		io.WriteFile(c.outputFiles[query], strings.Join(lines[1:], "\n"))
 	}
 }
 

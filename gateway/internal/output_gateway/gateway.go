@@ -168,11 +168,30 @@ func (g *Gateway) listenRabbitMQ(ctx context.Context) {
 				g.logger.Warning("rabbitMQ channel closed")
 				return
 			}
-			fmt.Printf("Headers received: %#v\n", msg.Headers)
+
+			if len(msg.Headers) == 0 {
+				continue
+			}
 
 			clientID := msg.Headers["ClientID"].(string)
 
-			message := fmt.Sprintf("%s\n%s", msg.Headers["Query"], string(msg.Body))
+			body := strings.Split(string(msg.Body), "\n")
+			body = body[1:]
+
+			var queryInt uint8
+
+			query := msg.Headers["Query"]
+
+			switch v := query.(type) {
+			case uint8:
+				queryInt = v
+			}
+
+			bodyStr := strings.Join(body, "\n")
+
+			message := fmt.Sprintf("%s\n%s", g.mapQueryNumberToString(queryInt), bodyStr)
+			g.logger.Info("---- Message ----")
+			g.logger.Infof("Sending body: %s\n", string(message))
 
 			g.clientsMutex.RLock()
 			conn, exists := g.clients[clientID]
@@ -201,6 +220,23 @@ func (g *Gateway) listenRabbitMQ(ctx context.Context) {
 				g.logger.Infof("Query result delivered succesfully to client: %s", clientID)
 			}
 		}
+	}
+}
+
+func (g *Gateway) mapQueryNumberToString(query uint8) string {
+	switch query {
+	case 1:
+		return QueryArgentinaEsp
+	case 2:
+		return QueryTopInvestors
+	case 3:
+		return QueryTopArgentinianMoviesByRating
+	case 4:
+		return QueryTopArgentinianActors
+	case 5:
+		return QuerySentimentAnalysis
+	default:
+		return ""
 	}
 }
 
