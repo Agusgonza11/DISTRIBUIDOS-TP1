@@ -23,7 +23,8 @@ class JoinerNode:
         self.termino_ratings = False
         self.db_client = DBClient()
         self.lineas_csv = {"ratings": 0, "credits": 0}
-        self.umbral_envio = 100
+        self.umbral_envio_3 = 10000
+        self.umbral_envio_4 = 10000
 
 
     def guardar_csv(self, csv, datos):
@@ -35,11 +36,12 @@ class JoinerNode:
 
 
     def puede_enviar(self, consulta_id):
+        logging.info(f"puede enviar {self.lineas_csv}")
         puede_enviar = False
-        if consulta_id == 3 and self.lineas_csv["ratings"] >= self.umbral_envio:
+        if consulta_id == 3 and (self.lineas_csv["ratings"] >= self.umbral_envio_3 or self.termino_ratings):
             self.lineas_csv["ratings"] = 0
             puede_enviar = True
-        if consulta_id == 4 and self.lineas_csv["credits"] >= self.umbral_envio:
+        if consulta_id == 4 and (self.lineas_csv["credits"] >= self.umbral_envio_4 or self.termino_credits):
             self.lineas_csv["credits"] = 0
             puede_enviar = True        
         return puede_enviar
@@ -56,7 +58,6 @@ class JoinerNode:
             return False
 
         datos = concat_data(datos)
-        logging.info(f"Ejecutando consulta {consulta_id} con {len(datos)} elementos")      
         
         match consulta_id:
             case 3:
