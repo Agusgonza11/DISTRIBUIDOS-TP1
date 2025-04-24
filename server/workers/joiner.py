@@ -20,13 +20,18 @@ class JoinerNode:
         self.termino_ratings = False
 
     def guardar_csv(self, csv, datos):
+        if csv == "RATINGS":
+            pass
+        if csv == "CREDITS":
+            pass
         #Aca deberia guardar en base de datos
+        # Datos es un DataFrame
         pass
 
     def puede_enviar(self):
         #Aca deberia ser una funcion que decida cuando puede enviar al nodo siguiente el resultado
         #Quiza esperar una cierta cantidad de info hay que ver
-        True
+        False
 
     def guardar_datos(self, consulta_id, datos):
         if consulta_id not in self.resultados_parciales:
@@ -53,13 +58,11 @@ class JoinerNode:
 
     def consulta_3(self, datos):
         logging.info("Procesando datos para consulta 3")
-        datos = create_dataframe(datos)
         #Consulta 3 Tomas
         return datos
 
     def consulta_4(self, datos):
         logging.info("Procesando datos para consulta 4")
-        datos = create_dataframe(datos)
         #Consulta 4 Tomas
         return datos
 
@@ -82,7 +85,7 @@ class JoinerNode:
             self.guardar_csv("credits", mensaje.body.decode('utf-8'))
         if mensaje.headers.get("type") == "MOVIES":
             self.guardar_datos(consulta_id, mensaje.body.decode('utf-8'))
-        if self.termino_movies:
+        if self.termino_movies or self.puede_enviar():
             resultado = self.ejecutar_consulta(consulta_id)
             await enviar_func(destino, resultado, headers={"Query": consulta_id, "ClientID": mensaje.headers.get("ClientID")})
         if self.termino_credits and self.termino_ratings and self.termino_movies:
