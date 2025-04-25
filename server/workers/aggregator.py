@@ -2,7 +2,7 @@ import threading
 import logging
 import os
 from common.utils import cargar_eofs, concat_data, create_dataframe, prepare_data_aggregator_consult_3
-from common.communication import iniciar_nodo
+from common.communication import iniciar_nodo, obtener_query
 
 AGGREGATOR = "aggregator"
 
@@ -67,7 +67,8 @@ class AggregatorNode:
         return average_rate_by_sentiment
     
 
-    def procesar_mensajes(self, destino, consulta_id, mensaje, enviar_func):
+    def procesar_mensajes(self, mensaje, enviar_func):
+        consulta_id = obtener_query(mensaje)
         try:
             if mensaje['headers'].get("type") == "EOF":
                 logging.info(f"Consulta {consulta_id} recibió EOF")
@@ -75,12 +76,11 @@ class AggregatorNode:
                 if self.eof_esperados[consulta_id] == 0:
                     logging.info(f"Consulta {consulta_id} recibió TODOS los EOF que esperaba")
                     resultado = self.ejecutar_consulta(consulta_id)
-                    enviar_func(destino, resultado, headers={"type": "RESULT", "Query": consulta_id, "ClientID": mensaje['headers'].get("ClientID")})
+                    enviar_func(AGGREGATOR, consulta_id, resultado, mensaje, "RESULT")
                     self.shutdown_event.set()
                     mensaje['ack']() 
                     return
                 else:
-                    # Asegurarse de que el ACK no se mande antes de que todo esté procesado
                     mensaje['ack']()  
             contenido = mensaje['body'].decode('utf-8')
             self.guardar_datos(consulta_id, contenido)

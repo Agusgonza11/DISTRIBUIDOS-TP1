@@ -10,15 +10,20 @@ conexion = None
 canal = None
 
 # ----------------------
-# Diccionario global
+# ENRUTAMIENTO DE MENSAJE
 # ----------------------
-COLAS = {
+QUERY = {
     "ARGENTINIAN-SPANISH-PRODUCTIONS": 1,
     "TOP-INVESTING-COUNTRIES" : 2,
     "TOP-ARGENTINIAN-MOVIES-BY-RATING": 3,
     "TOP-ARGENTINIAN-ACTORS": 4,
     "SENTIMENT-ANALYSIS": 5,
 }
+
+
+def obtener_query(mensaje):
+    tipo = mensaje['headers'].get("Query")
+    return QUERY[tipo]
 
 
 #Utilizar a futuro para colas unicas
@@ -51,6 +56,14 @@ def determinar_salida(tipo_nodo, consulta_id):
         raise ValueError(f"No se puede determinar salida para {tipo_nodo} y consulta {consulta_id}")
 
 
+def enrutamiento_mensaje(tipo_nodo, consulta_id, mensaje_original, tipo=None):
+    routing_key = determinar_salida(tipo_nodo, consulta_id)
+    headers = {"Query": mensaje_original['headers'].get("Query"), "ClientID": mensaje_original['headers'].get("ClientID")}
+    if type != None:
+        headers["type"] = tipo
+    return (routing_key, pika.BasicProperties(headers=headers))   
+
+
 
 # ---------------------
 # GENERALES
@@ -72,10 +85,10 @@ def inicializar_comunicacion():
     canal.basic_qos(prefetch_count=1)
 
 
-def enviar_mensaje(routing_key, body, headers=None):
+def enviar_mensaje(tipo_nodo, consulta_id, body, mensaje_original, type=None):
     if puede_enviar(body):
         logging.info(f"Lo que voy a enviar es {body}")
-        propiedades = pika.BasicProperties(headers=headers)
+        routing_key, propiedades = enrutamiento_mensaje(tipo_nodo, consulta_id, mensaje_original, type)
         canal.basic_publish(
             exchange='',
             routing_key=routing_key,
@@ -101,19 +114,19 @@ def escuchar_colas(entrada, nodo, consultas):
             canal.queue_declare(queue=nombre_salida, durable=True)
             colas_declaradas.add(nombre_salida)
 
-        def make_callback(consulta_id, nombre_salida):
+        def make_callback():
             def callback(ch, method, properties, body):
                 mensaje = {
                     'body': body,
                     'headers': properties.headers if properties.headers else {},
                     'ack': lambda: ch.basic_ack(delivery_tag=method.delivery_tag)
                 }
-                nodo.procesar_mensajes(nombre_salida, consulta_id, mensaje, enviar_mensaje)
+                nodo.procesar_mensajes(mensaje, enviar_mensaje)
             return callback
 
         canal.basic_consume(
             queue=nombre_entrada,
-            on_message_callback=make_callback(consulta_id, nombre_salida),
+            on_message_callback=make_callback(),
             auto_ack=False
         )
 
