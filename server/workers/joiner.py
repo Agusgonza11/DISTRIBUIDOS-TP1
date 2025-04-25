@@ -2,7 +2,7 @@ import threading
 import logging
 import os
 from common.utils import cargar_eofs, concat_data, create_dataframe, dictionary_to_list
-from workers.communication import iniciar_nodo
+from common.communication import iniciar_nodo
 import pandas as pd # type: ignore
 
 

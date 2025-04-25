@@ -2,7 +2,7 @@ import threading
 import logging
 import os
 from common.utils import cargar_eofs, concat_data, create_dataframe, prepare_data_aggregator_consult_3
-from workers.communication import iniciar_nodo
+from common.communication import iniciar_nodo
 
 AGGREGATOR = "aggregator"
 
@@ -24,9 +24,7 @@ class AggregatorNode:
         datos = self.resultados_parciales.get(consulta_id, [])
         if not datos:
             return False
-
         datos = concat_data(datos)
-        logging.info(f"Ejecutando consulta {consulta_id} con {len(datos)} elementos")        
         match consulta_id:
             case 2:
                 return self.consulta_2(datos)

@@ -2,7 +2,7 @@ import logging
 import threading
 import os
 from common.utils import cargar_eof_a_enviar, create_dataframe, prepare_data_filter
-from workers.communication import iniciar_nodo
+from common.communication import iniciar_nodo
 
 FILTER = "filter"
 
@@ -15,9 +15,6 @@ class FiltroNode:
         self.shutdown_event = threading.Event()
 
     def ejecutar_consulta(self, consulta_id, datos):
-        lineas = datos.strip().split("\n")
-        logging.info(f"Ejecutando consulta {consulta_id} con {len(lineas)} elementos")
-        
         match consulta_id:
             case 1:
                 return self.consulta_1(datos)

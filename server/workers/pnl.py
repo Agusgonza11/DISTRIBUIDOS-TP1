@@ -2,7 +2,7 @@ import threading
 import logging
 import os
 from common.utils import cargar_eofs, create_dataframe
-from workers.communication import iniciar_nodo
+from common.communication import iniciar_nodo
 from transformers import pipeline # type: ignore
 import time
 
@@ -18,10 +18,6 @@ class PnlNode:
 
 
     def ejecutar_consulta(self, consulta_id, datos):
-        lineas = datos.strip().split("\n")
-
-        logging.info(f"Ejecutando consulta {consulta_id} con {len(lineas)} elementos")
-        
         match consulta_id:
             case 5:
                 return self.consulta_5(datos)

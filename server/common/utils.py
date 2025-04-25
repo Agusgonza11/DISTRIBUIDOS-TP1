@@ -1,7 +1,6 @@
 import ast
 import logging
 import pika # type: ignore
-import asyncio
 from io import StringIO
 import pandas as pd # type: ignore
 import os
