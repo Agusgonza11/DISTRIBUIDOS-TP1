@@ -27,6 +27,35 @@ COLAS = {
     "joiner_consult_4": "aggregator_consult_4",
 }
 
+#Utilizar a futuro para colas unicas
+def determinar_salida(tipo_nodo, consulta_id):
+    if tipo_nodo == "filter":
+        return {
+            1: "gateway_output",
+            2: "aggregator_input",
+            3: "joiner_input",
+            4: "joiner_input",
+            5: "pnl_input"
+        }[consulta_id]
+    elif tipo_nodo == "joiner":
+        return {
+            3: "aggregator_input",
+            4: "aggregator_input"
+        }[consulta_id]
+    elif tipo_nodo == "aggregator":
+        return {
+            2: "gateway_output",
+            3: "gateway_output",
+            4: "gateway_output",
+            5: "gateway_output"
+        }[consulta_id]
+    elif tipo_nodo == "pnl":
+        return {
+            5: "aggregator_input"
+        }[consulta_id]
+    else:
+        raise ValueError(f"No se puede determinar salida para {tipo_nodo} y consulta {consulta_id}")
+
 
 
 # ---------------------
