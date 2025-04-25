@@ -1,7 +1,7 @@
 import logging
 import threading
 import os
-from common.utils import cargar_eof_a_enviar, create_dataframe, prepare_data_filter, EOF
+from common.utils import cargar_eof_a_enviar, create_dataframe, prepare_data_consult_1, prepare_data_consult_2, prepare_data_filter, EOF
 from common.communication import determinar_salida, iniciar_nodo, obtener_query
 
 FILTER = "filter"
@@ -40,7 +40,7 @@ class FiltroNode:
         return movies_arg_post_2000
 
     def consulta_1(self, datos):
-        datos = prepare_data_filter(datos)
+        datos = prepare_data_consult_1(datos)
         movies_argentina_españa_00s_df = datos[
             (datos['production_countries'].str.contains('Argentina', case=False, na=False)) & 
             (datos['production_countries'].str.contains('Spain', case=False, na=False)) & 
@@ -50,14 +50,13 @@ class FiltroNode:
         output_q1 = movies_argentina_españa_00s_df[["title", "genres"]]
         return output_q1
 
+
     def consulta_2(self, datos):
-        logging.info("Procesando datos para consulta 2")
-        datos = create_dataframe(datos)
-        solo_country_df = datos[
-            datos['production_countries'].apply(lambda x: len(eval(x)) == 1)
-        ]
+        logging.info("Procesando datos para consulta 2") 
+        datos = prepare_data_consult_2(datos)
+        solo_country_df = datos[datos['production_countries'].apply(lambda x: len(eval(x)) == 1)]
         solo_country_df = solo_country_df.copy()
-        solo_country_df['country'] = solo_country_df['production_countries'].apply(lambda x: eval(x)[0])
+        solo_country_df.loc[:, 'country'] = solo_country_df['production_countries'].apply(lambda x: eval(x)[0])
         return solo_country_df
 
     def consulta_3(self, datos):

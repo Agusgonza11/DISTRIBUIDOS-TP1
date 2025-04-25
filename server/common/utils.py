@@ -47,6 +47,11 @@ def dictionary_to_list(dictionary_str):
     except (ValueError, SyntaxError):
         return [] 
 
+
+
+# -------------------
+# PREPARAR DATA
+# -------------------
 def prepare_data_filter(data):
     data = create_dataframe(data)
     data['genres'] = data['genres'].apply(dictionary_to_list)
@@ -56,6 +61,24 @@ def prepare_data_filter(data):
     data['release_date'] = pd.to_datetime(data['release_date'], errors='coerce')
     return data
 
+def prepare_data_consult_1(data):
+    data = create_dataframe(data)
+    data['release_date'] = pd.to_datetime(data['release_date'], format='%Y-%m-%d', errors='coerce')
+    data['genres'] = data['genres'].apply(dictionary_to_list)
+    data['production_countries'] = data['production_countries'].apply(dictionary_to_list)
+    data['genres'] = data['genres'].astype(str)
+    data['production_countries'] = data['production_countries'].astype(str)
+    return data
+
+def prepare_data_consult_2(data):
+    data = create_dataframe(data)
+    data['production_countries'] = data['production_countries'].apply(dictionary_to_list)
+    data['production_countries'] = data['production_countries'].astype(str)
+    data['budget'] = pd.to_numeric(data['budget'], errors='coerce')
+    return data
+
+
+
 def prepare_data_aggregator_consult_3(min, max):
     headers = ["id", "title", "rating"]
     data = [
@@ -63,12 +86,6 @@ def prepare_data_aggregator_consult_3(min, max):
         {**{h: min[h] for h in headers}, "tipo": "min"}
     ]
     return pd.DataFrame(data)
-
-
-    
-def list_to_string(row):
-    escaped = [item.replace('"', '\\"').replace(',', '\\,').replace('{', '\\{').replace('}', '\\}') for item in row]
-    return '{' + ','.join(escaped) + '}'
 
 
 
