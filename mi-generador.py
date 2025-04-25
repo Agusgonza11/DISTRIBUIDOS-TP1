@@ -172,7 +172,6 @@ def agregar_workers(compose, cant_filter=1, cant_joiner=1, cant_aggregator=1, ca
                 "environment": env,
                 "networks": ["testing_net"],
                 "depends_on": {
-                        "server": {"condition": "service_started"},
                         "rabbitmq": {"condition": "service_healthy"}
                 }
             }
@@ -214,21 +213,6 @@ def generar_yaml(cant_filter, cant_joiner, cant_aggregator, cant_pnl):
                     "timeout": "5s"
                 }
             },
-            "server": {
-                "container_name": "server",
-                "image": "server:latest",
-                "entrypoint": "python3 /main.py",
-                "environment": [
-                    "PYTHONUNBUFFERED=1",
-                    "LOGGING_LEVEL=DEBUG"
-                ],
-                "networks": ["testing_net"],
-                "depends_on": {
-                    "postgres": {
-                        "condition": "service_healthy"
-                    }
-                } 
-            },
             "client": {
                 "container_name": "client",
                 "image": "client:latest",
@@ -239,7 +223,7 @@ def generar_yaml(cant_filter, cant_joiner, cant_aggregator, cant_pnl):
                 ],
                 "volumes": ["./client/data:/app/data"],
                 "networks": ["testing_net"],
-                "depends_on": ["server", "input_gateway", "output_gateway"]
+                "depends_on": ["input_gateway", "output_gateway"]
             },
             "input_gateway": {
                 "container_name": "input_gateway",

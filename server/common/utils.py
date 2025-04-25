@@ -20,6 +20,10 @@ def initialize_log(logging_level):
         datefmt='%Y-%m-%d %H:%M:%S',
     )
 
+
+# -------------------
+# PANDAS
+# -------------------
 def create_dataframe(csv):
     return pd.read_csv(StringIO(csv))
 
@@ -52,6 +56,24 @@ def prepare_data_aggregator_consult_3(min, max):
     return pd.DataFrame(data)
 
 
+def dictionary_to_list(dictionary_str):
+    try:
+        dictionary_list = ast.literal_eval(dictionary_str)  
+        return [data['name'] for data in dictionary_list]  
+    except (ValueError, SyntaxError):
+        return [] 
+    
+def list_to_string(row):
+    escaped = [item.replace('"', '\\"').replace(',', '\\,').replace('{', '\\{').replace('}', '\\}') for item in row]
+    return '{' + ','.join(escaped) + '}'
+
+
+
+
+
+# -------------------
+# EOF
+# -------------------
 def cargar_eofs():
     raw = os.getenv("EOF_ESPERADOS", "")
     eofs = {}
@@ -71,15 +93,3 @@ def cargar_eof_a_enviar():
                 k, v = par.split(":")
                 eofs[int(k)] = int(v)
     return eofs
-
-
-def dictionary_to_list(dictionary_str):
-    try:
-        dictionary_list = ast.literal_eval(dictionary_str)  
-        return [data['name'] for data in dictionary_list]  
-    except (ValueError, SyntaxError):
-        return [] 
-    
-def list_to_string(row):
-    escaped = [item.replace('"', '\\"').replace(',', '\\,').replace('{', '\\{').replace('}', '\\}') for item in row]
-    return '{' + ','.join(escaped) + '}'
