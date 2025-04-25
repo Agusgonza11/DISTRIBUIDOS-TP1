@@ -95,8 +95,8 @@ def enviar_mensaje(tipo_nodo, consulta_id, body, mensaje_original, type=None):
             body=create_body(body).encode(),
             properties=propiedades
         )
-    else:
-        logging.info("No se enviará el mensaje: body vacío")
+    #else:
+        #logging.info("No se enviará el mensaje: body vacío")
 
 
 # ---------------------

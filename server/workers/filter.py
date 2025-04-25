@@ -40,7 +40,6 @@ class FiltroNode:
         return movies_arg_post_2000
 
     def consulta_1(self, datos):
-        logging.info("Procesando datos para consulta 1")
         datos = prepare_data_filter(datos)
         movies_argentina_españa_00s_df = datos[
             (datos['production_countries'].str.contains('Argentina', case=False, na=False)) & 
