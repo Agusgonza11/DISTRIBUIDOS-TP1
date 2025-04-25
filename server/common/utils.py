@@ -73,6 +73,8 @@ def list_to_string(row):
 # -------------------
 # EOF
 # -------------------
+EOF = "EOF"
+
 def cargar_eofs():
     raw = os.getenv("EOF_ESPERADOS", "")
     eofs = {}

@@ -1,8 +1,8 @@
 import threading
 import logging
 import os
-from common.utils import cargar_eofs, create_dataframe
-from common.communication import iniciar_nodo
+from common.utils import EOF, cargar_eofs, create_dataframe
+from common.communication import iniciar_nodo, obtener_query
 from transformers import pipeline # type: ignore
 import time
 
@@ -33,28 +33,30 @@ class PnlNode:
         datos['sentiment'] = datos['overview'].fillna('').apply(lambda x: sentiment_analyzer(x)[0]['label'])
         return datos
     
-def procesar_mensajes(self, destino, consulta_id, mensaje, enviar_func):
-    try:
-        if mensaje['headers'].get("type") == "EOF":
-            logging.info(f"Consulta {consulta_id} recibió EOF")
-            self.eof_esperados[consulta_id] -= 1
-            if self.eof_esperados[consulta_id] == 0:
-                logging.info(f"Consulta {consulta_id} recibió TODOS los EOF que esperaba")
-                enviar_func(destino, "EOF", headers={"type": "EOF", "Query": consulta_id, "ClientID": mensaje['headers'].get("ClientID")})
-                self.shutdown_event.set()
+    def procesar_mensajes(self, mensaje, enviar_func):
+        consulta_id = obtener_query(mensaje)
+        try:
+            if mensaje['headers'].get("type") == EOF:
+                logging.info(f"Consulta {consulta_id} recibió EOF")
+                self.eof_esperados[consulta_id] -= 1
+                if self.eof_esperados[consulta_id] == 0:
+                    logging.info(f"Consulta {consulta_id} recibió TODOS los EOF que esperaba")
+                    enviar_func(PNL, consulta_id, EOF, mensaje, EOF)
+                    self.shutdown_event.set()
+                else:
+                    # Asegurarse de que el ACK no se mande antes de que todo esté procesado
+                    mensaje['ack']()  
             else:
-                # Asegurarse de que el ACK no se mande antes de que todo esté procesado
-                mensaje['ack']()  
-        else:
-            resultado = self.ejecutar_consulta(consulta_id, mensaje['body'].decode('utf-8'))
-            enviar_func(destino, resultado, headers={"Query": consulta_id, "ClientID": mensaje['headers'].get("ClientID")})
+                resultado = self.ejecutar_consulta(consulta_id, mensaje['body'].decode('utf-8'))
+                enviar_func(PNL, consulta_id, resultado, mensaje, "")
 
-        mensaje['ack']()
 
-    except Exception as e:
-        logging.error(f"Error procesando mensaje en consulta {consulta_id}: {e}")
+            mensaje['ack']()
 
-    
+        except Exception as e:
+            logging.error(f"Error procesando mensaje en consulta {consulta_id}: {e}")
+
+        
 
 
 # -----------------------

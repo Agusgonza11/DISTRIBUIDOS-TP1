@@ -1,8 +1,8 @@
 import logging
 import threading
 import os
-from common.utils import cargar_eof_a_enviar, create_dataframe, prepare_data_filter
-from common.communication import iniciar_nodo
+from common.utils import cargar_eof_a_enviar, create_dataframe, prepare_data_filter, EOF
+from common.communication import determinar_salida, iniciar_nodo, obtener_query
 
 FILTER = "filter"
 
@@ -77,24 +77,20 @@ class FiltroNode:
         q5_input_df = q5_input_df.loc[q5_input_df['revenue'] != 0]
         return q5_input_df
 
-    def procesar_mensajes(self, destino, consulta_id, mensaje, enviar_func):
+
+    def procesar_mensajes(self, mensaje, enviar_func):
+        consulta_id = obtener_query(mensaje)
         try:
-            if mensaje['headers'].get("type") == "EOF":
-                logging.info(f"Consulta {consulta_id} recibió EOF con clientID")
+            if mensaje['headers'].get("type") == EOF:
+                logging.info(f"Consulta {consulta_id} recibió EOF")
                 eof_a_enviar = self.eof_a_enviar.get(consulta_id, 1) if consulta_id in [3, 4, 5] else 1
                 for _ in range(eof_a_enviar):
-                    enviar_func(destino, "EOF", headers={
-                        "type": "EOF",
-                        "Query": consulta_id,
-                        "ClientID": mensaje['headers'].get("ClientID")
-                    })
+                    enviar_func(FILTER, consulta_id, EOF, mensaje, EOF)
                 self.shutdown_event.set()
             else:
                 resultado = self.ejecutar_consulta(consulta_id, mensaje['body'].decode('utf-8'))
-                headers = {"Query": consulta_id, "ClientID": mensaje['headers'].get("ClientID")}
-                if consulta_id in [3, 4]:
-                    headers["type"] = "MOVIES"
-                enviar_func(destino, resultado, headers=headers)
+                tipo = "MOVIES" if consulta_id in [3, 4] else None
+                enviar_func(FILTER, consulta_id, resultado, mensaje, tipo)
 
             mensaje['ack']()
 

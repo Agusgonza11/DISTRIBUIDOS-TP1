@@ -1,7 +1,7 @@
 import threading
 import logging
 import os
-from common.utils import cargar_eofs, concat_data, create_dataframe, prepare_data_aggregator_consult_3
+from common.utils import EOF, cargar_eofs, concat_data, create_dataframe, prepare_data_aggregator_consult_3
 from common.communication import iniciar_nodo, obtener_query
 
 AGGREGATOR = "aggregator"
@@ -70,7 +70,7 @@ class AggregatorNode:
     def procesar_mensajes(self, mensaje, enviar_func):
         consulta_id = obtener_query(mensaje)
         try:
-            if mensaje['headers'].get("type") == "EOF":
+            if mensaje['headers'].get("type") == EOF:
                 logging.info(f"Consulta {consulta_id} recibió EOF")
                 self.eof_esperados[consulta_id] -= 1
                 if self.eof_esperados[consulta_id] == 0:

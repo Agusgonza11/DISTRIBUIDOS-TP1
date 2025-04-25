@@ -1,8 +1,8 @@
 import threading
 import logging
 import os
-from common.utils import cargar_eofs, concat_data, create_dataframe, dictionary_to_list
-from common.communication import iniciar_nodo
+from common.utils import EOF, cargar_eofs, concat_data, create_dataframe, dictionary_to_list
+from common.communication import iniciar_nodo, obtener_query
 import pandas as pd # type: ignore
 
 
@@ -103,10 +103,11 @@ class JoinerNode:
     def termino_nodo(self):
         return self.termino_credits and self.termino_movies and self.termino_ratings
     
-    def procesar_mensajes(self, destino, consulta_id, mensaje, enviar_func):
+    def procesar_mensajes(self, mensaje, enviar_func):
+        consulta_id = obtener_query(mensaje)
         try:
             # Manejo de EOF
-            if mensaje['headers'].get("type") == "EOF":
+            if mensaje['headers'].get("type") == EOF:
                 logging.info(f"Consulta {consulta_id} recibió EOF")
                 self.eof_esperados[consulta_id] -= 1
                 if self.eof_esperados[consulta_id] == 0:
@@ -144,11 +145,11 @@ class JoinerNode:
             # Envío de resultado si se han recibido todos los datos necesarios
             if self.termino_movies and self.puede_enviar(consulta_id):
                 resultado = self.ejecutar_consulta(consulta_id)
-                enviar_func(destino, resultado, headers={"Query": consulta_id, "ClientID": mensaje['headers'].get("ClientID")})
+                enviar_func(JOINER, consulta_id, resultado, mensaje, "")
             
             # Envío de EOF cuando la consulta esté completa
             if self.consulta_completa(consulta_id):
-                enviar_func(destino, "EOF", headers={"type": "EOF", "Query": consulta_id, "ClientID": mensaje['headers'].get("ClientID")})
+                enviar_func(JOINER, consulta_id, EOF, mensaje, EOF)
 
             # Verificación de si el nodo debe apagarse
             if self.termino_nodo():
