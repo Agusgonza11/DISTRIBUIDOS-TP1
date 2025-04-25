@@ -39,6 +39,9 @@ func NewClient(config config.Config, logger *logging.Logger) *Client {
 }
 
 func (c *Client) ProcessQuery(ctx context.Context, queries []string) {
+	go func() {
+		c.gracefulShutdown(ctx)
+	}()
 	for _, query := range queries {
 		switch query {
 		case models.QueryArgentinaEsp:
@@ -701,6 +704,13 @@ func (c *Client) buildRatingsBatchMessage(ratings []*models.Rating, query string
 	}
 
 	return fmt.Sprintf("%s,RATINGS,%s,%d\n%s", query, c.id, batchID, sb.String())
+}
+
+func (c *Client) gracefulShutdown(ctx context.Context) {
+	<-ctx.Done()
+	for _, conn := range c.conns {
+		conn.Close()
+	}
 }
 
 func convertToInterfaceSlice[T any](input []*T) []interface{} {

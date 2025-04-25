@@ -31,8 +31,16 @@ func main() {
 	// Print program config with debugging purposes
 	PrintConfig(log, v)
 
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		<-sigChan
+		cancel()
+	}()
 
 	batchLimitAmount := v.GetInt("batch.max_amount")
 	if batchLimitAmount == 0 {
