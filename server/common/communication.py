@@ -13,19 +13,13 @@ canal = None
 # Diccionario global
 # ----------------------
 COLAS = {
-    "filter_consult_1": "gateway_output",
-    "filter_consult_2": "aggregator_consult_2",
-    "filter_consult_3": "joiner_consult_3",
-    "filter_consult_4": "joiner_consult_4",
-    "filter_consult_5": "pnl_consult_5",
-    "aggregator_consult_2": "gateway_output",
-    "aggregator_consult_3": "gateway_output",
-    "aggregator_consult_4": "gateway_output",
-    "aggregator_consult_5": "gateway_output",
-    "pnl_consult_5": "aggregator_consult_5",
-    "joiner_consult_3": "aggregator_consult_3",
-    "joiner_consult_4": "aggregator_consult_4",
+    "ARGENTINIAN-SPANISH-PRODUCTIONS": 1,
+    "TOP-INVESTING-COUNTRIES" : 2,
+    "TOP-ARGENTINIAN-MOVIES-BY-RATING": 3,
+    "TOP-ARGENTINIAN-ACTORS": 4,
+    "SENTIMENT-ANALYSIS": 5,
 }
+
 
 #Utilizar a futuro para colas unicas
 def determinar_salida(tipo_nodo, consulta_id):
@@ -95,13 +89,17 @@ def enviar_mensaje(routing_key, body, headers=None):
 # ---------------------
 # ATENDER CONSULTA
 # ---------------------
-def escuchar_colas(entrada, nodo, consultas):
-    for consulta_id in consultas:
-        nombre_entrada = f"{entrada}_consult_{consulta_id}"
-        nombre_salida = COLAS[nombre_entrada]
 
-        canal.queue_declare(queue=nombre_entrada, durable=True)
-        canal.queue_declare(queue=nombre_salida, durable=True)
+def escuchar_colas(entrada, nodo, consultas):
+    nombre_entrada = f"{entrada}_input"
+    colas_declaradas = set()
+    canal.queue_declare(queue=nombre_entrada, durable=True)
+    for consulta_id in consultas:
+        nombre_salida = determinar_salida(entrada, consulta_id)
+
+        if nombre_salida not in colas_declaradas:
+            canal.queue_declare(queue=nombre_salida, durable=True)
+            colas_declaradas.add(nombre_salida)
 
         def make_callback(consulta_id, nombre_salida):
             def callback(ch, method, properties, body):
@@ -120,6 +118,32 @@ def escuchar_colas(entrada, nodo, consultas):
         )
 
         logging.info(f"Escuchando en {nombre_entrada}")
+        logging.info(f"Para enviar en {nombre_salida}")
 
     canal.start_consuming()
 
+
+
+
+
+
+
+
+
+
+"""
+COLAS = {
+    "filter_consult_1": "gateway_output",
+    "filter_consult_2": "aggregator_consult_2",
+    "filter_consult_3": "joiner_consult_3",
+    "filter_consult_4": "joiner_consult_4",
+    "filter_consult_5": "pnl_consult_5",
+    "aggregator_consult_2": "gateway_output",
+    "aggregator_consult_3": "gateway_output",
+    "aggregator_consult_4": "gateway_output",
+    "aggregator_consult_5": "gateway_output",
+    "pnl_consult_5": "aggregator_consult_5",
+    "joiner_consult_3": "aggregator_consult_3",
+    "joiner_consult_4": "aggregator_consult_4",
+}
+"""

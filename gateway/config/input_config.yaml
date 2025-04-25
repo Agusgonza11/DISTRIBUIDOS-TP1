@@ -8,11 +8,11 @@ log:
 rabbitmq:
   address: "amqp://guest:guest@rabbitmq/"
   filter_queues:
-    argentinian-spanish-productions: "filter_consult_1"
-    top-investing-countries: "filter_consult_2"
-    top-argentinian-movies-by-rating: "filter_consult_3"
-    top-argentinian-actors: "filter_consult_4"
-    sentiment-analysis: "filter_consult_5"
+    argentinian-spanish-productions: "filter_input"
+    top-investing-countries: "filter_input"
+    top-argentinian-movies-by-rating: "filter_input"
+    top-argentinian-actors: "filter_input"
+    sentiment-analysis: "filter_input"
   join_queues:
-    top-argentinian-movies-by-rating: "joiner_consult_3"
-    top-argentinian-actors: "joiner_consult_4"
+    top-argentinian-movies-by-rating: "joiner_input"
+    top-argentinian-actors: "joiner_input"
