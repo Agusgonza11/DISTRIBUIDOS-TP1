@@ -1,9 +1,8 @@
-import asyncio
 import logging
-from common.utils import cargar_eof_a_enviar, create_dataframe, initialize_log, prepare_data_filter
-from workers.test import enviar_mock
-from workers.communication import inicializar_comunicacion, escuchar_colas
+import threading
 import os
+from common.utils import cargar_eof_a_enviar, create_dataframe, prepare_data_filter
+from workers.communication import iniciar_nodo
 
 FILTER = "filter"
 
@@ -13,8 +12,7 @@ FILTER = "filter"
 class FiltroNode:
     def __init__(self):
         self.eof_a_enviar = cargar_eof_a_enviar()
-        self.shutdown_event = asyncio.Event()
-
+        self.shutdown_event = threading.Event()
 
     def ejecutar_consulta(self, consulta_id, datos):
         lineas = datos.strip().split("\n")
@@ -35,7 +33,6 @@ class FiltroNode:
                 logging.warning(f"Consulta desconocida: {consulta_id}")
                 return []
 
-    
     def filtro_consulta_3_4(self, datos):
         datos = prepare_data_filter(datos)
         movies_arg_post_2000 = datos[
@@ -44,7 +41,6 @@ class FiltroNode:
         ]
         movies_arg_post_2000 = movies_arg_post_2000.astype({'id': int})
         return movies_arg_post_2000
-    
 
     def consulta_1(self, datos):
         logging.info("Procesando datos para consulta 1")
@@ -83,40 +79,37 @@ class FiltroNode:
         q5_input_df = q5_input_df.loc[q5_input_df['budget'] != 0]
         q5_input_df = q5_input_df.loc[q5_input_df['revenue'] != 0]
         return q5_input_df
-    
-    async def procesar_mensajes(self, destino, consulta_id, mensaje, enviar_func):
-        if mensaje.headers.get("type") == "EOF":
-            logging.info(f"Consulta {consulta_id} recibió EOF con clientID")
-            eof_a_enviar = self.eof_a_enviar.get(consulta_id, 1) if consulta_id in [3, 4, 5] else 1
-            for _ in range(eof_a_enviar):
-                await enviar_func(destino, "EOF", headers={"type": "EOF","Query": consulta_id, "ClientID": mensaje.headers.get("ClientID")})
-            self.shutdown_event.set()
-            return
-        resultado = self.ejecutar_consulta(consulta_id, mensaje.body.decode('utf-8'))
-        headers = {"Query": consulta_id, "ClientID": mensaje.headers.get("ClientID")}
-        if consulta_id in [3, 4]: headers["type"] = "MOVIES"
-        await enviar_func(destino, resultado, headers=headers)
 
+    def procesar_mensajes(self, destino, consulta_id, mensaje, enviar_func):
+        try:
+            if mensaje['headers'].get("type") == "EOF":
+                logging.info(f"Consulta {consulta_id} recibió EOF con clientID")
+                eof_a_enviar = self.eof_a_enviar.get(consulta_id, 1) if consulta_id in [3, 4, 5] else 1
+                for _ in range(eof_a_enviar):
+                    enviar_func(destino, "EOF", headers={
+                        "type": "EOF",
+                        "Query": consulta_id,
+                        "ClientID": mensaje['headers'].get("ClientID")
+                    })
+                self.shutdown_event.set()
+            else:
+                resultado = self.ejecutar_consulta(consulta_id, mensaje['body'].decode('utf-8'))
+                headers = {"Query": consulta_id, "ClientID": mensaje['headers'].get("ClientID")}
+                if consulta_id in [3, 4]:
+                    headers["type"] = "MOVIES"
+                enviar_func(destino, resultado, headers=headers)
 
-    
+            mensaje['ack']()
+
+        except Exception as e:
+            logging.error(f"Error procesando mensaje en consulta {consulta_id}: {e}")
+
 
 
 # -----------------------
 # Ejecutando nodo filtro
 # -----------------------
 
-filtro = FiltroNode()
-
-async def main():
-    initialize_log("INFO")
-    logging.info("Se inicializó el worker filter")
-    consultas_str = os.getenv("CONSULTAS", "")
-    consultas = list(map(int, consultas_str.split(","))) if consultas_str else []
-    await inicializar_comunicacion()
-    await escuchar_colas(FILTER, filtro, consultas)
-    # await enviar_mock() #Mock para probar consultas
-    await filtro.shutdown_event.wait()
-    logging.info("Shutdown del nodo filtro")
-
-asyncio.run(main())
-
+if __name__ == "__main__":
+    filtro = FiltroNode()
+    iniciar_nodo(FILTER, filtro, os.getenv("CONSULTAS", ""))

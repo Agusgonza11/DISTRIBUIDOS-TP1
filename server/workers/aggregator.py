@@ -1,9 +1,8 @@
-import asyncio
+import threading
 import logging
 import os
-from common.utils import cargar_eofs, concat_data, create_dataframe, initialize_log, prepare_data_aggregator_consult_3
-from workers.test import enviar_mock
-from workers.communication import inicializar_comunicacion, escuchar_colas
+from common.utils import cargar_eofs, concat_data, create_dataframe, prepare_data_aggregator_consult_3
+from workers.communication import iniciar_nodo
 
 AGGREGATOR = "aggregator"
 
@@ -13,7 +12,7 @@ AGGREGATOR = "aggregator"
 class AggregatorNode:
     def __init__(self):
         self.resultados_parciales = {}
-        self.shutdown_event = asyncio.Event()
+        self.shutdown_event = threading.Event()
         self.eof_esperados = cargar_eofs()
 
     def guardar_datos(self, consulta_id, datos):
@@ -70,38 +69,36 @@ class AggregatorNode:
         return average_rate_by_sentiment
     
 
-    async def procesar_mensajes(self, destino, consulta_id, mensaje, enviar_func):
-        if mensaje.headers.get("type") == "EOF":
-            logging.info(f"Consulta {consulta_id} recibió EOF")
-            self.eof_esperados[consulta_id] -= 1
-            if self.eof_esperados[consulta_id] == 0:
-                logging.info(f"Consulta {consulta_id} recibió TODOS los EOF que esperaba")
-                resultado = self.ejecutar_consulta(consulta_id)
-                await enviar_func(destino, resultado, headers={"type": "RESULT", "Query": consulta_id, "ClientID": mensaje.headers.get("ClientID")})
-                self.shutdown_event.set()
-                return
-        contenido = mensaje.body.decode('utf-8') 
-        self.guardar_datos(consulta_id, contenido)
+    def procesar_mensajes(self, destino, consulta_id, mensaje, enviar_func):
+        try:
+            if mensaje['headers'].get("type") == "EOF":
+                logging.info(f"Consulta {consulta_id} recibió EOF")
+                self.eof_esperados[consulta_id] -= 1
+                if self.eof_esperados[consulta_id] == 0:
+                    logging.info(f"Consulta {consulta_id} recibió TODOS los EOF que esperaba")
+                    resultado = self.ejecutar_consulta(consulta_id)
+                    enviar_func(destino, resultado, headers={"type": "RESULT", "Query": consulta_id, "ClientID": mensaje['headers'].get("ClientID")})
+                    self.shutdown_event.set()
+                    mensaje['ack']() 
+                    return
+                else:
+                    # Asegurarse de que el ACK no se mande antes de que todo esté procesado
+                    mensaje['ack']()  
+            contenido = mensaje['body'].decode('utf-8')
+            self.guardar_datos(consulta_id, contenido)
+
+            mensaje['ack']()
+
+        except Exception as e:
+            logging.error(f"Error procesando mensaje en consulta {consulta_id}: {e}")
+
 
 
 # -----------------------
 # Ejecutando nodo aggregator
 # -----------------------
 
-aggregator = AggregatorNode()
-
-
-async def main():
-    initialize_log("INFO")
-    logging.info("Se inicializó el worker aggregator")
-    consultas_str = os.getenv("CONSULTAS", "")
-    consultas = list(map(int, consultas_str.split(","))) if consultas_str else []
-
-    await inicializar_comunicacion()
-    await escuchar_colas(AGGREGATOR, aggregator, consultas)
-    #await enviar_mock() # Mock para probar consultas
-    await aggregator.shutdown_event.wait()
-    logging.info("Shutdown del nodo aggregator")
-
-asyncio.run(main())
+if __name__ == "__main__":
+    aggregator = AggregatorNode()
+    iniciar_nodo(AGGREGATOR, aggregator, os.getenv("CONSULTAS", ""))
 

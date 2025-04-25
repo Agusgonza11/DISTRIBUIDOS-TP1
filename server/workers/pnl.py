@@ -1,9 +1,8 @@
-import asyncio
+import threading
 import logging
 import os
-from common.utils import cargar_eofs, create_dataframe, initialize_log
-from workers.test import enviar_mock
-from workers.communication import inicializar_comunicacion, escuchar_colas
+from common.utils import cargar_eofs, create_dataframe
+from workers.communication import iniciar_nodo
 from transformers import pipeline # type: ignore
 import time
 
@@ -15,7 +14,7 @@ PNL = "pnl"
 class PnlNode:
     def __init__(self):
         self.eof_esperados = cargar_eofs()
-        self.shutdown_event = asyncio.Event()
+        self.shutdown_event = threading.Event()
 
 
     def ejecutar_consulta(self, consulta_id, datos):
@@ -38,17 +37,26 @@ class PnlNode:
         datos['sentiment'] = datos['overview'].fillna('').apply(lambda x: sentiment_analyzer(x)[0]['label'])
         return datos
     
-    async def procesar_mensajes(self, destino, consulta_id, mensaje, enviar_func):
-        if mensaje.headers.get("type") == "EOF":
+def procesar_mensajes(self, destino, consulta_id, mensaje, enviar_func):
+    try:
+        if mensaje['headers'].get("type") == "EOF":
             logging.info(f"Consulta {consulta_id} recibió EOF")
             self.eof_esperados[consulta_id] -= 1
             if self.eof_esperados[consulta_id] == 0:
                 logging.info(f"Consulta {consulta_id} recibió TODOS los EOF que esperaba")
-                await enviar_func(destino, "EOF", headers={"type": "EOF", "Query": consulta_id, "ClientID": mensaje.headers.get("ClientID")})
+                enviar_func(destino, "EOF", headers={"type": "EOF", "Query": consulta_id, "ClientID": mensaje['headers'].get("ClientID")})
                 self.shutdown_event.set()
-                return
-        resultado = self.ejecutar_consulta(consulta_id, mensaje.body.decode('utf-8'))
-        await enviar_func(destino, resultado, headers={"Query": consulta_id, "ClientID": mensaje.headers.get("ClientID")})
+            else:
+                # Asegurarse de que el ACK no se mande antes de que todo esté procesado
+                mensaje['ack']()  
+        else:
+            resultado = self.ejecutar_consulta(consulta_id, mensaje['body'].decode('utf-8'))
+            enviar_func(destino, resultado, headers={"Query": consulta_id, "ClientID": mensaje['headers'].get("ClientID")})
+
+        mensaje['ack']()
+
+    except Exception as e:
+        logging.error(f"Error procesando mensaje en consulta {consulta_id}: {e}")
 
     
 
@@ -57,19 +65,7 @@ class PnlNode:
 # Ejecutando nodo pnl
 # -----------------------
 
-pnl = PnlNode()
-
-
-async def main():
-    initialize_log("INFO")
-    logging.info("Se inicializó el worker pnl")
-    consultas_str = os.getenv("CONSULTAS", "")
-    consultas = list(map(int, consultas_str.split(","))) if consultas_str else []
-    await inicializar_comunicacion()
-    await escuchar_colas(PNL, pnl, consultas)
-    #await enviar_mock() # Mock para probar consultas
-    await pnl.shutdown_event.wait()
-    logging.info("Shutdown del nodo pnl")
-
-asyncio.run(main())
+if __name__ == "__main__":
+    pnl = PnlNode()
+    iniciar_nodo(PNL, pnl, os.getenv("CONSULTAS", ""))
 

@@ -1,6 +1,6 @@
-import aio_pika # type: ignore
+import pika # type: ignore
 import logging
-from common.utils import create_body, esperar_conexion, puede_enviar
+from common.utils import create_body, initialize_log, puede_enviar
 
 
 # ----------------------
@@ -32,19 +32,32 @@ COLAS = {
 # ---------------------
 # GENERALES
 # ---------------------
-async def inicializar_comunicacion():
+def iniciar_nodo(tipo_nodo, nodo, consultas):
+    initialize_log("INFO")
+    logging.info(f"Se inicializó el {tipo_nodo} filter")
+    consultas = list(map(int, consultas.split(","))) if consultas else []
+    inicializar_comunicacion()
+    escuchar_colas(tipo_nodo, nodo, consultas)
+    nodo.shutdown_event.wait()
+    logging.info(f"Shutdown del nodo {tipo_nodo}")
+
+def inicializar_comunicacion():
     global conexion, canal
-    conexion = await aio_pika.connect_robust("amqp://guest:guest@rabbitmq/")
-    canal = await conexion.channel()
-    await canal.set_qos(prefetch_count=1)
+    parametros = pika.ConnectionParameters(host="rabbitmq")
+    conexion = pika.BlockingConnection(parametros)
+    canal = conexion.channel()
+    canal.basic_qos(prefetch_count=1)
 
 
-async def enviar_mensaje(routing_key, body, headers=None):
+def enviar_mensaje(routing_key, body, headers=None):
     if puede_enviar(body):
         logging.info(f"Lo que voy a enviar es {body}")
-        await canal.default_exchange.publish(
-            aio_pika.Message(body=create_body(body).encode(), headers=headers),
+        propiedades = pika.BasicProperties(headers=headers)
+        canal.basic_publish(
+            exchange='',
             routing_key=routing_key,
+            body=create_body(body).encode(),
+            properties=propiedades
         )
     else:
         logging.info("No se enviará el mensaje: body vacío")
@@ -53,21 +66,31 @@ async def enviar_mensaje(routing_key, body, headers=None):
 # ---------------------
 # ATENDER CONSULTA
 # ---------------------
-async def escuchar_colas(entrada, nodo, consultas):
+def escuchar_colas(entrada, nodo, consultas):
     for consulta_id in consultas:
         nombre_entrada = f"{entrada}_consult_{consulta_id}"
         nombre_salida = COLAS[nombre_entrada]
 
-        await canal.declare_queue(nombre_entrada, durable=True)
-        await canal.declare_queue(nombre_salida, durable=True)
+        canal.queue_declare(queue=nombre_entrada, durable=True)
+        canal.queue_declare(queue=nombre_salida, durable=True)
 
-        async def wrapper(mensaje, consulta_id=consulta_id, nombre_salida=nombre_salida):
-            async with mensaje.process():
-                await nodo.procesar_mensajes(nombre_salida, consulta_id, mensaje, enviar_mensaje)
+        def make_callback(consulta_id, nombre_salida):
+            def callback(ch, method, properties, body):
+                mensaje = {
+                    'body': body,
+                    'headers': properties.headers if properties.headers else {},
+                    'ack': lambda: ch.basic_ack(delivery_tag=method.delivery_tag)
+                }
+                nodo.procesar_mensajes(nombre_salida, consulta_id, mensaje, enviar_mensaje)
+            return callback
 
-        queue = await canal.get_queue(nombre_entrada)
-        await queue.consume(wrapper)
+        canal.basic_consume(
+            queue=nombre_entrada,
+            on_message_callback=make_callback(consulta_id, nombre_salida),
+            auto_ack=False
+        )
+
         logging.info(f"Escuchando en {nombre_entrada}")
 
-
+    canal.start_consuming()
 

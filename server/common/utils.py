@@ -1,6 +1,6 @@
 import ast
 import logging
-import aio_pika # type: ignore
+import pika # type: ignore
 import asyncio
 from io import StringIO
 import pandas as pd # type: ignore
