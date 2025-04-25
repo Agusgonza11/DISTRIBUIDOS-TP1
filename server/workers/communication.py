@@ -34,7 +34,7 @@ COLAS = {
 # ---------------------
 async def inicializar_comunicacion():
     global conexion, canal
-    conexion = await esperar_conexion()
+    conexion = await aio_pika.connect_robust("amqp://guest:guest@rabbitmq/")
     canal = await conexion.channel()
     await canal.set_qos(prefetch_count=1)
 
@@ -50,10 +50,8 @@ async def enviar_mensaje(routing_key, body, headers=None):
         logging.info("No se enviará el mensaje: body vacío")
 
 
-
-
 # ---------------------
-# GENERAL
+# ATENDER CONSULTA
 # ---------------------
 async def escuchar_colas(entrada, nodo, consultas):
     for consulta_id in consultas:

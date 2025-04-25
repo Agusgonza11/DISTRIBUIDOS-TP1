@@ -36,6 +36,7 @@ class JoinerNode:
 
 
 
+
     def puede_enviar(self, consulta_id):
         logging.info(f"puede enviar {self.lineas_csv}")
         puede_enviar = False

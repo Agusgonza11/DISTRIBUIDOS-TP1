@@ -50,6 +50,7 @@ class AggregatorNode:
 
     def consulta_3(self, datos):
         logging.info("Procesando datos para consulta 3")
+        logging.info(f"Lo que me llega es {datos}")
         mean_ratings = datos.groupby(["id", "title"])['rating'].mean().reset_index()
         max_rated = mean_ratings.iloc[mean_ratings['rating'].idxmax()]
         min_rated = mean_ratings.iloc[mean_ratings['rating'].idxmin()]
@@ -58,7 +59,6 @@ class AggregatorNode:
 
     def consulta_4(self, datos):
         logging.info("Procesando datos para consulta 4")
-        logging.info(f"Lo que me llega es {datos}")
         actor_counts = datos.groupby("cast").count().reset_index().rename(columns={"id": "count"})
         top_10_actors = actor_counts.nlargest(10, 'count')
         return top_10_actors

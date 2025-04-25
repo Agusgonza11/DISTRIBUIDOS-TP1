@@ -1,0 +1,7 @@
+country
+United States of America    120153886644
+France                        2256831838
+United Kingdom                1611604610
+India                         1169682797
+Japan                          832585873
+Name: budget, dtype: int64
