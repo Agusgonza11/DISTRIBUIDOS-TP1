@@ -1,40 +1,39 @@
 import threading
 import logging
 import os
-from common.utils import EOF, cargar_eofs, concat_data, create_dataframe, dictionary_to_list
+from common.utils import EOF, cargar_eofs, concat_data, create_dataframe, dictionary_to_list, prepare_data_ratings
 from common.communication import iniciar_nodo, obtener_query
 import pandas as pd # type: ignore
 
 
 JOINER = "joiner"
 
+DATOS = 0
+LINEAS = 1
+TERMINO = 2
+
 # -----------------------
 # Nodo Joiner
 # -----------------------
 class JoinerNode:
-    def __init__(self):
+    def __init__(self, consultas):
         self.resultados_parciales = {}
+        self.consultas = consultas
         self.shutdown_event = threading.Event()
         self.eof_esperados = cargar_eofs()
-        self.termino_credits = False
         self.termino_movies = False
-        self.termino_ratings = False
-        self.lineas_csv = {"ratings": 0, "credits": 0}
-        self.umbral_envio_3 = 10000
-        self.umbral_envio_4 = 10000
-        self.datos_4 = []
-        self.datos_3 = []
-
-
+        self.umbral_envio_ratings = 10000
+        self.umbral_envio_credits = 10000
+        self.datos = {"ratings": [[], 0, False], "credits": [[], 0, False]}
+        # "CSV": (datos, cantidad de datos, termino de recibir todo)
 
     def puede_enviar(self, consulta_id):
-        logging.info(f"puede enviar {self.lineas_csv}")
         puede_enviar = False
-        if consulta_id == 3 and (self.lineas_csv["ratings"] >= self.umbral_envio_3 or self.termino_ratings):
-            self.lineas_csv["ratings"] = 0
+        if consulta_id == 3 and (self.datos["ratings"][LINEAS] >= self.umbral_envio_ratings or self.datos["ratings"][TERMINO]):
+            self.datos["ratings"][LINEAS] = 0
             puede_enviar = True
-        if consulta_id == 4 and (self.lineas_csv["credits"] >= self.umbral_envio_4 or self.termino_credits):
-            self.lineas_csv["credits"] = 0
+        if consulta_id == 4 and (self.datos["credits"][LINEAS] >= self.umbral_envio_credits or self.datos["credits"][TERMINO]):
+            self.datos["credits"][LINEAS] = 0
             puede_enviar = True        
         return puede_enviar
 
@@ -44,13 +43,14 @@ class JoinerNode:
             self.resultados_parciales[consulta_id] = []
         self.resultados_parciales[consulta_id].append(create_dataframe(datos))
 
-    def guardar_datos_temporal(self, consulta, datos):
+
+    def almacenar_csv(self, consulta, datos):
         if consulta == 3:
-            self.datos_3.append(create_dataframe(datos))
-            self.lineas_csv["ratings"] += len(datos)
+            csv = "ratings"
         else:
-            self.datos_4.append(create_dataframe(datos))
-            self.lineas_csv["credits"] += len(datos)
+            csv = "credits"
+        self.datos[csv][LINEAS] += len(datos)
+        self.datos[csv][DATOS].append(create_dataframe(datos))
 
 
     def ejecutar_consulta(self, consulta_id):
@@ -72,17 +72,17 @@ class JoinerNode:
 
     def consulta_3(self, datos):
         logging.info("Procesando datos para consulta 3")
-        ratings = concat_data(self.datos_3)
+        ratings = concat_data(self.datos["ratings"][DATOS])
+        self.datos["ratings"][DATOS] = []
+        self.datos["ratings"][LINEAS] = 0
         if ratings.empty:
             return False
-        ratings_df = pd.DataFrame(ratings, columns=["id", "rating"])
-        ratings_df.rename(columns={"movieId": "id"}, inplace=True)
-
-        return datos.merge(ratings_df, on="id")
+        ranking_arg_post_2000_df = datos[["id", "title"]].merge(ratings, on="id")
+        return ranking_arg_post_2000_df
 
     def consulta_4(self, datos):
         logging.info("Procesando datos para consulta 4")
-        credits = concat_data(self.datos_4)
+        credits = concat_data(self.datos_credits)
         if credits.empty:
             return False
         credits.columns = ['id', 'cast']
@@ -94,14 +94,21 @@ class JoinerNode:
     def consulta_completa(self, consulta_id):
         match consulta_id:
             case 3:
-                return self.termino_ratings and self.termino_movies
+                return self.datos["ratings"][TERMINO] and self.termino_movies
             case 4:
-                return self.termino_credits and self.termino_movies
+                return self.datos["credits"][TERMINO] and self.termino_movies
             case _:
                 return self.termino_movies
 
+
     def termino_nodo(self):
-        return self.termino_credits and self.termino_movies and self.termino_ratings
+        if 3 in self.consultas and 4 in self.consultas:
+            termino_nodo = True if self.termino_movies and self.datos["ratings"][TERMINO] and self.datos["credits"][TERMINO] else False
+        if 3 in self.consultas and 4 not in self.consultas:
+            termino_nodo = True if self.termino_movies and self.datos["ratings"][TERMINO] else False
+        if 3 not in self.consultas and 4 in self.consultas:
+            termino_nodo = True if self.termino_movies and self.datos["credits"][TERMINO] else False
+        return termino_nodo
     
     def procesar_mensajes(self, mensaje, enviar_func):
         consulta_id = obtener_query(mensaje)
@@ -111,50 +118,42 @@ class JoinerNode:
                 logging.info(f"Consulta {consulta_id} recibió EOF")
                 self.eof_esperados[consulta_id] -= 1
                 if self.eof_esperados[consulta_id] == 0:
-                    logging.info(f"Consulta {consulta_id} recibió TODOS los EOF que esperaba")
+                    logging.info(f"Consulta {consulta_id} recibió TODOS los EOF que esperaba de movies")
                     self.termino_movies = True
-                    mensaje['ack']()  # ACK después de recibir todos los EOF
+                    mensaje['ack']() 
 
-            # Manejo de EOF_RATINGS
             if mensaje['headers'].get("type") == "EOF_RATINGS":
                 logging.info(f"Recibí todos los ratings")
-                self.termino_ratings = True
-                mensaje['ack']()  # ACK después de recibir todos los ratings
+                self.datos["ratings"][TERMINO] = True
+                mensaje['ack']() 
 
-            # Manejo de EOF_CREDITS
             if mensaje['headers'].get("type") == "EOF_CREDITS":
                 logging.info(f"Recibí todos los credits")
-                self.termino_credits = True
-                mensaje['ack']()  # ACK después de recibir todos los credits
+                self.datos["credits"][TERMINO] = True
+                mensaje['ack']() 
 
-            # Guardado de datos de tipo RATINGS
             if mensaje['headers'].get("type") == "RATINGS":
-                self.guardar_datos_temporal(consulta_id, mensaje['body'].decode('utf-8'))
-                mensaje['ack']()  # ACK después de guardar los ratings
+                self.almacenar_csv(consulta_id, mensaje['body'].decode('utf-8'))
+                mensaje['ack']()
 
-            # Guardado de datos temporales para CREDITS
             if mensaje['headers'].get("type") == "CREDITS":
-                self.guardar_datos_temporal(consulta_id, mensaje['body'].decode('utf-8'))
-                mensaje['ack']()  # ACK después de guardar los credits
+                self.almacenar_csv(consulta_id, mensaje['body'].decode('utf-8'))
+                mensaje['ack']() 
 
-            # Guardado de datos de tipo MOVIES
             if mensaje['headers'].get("type") == "MOVIES":
                 self.guardar_datos(consulta_id, mensaje['body'].decode('utf-8'))
-                mensaje['ack']()  # ACK después de guardar las películas
+                mensaje['ack']()
 
-            # Envío de resultado si se han recibido todos los datos necesarios
             if self.termino_movies and self.puede_enviar(consulta_id):
                 resultado = self.ejecutar_consulta(consulta_id)
                 enviar_func(JOINER, consulta_id, resultado, mensaje, "")
             
-            # Envío de EOF cuando la consulta esté completa
             if self.consulta_completa(consulta_id):
                 enviar_func(JOINER, consulta_id, EOF, mensaje, EOF)
 
-            # Verificación de si el nodo debe apagarse
             if self.termino_nodo():
                 self.shutdown_event.set()
-                mensaje['ack']()  # ACK final antes de apagar el nodo
+                mensaje['ack']() 
 
         except Exception as e:
             logging.error(f"Error procesando mensaje para consulta {consulta_id}: {e}")
@@ -166,6 +165,8 @@ class JoinerNode:
 # -----------------------
 
 if __name__ == "__main__":
-    joiner = JoinerNode()
-    iniciar_nodo(JOINER, joiner, os.getenv("CONSULTAS", ""))
+    consultas = os.getenv("CONSULTAS", "")
+    consultas_atiende = list(map(int, consultas.split(","))) if consultas else []
+    joiner = JoinerNode(consultas_atiende)
+    iniciar_nodo(JOINER, joiner, consultas)
 

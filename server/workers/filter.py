@@ -1,8 +1,8 @@
 import logging
 import threading
 import os
-from common.utils import cargar_eof_a_enviar, create_dataframe, prepare_data_consult_1, prepare_data_consult_2, prepare_data_filter, EOF
-from common.communication import determinar_salida, iniciar_nodo, obtener_query
+from common.utils import cargar_eof_a_enviar, create_dataframe, prepare_data_consult_1_3_4, prepare_data_consult_2, EOF
+from common.communication import iniciar_nodo, obtener_query
 
 FILTER = "filter"
 
@@ -21,26 +21,19 @@ class FiltroNode:
             case 2:
                 return self.consulta_2(datos)
             case 3:
-                return self.consulta_3(datos)
+                logging.info("Procesando datos para consulta 3")
+                return self.consulta_3_y_4(datos)
             case 4:
-                return self.consulta_4(datos)
+                logging.info("Procesando datos para consulta 4")
+                return self.consulta_3_y_4(datos)
             case 5:
                 return self.consulta_5(datos)
             case _:
                 logging.warning(f"Consulta desconocida: {consulta_id}")
                 return []
 
-    def filtro_consulta_3_4(self, datos):
-        datos = prepare_data_filter(datos)
-        movies_arg_post_2000 = datos[
-            (datos['production_countries'].str.contains('Argentina', case=False, na=False)) &
-            (datos['release_date'].dt.year >= 2000)
-        ]
-        movies_arg_post_2000 = movies_arg_post_2000.astype({'id': int})
-        return movies_arg_post_2000
-
     def consulta_1(self, datos):
-        datos = prepare_data_consult_1(datos)
+        datos = prepare_data_consult_1_3_4(datos)
         movies_argentina_españa_00s_df = datos[
             (datos['production_countries'].str.contains('Argentina', case=False, na=False)) & 
             (datos['production_countries'].str.contains('Spain', case=False, na=False)) & 
@@ -58,14 +51,16 @@ class FiltroNode:
         solo_country_df = solo_country_df.copy()
         solo_country_df.loc[:, 'country'] = solo_country_df['production_countries'].apply(lambda x: eval(x)[0])
         return solo_country_df
+    
+    def consulta_3_y_4(self, datos):
+        datos = prepare_data_consult_1_3_4(datos)
+        movies_arg_post_2000 = datos[
+            (datos['production_countries'].str.contains('Argentina', case=False, na=False)) &
+            (datos['release_date'].dt.year >= 2000)
+        ]
+        movies_arg_post_2000 = movies_arg_post_2000.astype({'id': int})
+        return movies_arg_post_2000
 
-    def consulta_3(self, datos):
-        logging.info("Procesando datos para consulta 3")
-        return self.filtro_consulta_3_4(datos)
-
-    def consulta_4(self, datos):
-        logging.info("Procesando datos para consulta 4")
-        return self.filtro_consulta_3_4(datos)
 
     def consulta_5(self, datos):
         logging.info("Procesando datos para consulta 5")

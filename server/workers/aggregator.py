@@ -18,6 +18,7 @@ class AggregatorNode:
     def guardar_datos(self, consulta_id, datos):
         if consulta_id not in self.resultados_parciales:
             self.resultados_parciales[consulta_id] = []
+        logging.info(f"Lo que me llega es {datos}")
         self.resultados_parciales[consulta_id].append(create_dataframe(datos))
 
     def ejecutar_consulta(self, consulta_id):
@@ -47,7 +48,6 @@ class AggregatorNode:
 
     def consulta_3(self, datos):
         logging.info("Procesando datos para consulta 3")
-        logging.info(f"Lo que me llega es {datos}")
         mean_ratings = datos.groupby(["id", "title"])['rating'].mean().reset_index()
         max_rated = mean_ratings.iloc[mean_ratings['rating'].idxmax()]
         min_rated = mean_ratings.iloc[mean_ratings['rating'].idxmin()]

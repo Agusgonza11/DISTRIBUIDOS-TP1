@@ -52,16 +52,8 @@ def dictionary_to_list(dictionary_str):
 # -------------------
 # PREPARAR DATA
 # -------------------
-def prepare_data_filter(data):
-    data = create_dataframe(data)
-    data['genres'] = data['genres'].apply(dictionary_to_list)
-    data['production_countries'] = data['production_countries'].apply(dictionary_to_list)
-    data['genres'] = data['genres'].astype(str)
-    data['production_countries'] = data['production_countries'].astype(str)
-    data['release_date'] = pd.to_datetime(data['release_date'], errors='coerce')
-    return data
 
-def prepare_data_consult_1(data):
+def prepare_data_consult_1_3_4(data):
     data = create_dataframe(data)
     data['release_date'] = pd.to_datetime(data['release_date'], format='%Y-%m-%d', errors='coerce')
     data['genres'] = data['genres'].apply(dictionary_to_list)
@@ -76,7 +68,6 @@ def prepare_data_consult_2(data):
     data['production_countries'] = data['production_countries'].astype(str)
     data['budget'] = pd.to_numeric(data['budget'], errors='coerce')
     return data
-
 
 
 def prepare_data_aggregator_consult_3(min, max):
