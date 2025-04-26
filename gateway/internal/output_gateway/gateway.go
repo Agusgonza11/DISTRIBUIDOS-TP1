@@ -192,13 +192,12 @@ func (g *Gateway) listenRabbitMQ(ctx context.Context) {
 			body := strings.Split(string(msg.Body), "\n")
 			body = body[1:]
 
-			var queryInt uint8
-
 			query := msg.Headers["Query"]
 
-			switch v := query.(type) {
-			case uint8:
-				queryInt = v
+			queryStr, ok := query.(string)
+			if !ok {
+				g.logger.Errorf("Error: Query no es un string!")
+				continue
 			}
 
 			messageType := msg.Headers["type"]
@@ -206,14 +205,14 @@ func (g *Gateway) listenRabbitMQ(ctx context.Context) {
 				isEOF := messageType.(string) == "EOF"
 				if isEOF {
 					g.logger.Info("---- Sending EOF message ----")
-					g.handleEOFMessage(conn, clientID, g.mapQueryNumberToString(queryInt))
+					g.handleEOFMessage(conn, clientID, queryStr)
 					continue
 				}
 			}
 
 			bodyStr := strings.Join(body, "\n")
 
-			message := fmt.Sprintf("%s\n%s", g.mapQueryNumberToString(queryInt), bodyStr)
+			message := fmt.Sprintf("%s\n%s", queryStr, bodyStr)
 			g.logger.Info("---- Message ----")
 			g.logger.Infof("Sending body: %s\n", string(message))
 
