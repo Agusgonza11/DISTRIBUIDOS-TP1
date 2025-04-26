@@ -12,6 +12,22 @@ canal = None
 # ----------------------
 # ENRUTAMIENTO DE MENSAJE
 # ----------------------
+COLAS = {
+    "filter_consult_1": "gateway_output",
+    "filter_consult_2": "aggregator_consult_2",
+    "filter_consult_3": "joiner_consult_3",
+    "filter_consult_4": "joiner_consult_4",
+    "filter_consult_5": "pnl_consult_5",
+    "aggregator_consult_2": "gateway_output",
+    "aggregator_consult_3": "gateway_output",
+    "aggregator_consult_4": "gateway_output",
+    "aggregator_consult_5": "gateway_output",
+    "pnl_consult_5": "aggregator_consult_5",
+    "joiner_consult_3": "aggregator_consult_3",
+    "joiner_consult_4": "aggregator_consult_4",
+}
+
+
 QUERY = {
     "ARGENTINIAN-SPANISH-PRODUCTIONS": 1,
     "TOP-INVESTING-COUNTRIES" : 2,
@@ -56,12 +72,11 @@ def determinar_salida(tipo_nodo, consulta_id):
         raise ValueError(f"No se puede determinar salida para {tipo_nodo} y consulta {consulta_id}")
 
 
-def enrutamiento_mensaje(tipo_nodo, consulta_id, mensaje_original, tipo=None):
-    routing_key = determinar_salida(tipo_nodo, consulta_id)
+def config_header(mensaje_original, tipo=None):
     headers = {"Query": mensaje_original['headers'].get("Query"), "ClientID": mensaje_original['headers'].get("ClientID")}
     if type != None:
         headers["type"] = tipo
-    return (routing_key, pika.BasicProperties(headers=headers))   
+    return pika.BasicProperties(headers=headers)  
 
 
 
@@ -85,10 +100,10 @@ def inicializar_comunicacion():
     canal.basic_qos(prefetch_count=1)
 
 
-def enviar_mensaje(tipo_nodo, consulta_id, body, mensaje_original, type=None):
+def enviar_mensaje(routing_key, body, mensaje_original, type=None):
     if puede_enviar(body):
         logging.info(f"Lo que voy a enviar es {body}")
-        routing_key, propiedades = enrutamiento_mensaje(tipo_nodo, consulta_id, mensaje_original, type)
+        propiedades = config_header(mensaje_original, type)
         canal.basic_publish(
             exchange='',
             routing_key=routing_key,
@@ -104,29 +119,27 @@ def enviar_mensaje(tipo_nodo, consulta_id, body, mensaje_original, type=None):
 # ---------------------
 
 def escuchar_colas(entrada, nodo, consultas):
-    nombre_entrada = f"{entrada}_input"
-    colas_declaradas = set()
-    canal.queue_declare(queue=nombre_entrada, durable=True)
     for consulta_id in consultas:
-        nombre_salida = determinar_salida(entrada, consulta_id)
+        nombre_entrada = f"{entrada}_consult_{consulta_id}"
+        nombre_salida = COLAS[nombre_entrada]
 
-        if nombre_salida not in colas_declaradas:
-            canal.queue_declare(queue=nombre_salida, durable=True)
-            colas_declaradas.add(nombre_salida)
+        canal.queue_declare(queue=nombre_entrada, durable=True)
+        canal.queue_declare(queue=nombre_salida, durable=True)
 
-        def make_callback():
+
+        def make_callback(nombre_salida):
             def callback(ch, method, properties, body):
                 mensaje = {
                     'body': body,
                     'headers': properties.headers if properties.headers else {},
                     'ack': lambda: ch.basic_ack(delivery_tag=method.delivery_tag)
                 }
-                nodo.procesar_mensajes(mensaje, enviar_mensaje)
+                nodo.procesar_mensajes(nombre_salida, mensaje, enviar_mensaje)
             return callback
 
         canal.basic_consume(
             queue=nombre_entrada,
-            on_message_callback=make_callback(),
+            on_message_callback=make_callback(nombre_salida),
             auto_ack=False
         )
 
@@ -135,28 +148,3 @@ def escuchar_colas(entrada, nodo, consultas):
 
     canal.start_consuming()
 
-
-
-
-
-
-
-
-
-
-"""
-COLAS = {
-    "filter_consult_1": "gateway_output",
-    "filter_consult_2": "aggregator_consult_2",
-    "filter_consult_3": "joiner_consult_3",
-    "filter_consult_4": "joiner_consult_4",
-    "filter_consult_5": "pnl_consult_5",
-    "aggregator_consult_2": "gateway_output",
-    "aggregator_consult_3": "gateway_output",
-    "aggregator_consult_4": "gateway_output",
-    "aggregator_consult_5": "gateway_output",
-    "pnl_consult_5": "aggregator_consult_5",
-    "joiner_consult_3": "aggregator_consult_3",
-    "joiner_consult_4": "aggregator_consult_4",
-}
-"""

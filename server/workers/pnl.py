@@ -28,8 +28,6 @@ class PnlNode:
 
 
     def ejecutar_consulta(self, consulta_id):
-        logging.info(f"la cantidad de lineas es {self.lineas_actuales} recibió EOF")
-
         datos = self.resultados_parciales.get(consulta_id, [])
         self.resultados_parciales[consulta_id] = []
         self.lineas_actuales = 0
@@ -50,7 +48,7 @@ class PnlNode:
         datos['sentiment'] = datos['overview'].fillna('').apply(lambda x: sentiment_analyzer(x)[0]['label'])
         return datos
     
-    def procesar_mensajes(self, mensaje, enviar_func):
+    def procesar_mensajes(self, destino, mensaje, enviar_func):
         consulta_id = obtener_query(mensaje)
         try:
             if mensaje['headers'].get("type") == EOF:
@@ -59,8 +57,8 @@ class PnlNode:
                 if self.eof_esperados[consulta_id] == 0:
                     logging.info(f"Consulta {consulta_id} recibió TODOS los EOF que esperaba")
                     resultado = self.ejecutar_consulta(consulta_id)
-                    enviar_func(PNL, consulta_id, resultado, mensaje, "")
-                    enviar_func(PNL, consulta_id, EOF, mensaje, EOF)
+                    enviar_func(destino, resultado, mensaje, "")
+                    enviar_func(destino, EOF, mensaje, EOF)
                     self.shutdown_event.set()
                 else:
                     # Asegurarse de que el ACK no se mande antes de que todo esté procesado
@@ -70,7 +68,7 @@ class PnlNode:
                 self.guardar_datos(consulta_id, contenido)
             if self.lineas_actuales >= 1000:
                 resultado = self.ejecutar_consulta(consulta_id)
-                enviar_func(PNL, consulta_id, resultado, mensaje, "")
+                enviar_func(destino, resultado, mensaje, "")
 
             mensaje['ack']()
 

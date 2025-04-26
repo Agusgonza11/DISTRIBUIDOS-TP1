@@ -66,7 +66,7 @@ class AggregatorNode:
         return average_rate_by_sentiment
     
 
-    def procesar_mensajes(self, mensaje, enviar_func):
+    def procesar_mensajes(self, destino, mensaje, enviar_func):
         consulta_id = obtener_query(mensaje)
         try:
             if mensaje['headers'].get("type") == EOF:
@@ -75,7 +75,7 @@ class AggregatorNode:
                 if self.eof_esperados[consulta_id] == 0:
                     logging.info(f"Consulta {consulta_id} recibió TODOS los EOF que esperaba")
                     resultado = self.ejecutar_consulta(consulta_id)
-                    enviar_func(AGGREGATOR, consulta_id, resultado, mensaje, "RESULT")
+                    enviar_func(destino, resultado, mensaje, "RESULT")
                     self.shutdown_event.set()
                     mensaje['ack']() 
                     return

@@ -1,7 +1,7 @@
 import threading
 import logging
 import os
-from common.utils import EOF, cargar_eofs, concat_data, create_dataframe, dictionary_to_list, prepare_data_consult_4
+from common.utils import EOF, cargar_eofs, concat_data, create_dataframe, prepare_data_consult_4
 from common.communication import iniciar_nodo, obtener_query
 import pandas as pd # type: ignore
 
@@ -109,7 +109,7 @@ class JoinerNode:
             termino_nodo = True if self.termino_movies and self.datos["credits"][TERMINO] else False
         return termino_nodo
     
-    def procesar_mensajes(self, mensaje, enviar_func):
+    def procesar_mensajes(self, destino, mensaje, enviar_func):
         consulta_id = obtener_query(mensaje)
         try:
             # Manejo de EOF
@@ -145,10 +145,10 @@ class JoinerNode:
 
             if self.termino_movies and self.puede_enviar(consulta_id):
                 resultado = self.ejecutar_consulta(consulta_id)
-                enviar_func(JOINER, consulta_id, resultado, mensaje, "")
+                enviar_func(destino, resultado, mensaje, "")
             
             if self.consulta_completa(consulta_id):
-                enviar_func(JOINER, consulta_id, EOF, mensaje, EOF)
+                enviar_func(destino, EOF, mensaje, EOF)
 
             if self.termino_nodo():
                 self.shutdown_event.set()
