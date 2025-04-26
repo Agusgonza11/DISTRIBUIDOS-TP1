@@ -74,6 +74,11 @@ def prepare_data_consult_4(data):
     credits['cast'] = credits['cast'].apply(dictionary_to_list)
     return credits
 
+def prepare_data_consult_5(data):
+    datos = create_dataframe(data)
+    datos['budget'] = pd.to_numeric(datos['budget'], errors='coerce')
+    datos['revenue'] = pd.to_numeric(datos['revenue'], errors='coerce')
+    return datos
 
 
 def prepare_data_aggregator_consult_3(min, max):

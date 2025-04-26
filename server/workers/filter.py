@@ -1,7 +1,7 @@
 import logging
 import threading
 import os
-from common.utils import cargar_eof_a_enviar, create_dataframe, prepare_data_consult_1_3_4, prepare_data_consult_2, EOF
+from common.utils import cargar_eof_a_enviar, create_dataframe, prepare_data_consult_1_3_4, prepare_data_consult_2, EOF, prepare_data_consult_5
 from common.communication import iniciar_nodo, obtener_query
 
 FILTER = "filter"
@@ -64,7 +64,7 @@ class FiltroNode:
 
     def consulta_5(self, datos):
         logging.info("Procesando datos para consulta 5")
-        datos = create_dataframe(datos)
+        datos = prepare_data_consult_5(datos)
         q5_input_df = datos.copy()
         q5_input_df = q5_input_df.loc[q5_input_df['budget'] != 0]
         q5_input_df = q5_input_df.loc[q5_input_df['revenue'] != 0]
@@ -73,17 +73,21 @@ class FiltroNode:
 
     def procesar_mensajes(self, mensaje, enviar_func):
         consulta_id = obtener_query(mensaje)
+        eof_a_enviar = self.eof_a_enviar.get(consulta_id, 1) if consulta_id in [3, 4, 5] else 1
         try:
             if mensaje['headers'].get("type") == EOF:
                 logging.info(f"Consulta {consulta_id} recibió EOF")
-                eof_a_enviar = self.eof_a_enviar.get(consulta_id, 1) if consulta_id in [3, 4, 5] else 1
                 for _ in range(eof_a_enviar):
                     enviar_func(FILTER, consulta_id, EOF, mensaje, EOF)
                 self.shutdown_event.set()
             else:
                 resultado = self.ejecutar_consulta(consulta_id, mensaje['body'].decode('utf-8'))
                 tipo = "MOVIES" if consulta_id in [3, 4] else None
-                enviar_func(FILTER, consulta_id, resultado, mensaje, tipo)
+                if consulta_id == 3 or consulta_id == 4:
+                    for _ in range(eof_a_enviar): #Brodcasteo para el joiner
+                        enviar_func(FILTER, consulta_id, resultado, mensaje, tipo)
+                else:
+                    enviar_func(FILTER, consulta_id, resultado, mensaje, tipo)
 
             mensaje['ack']()
 
