@@ -119,29 +119,23 @@ class JoinerNode:
                 if self.eof_esperados[consulta_id] == 0:
                     logging.info(f"Consulta {consulta_id} recibió TODOS los EOF que esperaba de movies")
                     self.termino_movies = True
-                    mensaje['ack']() 
 
             if mensaje['headers'].get("type") == "EOF_RATINGS":
                 logging.info(f"Recibí todos los ratings")
                 self.datos["ratings"][TERMINO] = True
-                mensaje['ack']() 
 
             if mensaje['headers'].get("type") == "EOF_CREDITS":
                 logging.info(f"Recibí todos los credits")
                 self.datos["credits"][TERMINO] = True
-                mensaje['ack']() 
 
             if mensaje['headers'].get("type") == "RATINGS":
                 self.almacenar_csv(consulta_id, mensaje['body'].decode('utf-8'))
-                mensaje['ack']()
 
             if mensaje['headers'].get("type") == "CREDITS":
                 self.almacenar_csv(consulta_id, mensaje['body'].decode('utf-8'))
-                mensaje['ack']() 
 
             if mensaje['headers'].get("type") == "MOVIES":
                 self.guardar_datos(consulta_id, mensaje['body'].decode('utf-8'))
-                mensaje['ack']()
 
             if self.termino_movies and self.puede_enviar(consulta_id):
                 resultado = self.ejecutar_consulta(consulta_id)
@@ -152,8 +146,8 @@ class JoinerNode:
 
             if self.termino_nodo():
                 self.shutdown_event.set()
-                mensaje['ack']() 
-
+            
+            mensaje['ack']() 
         except Exception as e:
             logging.error(f"Error procesando mensaje para consulta {consulta_id}: {e}")
             # No se hace ack en caso de error, lo que permitirá reintentar el mensaje

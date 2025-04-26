@@ -60,9 +60,6 @@ class PnlNode:
                     enviar_func(canal, destino, resultado, mensaje, "")
                     enviar_func(canal, destino, EOF, mensaje, EOF)
                     self.shutdown_event.set()
-                else:
-                    # Asegurarse de que el ACK no se mande antes de que todo esté procesado
-                    mensaje['ack']()  
             else:
                 contenido = mensaje['body'].decode('utf-8')
                 self.guardar_datos(consulta_id, contenido)
