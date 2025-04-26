@@ -13,8 +13,8 @@ from common.utils import create_body, initialize_log, puede_enviar
 COLAS = {
     "filter_consult_1": "gateway_output",
     "filter_consult_2": "aggregator_consult_2",
-    "filter_consult_3": "joiner_consult_3",
-    "filter_consult_4": "joiner_consult_4",
+    "filter_consult_3": "broker",
+    "filter_consult_4": "broker",
     "filter_consult_5": "pnl_consult_5",
     "aggregator_consult_2": "gateway_output",
     "aggregator_consult_3": "gateway_output",
@@ -80,12 +80,19 @@ def config_header(mensaje_original, tipo=None):
 # ---------------------
 # GENERALES
 # ---------------------
-def iniciar_nodo(tipo_nodo, nodo, consultas):
+def iniciar_nodo(tipo_nodo, nodo, consultas=None, cant_joiners=None, joiner_id=None):
     initialize_log("INFO")
     logging.info(f"Se inicializó el {tipo_nodo} filter")
     consultas = list(map(int, consultas.split(","))) if consultas else []
     conexion, canal = inicializar_comunicacion()
-    escuchar_colas(tipo_nodo, nodo, consultas, canal)
+    if tipo_nodo == "broker":
+        escuchar_colas_broker(nodo, cant_joiners, canal)
+    if tipo_nodo == "joiner":
+        escuchar_colas_joiner(nodo, consultas, canal, joiner_id)
+    else:
+        escuchar_colas(tipo_nodo, nodo, consultas, canal)
+
+
     nodo.shutdown_event.wait()
     logging.info(f"Shutdown del nodo {tipo_nodo}")
     canal.close()
@@ -101,7 +108,7 @@ def inicializar_comunicacion():
 
 def enviar_mensaje(canal, routing_key, body, mensaje_original, type=None):
     if puede_enviar(body):
-        logging.info(f"Lo que voy a enviar es {body}")
+        logging.info(f"A {routing_key} le voy a enviar: {body}")
         propiedades = config_header(mensaje_original, type)
         canal.basic_publish(
             exchange='',
@@ -117,7 +124,7 @@ def enviar_mensaje(canal, routing_key, body, mensaje_original, type=None):
 # ATENDER CONSULTA
 # ---------------------
 
-def escuchar_colas(entrada, nodo, consultas, canal):
+def escuchar_colas(entrada, nodo, consultas, canal):        
     for consulta_id in consultas:
         nombre_entrada = f"{entrada}_consult_{consulta_id}"
         nombre_salida = COLAS[nombre_entrada]
@@ -125,25 +132,63 @@ def escuchar_colas(entrada, nodo, consultas, canal):
         canal.queue_declare(queue=nombre_entrada, durable=True)
         canal.queue_declare(queue=nombre_salida, durable=True)
 
-
-        def make_callback(nombre_salida):
-            def callback(ch, method, properties, body):
-                mensaje = {
-                    'body': body,
-                    'headers': properties.headers if properties.headers else {},
-                    'ack': lambda: ch.basic_ack(delivery_tag=method.delivery_tag)
-                }
-                nodo.procesar_mensajes(canal, nombre_salida, mensaje, enviar_mensaje)
-            return callback
-
-        canal.basic_consume(
-            queue=nombre_entrada,
-            on_message_callback=make_callback(nombre_salida),
-            auto_ack=False
-        )
-
-        logging.info(f"Escuchando en {nombre_entrada}")
-        logging.info(f"Para enviar en {nombre_salida}")
+        generalizo_callback(nombre_entrada, nombre_salida, canal, nodo)
 
     canal.start_consuming()
 
+
+
+def escuchar_colas_broker(nodo, cant_joiners, canal): 
+    nombre_entrada = f"broker"
+    canal.queue_declare(queue=nombre_entrada, durable=True)
+    colas_salida = []
+    cantidad_3, cantidad_4 = cant_joiners
+    for i in range(1, cantidad_3 + 1):
+        colas_salida.append(f"joiner_consult_3_{i}")
+    for i in range(1, cantidad_4 + 1):
+        colas_salida.append(f"joiner_consult_4_{i}")
+
+    for nombre_salida in colas_salida:
+        canal.queue_declare(queue=nombre_salida, durable=True)
+        generalizo_callback(nombre_entrada, nombre_salida, canal, nodo)
+
+    canal.start_consuming()
+
+
+def escuchar_colas_joiner(nodo, consultas, canal, joiner_id):   
+    colas_entrada = []
+    for consulta_id in consultas:
+        colas_entrada.append(f"joiner_consult_{consulta_id}")
+    for consulta_id in consultas:
+        colas_entrada.append(f"joiner_consult_{consulta_id}_{joiner_id}")
+
+    for nombre_entrada in colas_entrada:
+        canal.queue_declare(queue=nombre_entrada, durable=True)
+        nombre_salida = "aggregator_consult_3" if "3" in nombre_entrada else "aggregator_consult_4"        
+        canal.queue_declare(queue=nombre_salida, durable=True)
+        generalizo_callback(nombre_entrada, nombre_salida, canal, nodo)
+
+    canal.start_consuming()
+
+
+
+
+def generalizo_callback(nombre_entrada, nombre_salida, canal, nodo):
+    def make_callback(nombre_salida):
+        def callback(ch, method, properties, body):
+            mensaje = {
+                'body': body,
+                'headers': properties.headers if properties.headers else {},
+                'ack': lambda: ch.basic_ack(delivery_tag=method.delivery_tag)
+            }
+            nodo.procesar_mensajes(canal, nombre_salida, mensaje, enviar_mensaje)
+        return callback
+
+    canal.basic_consume(
+        queue=nombre_entrada,
+        on_message_callback=make_callback(nombre_salida),
+        auto_ack=False
+    )
+
+    logging.info(f"Escuchando en {nombre_entrada}")
+    logging.info(f"Para enviar en {nombre_salida}")    

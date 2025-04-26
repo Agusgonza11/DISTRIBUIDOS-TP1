@@ -23,6 +23,8 @@ docker-image:
 	docker build -f ./dockers/aggregator.Dockerfile -t aggregator:latest .
 	docker build -f ./dockers/pnl.Dockerfile -t pnl:latest .
 	docker build -f ./dockers/client.Dockerfile -t "client:latest" .
+	docker build -f ./dockers/broker.Dockerfile -t "broker:latest" .
+
 
 	# Execute this command from time to time to clean up intermediate stages generated 
 	# during client build (your hard drive will like this :) ). Don't left uncommented if you 

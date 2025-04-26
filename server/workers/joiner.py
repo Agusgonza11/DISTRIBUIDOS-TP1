@@ -86,7 +86,11 @@ class JoinerNode:
         if credits.empty:
             return False
         cast_arg_post_2000_df = datos[["id", "title"]].merge(credits, on="id")
-        cast_and_movie_arg_post_2000_df = cast_arg_post_2000_df.set_index("id")["cast"].apply(pd.Series).stack().reset_index("id", name="name")
+        df_cast = cast_arg_post_2000_df.explode('cast')
+
+        # Te quedás con id y nombre del actor
+        cast_and_movie_arg_post_2000_df = df_cast[['id', 'cast']].rename(columns={'cast': 'name'})
+
         return cast_and_movie_arg_post_2000_df
 
     
@@ -112,7 +116,6 @@ class JoinerNode:
     def procesar_mensajes(self, canal, destino, mensaje, enviar_func):
         consulta_id = obtener_query(mensaje)
         try:
-            # Manejo de EOF
             if mensaje['headers'].get("type") == EOF:
                 logging.info(f"Consulta {consulta_id} recibió EOF")
                 self.eof_esperados[consulta_id] -= 1
@@ -159,7 +162,8 @@ class JoinerNode:
 
 if __name__ == "__main__":
     consultas = os.getenv("CONSULTAS", "")
+    worker_id = int(os.environ.get("WORKER_ID", 0))
     consultas_atiende = list(map(int, consultas.split(","))) if consultas else []
     joiner = JoinerNode(consultas_atiende)
-    iniciar_nodo(JOINER, joiner, consultas)
+    iniciar_nodo(JOINER, joiner, consultas, None, worker_id)
 

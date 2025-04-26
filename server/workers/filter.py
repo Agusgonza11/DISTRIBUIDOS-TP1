@@ -82,12 +82,7 @@ class FiltroNode:
                 self.shutdown_event.set()
             else:
                 resultado = self.ejecutar_consulta(consulta_id, mensaje['body'].decode('utf-8'))
-                tipo = "MOVIES" if consulta_id in [3, 4] else None
-                if consulta_id == 3 or consulta_id == 4:
-                    for _ in range(eof_a_enviar): #Brodcasteo para el joiner
-                        enviar_func(canal, destino, resultado, mensaje, tipo)
-                else:
-                    enviar_func(canal, destino, resultado, mensaje, tipo)
+                enviar_func(canal, destino, resultado, mensaje)
             mensaje['ack']()
         except Exception as e:
             logging.error(f"Error procesando mensaje en consulta {consulta_id}: {e}")

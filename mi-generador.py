@@ -116,6 +116,21 @@ def calcular_eofs(tipo, distribucion):
 
     return eof_dict
 
+def agregar_broker(compose, cant_filter=1, cant_joiner=1, cant_aggregator=1, cant_pnl=1):
+    consultas_por_nodo = distribuir_consultas_por_nodo(cant_filter, cant_joiner, cant_aggregator, cant_pnl)
+    eof_aggregator = calcular_eofs("aggregator", consultas_por_nodo)
+    eof_str = ",".join(f"{k}:{v}" for k, v in eof_aggregator.items())
+
+    compose["services"]["broker"] = {
+                    "container_name": "broker",
+                    "image": "broker:latest",
+                    "entrypoint": f"python3 workers/broker.py",
+                    "environment": [f"EOF_ESPERADOS={eof_str}"],
+                    "networks": ["testing_net"],
+                    "depends_on": {
+                            "rabbitmq": {"condition": "service_healthy"}
+                    }
+                }
 
 
 def agregar_workers(compose, cant_filter=1, cant_joiner=1, cant_aggregator=1, cant_pnl=1):
@@ -132,7 +147,7 @@ def agregar_workers(compose, cant_filter=1, cant_joiner=1, cant_aggregator=1, ca
         "filter": cant_filter,
         "joiner": cant_joiner,
         "aggregator": cant_aggregator,
-        "pnl": cant_pnl
+        "pnl": cant_pnl,
     }
 
     for tipo, cantidad in tipos.items():
@@ -155,7 +170,6 @@ def agregar_workers(compose, cant_filter=1, cant_joiner=1, cant_aggregator=1, ca
             elif tipo == "aggregator":
                 eof_str = ",".join(f"{k}:{v}" for k, v in eof_aggregator.items())
                 env.append(f"EOF_ESPERADOS={eof_str}")
-
             if tipo == "filter":
                 eof_map = eof_enviar_por_filter.get(i, {})
                 if eof_map:
@@ -251,7 +265,7 @@ def generar_yaml(cant_filter, cant_joiner, cant_aggregator, cant_pnl):
     }
 
     agregar_workers(compose, cant_filter, cant_joiner, cant_aggregator, cant_pnl)
-
+    agregar_broker(compose, cant_aggregator)
     return compose
 
 def construir_env_input_gateway(consultas_por_nodo):
