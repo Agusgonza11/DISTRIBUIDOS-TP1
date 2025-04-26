@@ -69,6 +69,12 @@ def prepare_data_consult_2(data):
     data['budget'] = pd.to_numeric(data['budget'], errors='coerce')
     return data
 
+def prepare_data_consult_4(data):
+    credits = concat_data(data) 
+    credits['cast'] = credits['cast'].apply(dictionary_to_list)
+    return credits
+
+
 
 def prepare_data_aggregator_consult_3(min, max):
     headers = ["id", "title", "rating"]

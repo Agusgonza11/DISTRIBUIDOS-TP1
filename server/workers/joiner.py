@@ -1,7 +1,7 @@
 import threading
 import logging
 import os
-from common.utils import EOF, cargar_eofs, concat_data, create_dataframe, dictionary_to_list
+from common.utils import EOF, cargar_eofs, concat_data, create_dataframe, dictionary_to_list, prepare_data_consult_4
 from common.communication import iniciar_nodo, obtener_query
 import pandas as pd # type: ignore
 
@@ -80,13 +80,14 @@ class JoinerNode:
 
     def consulta_4(self, datos):
         logging.info("Procesando datos para consulta 4")
-        credits = concat_data(self.datos_credits)
+        credits = prepare_data_consult_4(self.datos["credits"][DATOS])
+        self.datos["credits"][DATOS] = []
+        self.datos["credits"][LINEAS] = 0        
         if credits.empty:
             return False
-        credits.columns = ['id', 'cast']
-        credits['cast'] = credits['cast'].apply(dictionary_to_list)
-        credits.rename(columns={"movieId": "id"}, inplace=True)
-        return datos.merge(credits, on="id")
+        cast_arg_post_2000_df = datos[["id", "title"]].merge(credits, on="id")
+        cast_and_movie_arg_post_2000_df = cast_arg_post_2000_df.set_index("id")["cast"].apply(pd.Series).stack().reset_index("id", name="name")
+        return cast_and_movie_arg_post_2000_df
 
     
     def consulta_completa(self, consulta_id):

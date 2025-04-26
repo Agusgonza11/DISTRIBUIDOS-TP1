@@ -55,9 +55,9 @@ class AggregatorNode:
 
     def consulta_4(self, datos):
         logging.info("Procesando datos para consulta 4")
-        actor_counts = datos.groupby("cast").count().reset_index().rename(columns={"id": "count"})
-        top_10_actors = actor_counts.nlargest(10, 'count')
-        return top_10_actors
+        cast_per_movie_quantities = datos.groupby(["name"]).count().reset_index().rename(columns={"id":"count"})
+        top_ten = cast_per_movie_quantities.nlargest(10, 'count')
+        return top_ten
 
     def consulta_5(self, datos):
         logging.info("Procesando datos para consulta 5")
