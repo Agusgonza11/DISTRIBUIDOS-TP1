@@ -1,7 +1,7 @@
 import threading
 import logging
 import os
-from common.utils import EOF, cargar_eofs, concat_data, create_dataframe, dictionary_to_list, prepare_data_ratings
+from common.utils import EOF, cargar_eofs, concat_data, create_dataframe, dictionary_to_list
 from common.communication import iniciar_nodo, obtener_query
 import pandas as pd # type: ignore
 
@@ -22,7 +22,7 @@ class JoinerNode:
         self.shutdown_event = threading.Event()
         self.eof_esperados = cargar_eofs()
         self.termino_movies = False
-        self.umbral_envio_ratings = 10000
+        self.umbral_envio_ratings = 100000
         self.umbral_envio_credits = 10000
         self.datos = {"ratings": [[], 0, False], "credits": [[], 0, False]}
         # "CSV": (datos, cantidad de datos, termino de recibir todo)
@@ -30,10 +30,8 @@ class JoinerNode:
     def puede_enviar(self, consulta_id):
         puede_enviar = False
         if consulta_id == 3 and (self.datos["ratings"][LINEAS] >= self.umbral_envio_ratings or self.datos["ratings"][TERMINO]):
-            self.datos["ratings"][LINEAS] = 0
             puede_enviar = True
         if consulta_id == 4 and (self.datos["credits"][LINEAS] >= self.umbral_envio_credits or self.datos["credits"][TERMINO]):
-            self.datos["credits"][LINEAS] = 0
             puede_enviar = True        
         return puede_enviar
 
