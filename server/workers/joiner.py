@@ -109,7 +109,7 @@ class JoinerNode:
             termino_nodo = True if self.termino_movies and self.datos["credits"][TERMINO] else False
         return termino_nodo
     
-    def procesar_mensajes(self, destino, mensaje, enviar_func):
+    def procesar_mensajes(self, canal, destino, mensaje, enviar_func):
         consulta_id = obtener_query(mensaje)
         try:
             # Manejo de EOF
@@ -145,10 +145,10 @@ class JoinerNode:
 
             if self.termino_movies and self.puede_enviar(consulta_id):
                 resultado = self.ejecutar_consulta(consulta_id)
-                enviar_func(destino, resultado, mensaje, "")
+                enviar_func(canal, destino, resultado, mensaje, "")
             
             if self.consulta_completa(consulta_id):
-                enviar_func(destino, EOF, mensaje, EOF)
+                enviar_func(canal, destino, EOF, mensaje, EOF)
 
             if self.termino_nodo():
                 self.shutdown_event.set()

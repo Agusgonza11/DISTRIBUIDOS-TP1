@@ -43,7 +43,10 @@ def concat_data(data):
 def dictionary_to_list(dictionary_str):
     try:
         dictionary_list = ast.literal_eval(dictionary_str)  
-        return [data['name'] for data in dictionary_list]  
+        if isinstance(dictionary_list, list):
+            return [data['name'] for data in dictionary_list if isinstance(data, dict) and 'name' in data]
+        else:
+            return []
     except (ValueError, SyntaxError):
         return [] 
 

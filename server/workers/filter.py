@@ -71,23 +71,23 @@ class FiltroNode:
         return q5_input_df
 
 
-    def procesar_mensajes(self, destino, mensaje, enviar_func):
+    def procesar_mensajes(self, canal, destino, mensaje, enviar_func):
         consulta_id = obtener_query(mensaje)
         eof_a_enviar = self.eof_a_enviar.get(consulta_id, 1) if consulta_id in [3, 4, 5] else 1
         try:
             if mensaje['headers'].get("type") == EOF:
                 logging.info(f"Consulta {consulta_id} recibió EOF")
                 for _ in range(eof_a_enviar):
-                    enviar_func(destino, EOF, mensaje, EOF)
+                    enviar_func(canal, destino, EOF, mensaje, EOF)
                 self.shutdown_event.set()
             else:
                 resultado = self.ejecutar_consulta(consulta_id, mensaje['body'].decode('utf-8'))
                 tipo = "MOVIES" if consulta_id in [3, 4] else None
                 if consulta_id == 3 or consulta_id == 4:
                     for _ in range(eof_a_enviar): #Brodcasteo para el joiner
-                        enviar_func(destino, resultado, mensaje, tipo)
+                        enviar_func(canal, destino, resultado, mensaje, tipo)
                 else:
-                    enviar_func(destino, resultado, mensaje, tipo)
+                    enviar_func(canal, destino, resultado, mensaje, tipo)
             mensaje['ack']()
         except Exception as e:
             logging.error(f"Error procesando mensaje en consulta {consulta_id}: {e}")

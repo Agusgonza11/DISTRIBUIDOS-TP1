@@ -6,8 +6,6 @@ from common.utils import create_body, initialize_log, puede_enviar
 # ----------------------
 # Constantes globales
 # ----------------------
-conexion = None
-canal = None
 
 # ----------------------
 # ENRUTAMIENTO DE MENSAJE
@@ -27,7 +25,6 @@ COLAS = {
     "joiner_consult_4": "aggregator_consult_4",
 }
 
-
 QUERY = {
     "ARGENTINIAN-SPANISH-PRODUCTIONS": 1,
     "TOP-INVESTING-COUNTRIES" : 2,
@@ -42,7 +39,7 @@ def obtener_query(mensaje):
     return QUERY[tipo]
 
 
-#Utilizar a futuro para colas unicas
+#Utilizar para colas unicas
 def determinar_salida(tipo_nodo, consulta_id):
     if tipo_nodo == "filter":
         return {
@@ -87,20 +84,22 @@ def iniciar_nodo(tipo_nodo, nodo, consultas):
     initialize_log("INFO")
     logging.info(f"Se inicializó el {tipo_nodo} filter")
     consultas = list(map(int, consultas.split(","))) if consultas else []
-    inicializar_comunicacion()
-    escuchar_colas(tipo_nodo, nodo, consultas)
+    conexion, canal = inicializar_comunicacion()
+    escuchar_colas(tipo_nodo, nodo, consultas, canal)
     nodo.shutdown_event.wait()
     logging.info(f"Shutdown del nodo {tipo_nodo}")
+    canal.close()
+    conexion.close()
 
 def inicializar_comunicacion():
-    global conexion, canal
     parametros = pika.ConnectionParameters(host="rabbitmq")
     conexion = pika.BlockingConnection(parametros)
     canal = conexion.channel()
     canal.basic_qos(prefetch_count=1)
+    return conexion, canal
 
 
-def enviar_mensaje(routing_key, body, mensaje_original, type=None):
+def enviar_mensaje(canal, routing_key, body, mensaje_original, type=None):
     if puede_enviar(body):
         logging.info(f"Lo que voy a enviar es {body}")
         propiedades = config_header(mensaje_original, type)
@@ -118,7 +117,7 @@ def enviar_mensaje(routing_key, body, mensaje_original, type=None):
 # ATENDER CONSULTA
 # ---------------------
 
-def escuchar_colas(entrada, nodo, consultas):
+def escuchar_colas(entrada, nodo, consultas, canal):
     for consulta_id in consultas:
         nombre_entrada = f"{entrada}_consult_{consulta_id}"
         nombre_salida = COLAS[nombre_entrada]
@@ -134,7 +133,7 @@ def escuchar_colas(entrada, nodo, consultas):
                     'headers': properties.headers if properties.headers else {},
                     'ack': lambda: ch.basic_ack(delivery_tag=method.delivery_tag)
                 }
-                nodo.procesar_mensajes(nombre_salida, mensaje, enviar_mensaje)
+                nodo.procesar_mensajes(canal, nombre_salida, mensaje, enviar_mensaje)
             return callback
 
         canal.basic_consume(
