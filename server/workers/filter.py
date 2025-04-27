@@ -1,7 +1,7 @@
 import logging
 import threading
 import os
-from common.utils import cargar_eof_a_enviar, prepare_data_consult_1_3_4, prepare_data_consult_2, EOF, prepare_data_consult_5
+from common.utils import cargar_cant_pnls, prepare_data_consult_1_3_4, prepare_data_consult_2, EOF, prepare_data_consult_5
 from common.communication import iniciar_nodo, obtener_query
 
 FILTER = "filter"
@@ -11,8 +11,8 @@ FILTER = "filter"
 # -----------------------
 class FiltroNode:
     def __init__(self):
-        self.eof_a_enviar = cargar_eof_a_enviar()
         self.shutdown_event = threading.Event()
+        self.nodos_pnl = cargar_cant_pnls()
 
     def ejecutar_consulta(self, consulta_id, datos):
         match consulta_id:
@@ -33,6 +33,7 @@ class FiltroNode:
                 return []
 
     def consulta_1(self, datos):
+        logging.info("Procesando datos para consulta 1") 
         datos = prepare_data_consult_1_3_4(datos)
         movies_argentina_españa_00s_df = datos[
             (datos['production_countries'].str.contains('Argentina', case=False, na=False)) & 
@@ -76,7 +77,11 @@ class FiltroNode:
         try:
             if mensaje['headers'].get("type") == EOF:
                 logging.info(f"Consulta {consulta_id} recibió EOF")
-                enviar_func(canal, destino, EOF, mensaje, EOF)
+                if consulta_id == 5:
+                    for _ in range(self.nodos_pnl):
+                        enviar_func(canal, destino, EOF, mensaje, EOF)
+                else:
+                    enviar_func(canal, destino, EOF, mensaje, EOF)
                 self.shutdown_event.set()
             else:
                 resultado = self.ejecutar_consulta(consulta_id, mensaje['body'].decode('utf-8'))

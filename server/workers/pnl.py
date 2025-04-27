@@ -52,20 +52,24 @@ class PnlNode:
         consulta_id = obtener_query(mensaje)
         try:
             if mensaje['headers'].get("type") == EOF:
-                logging.info(f"Consulta {consulta_id} recibió EOF")
+                logging.info(f"Consulta {consulta_id} de pnl recibió EOF {self.eof_esperados}")
                 self.eof_esperados[consulta_id] -= 1
                 if self.eof_esperados[consulta_id] == 0:
                     logging.info(f"Consulta {consulta_id} recibió TODOS los EOF que esperaba")
                     resultado = self.ejecutar_consulta(consulta_id)
-                    enviar_func(canal, destino, resultado, mensaje, "")
+                    self.resultados_parciales[consulta_id] = []
+                    enviar_func(canal, destino, resultado, mensaje, "RESULT")
                     enviar_func(canal, destino, EOF, mensaje, EOF)
+                    logging.info(f"voy a cerrar el nodo")
                     self.shutdown_event.set()
+                    logging.info(f"lo cerre")
             else:
                 contenido = mensaje['body'].decode('utf-8')
                 self.guardar_datos(consulta_id, contenido)
-            if self.lineas_actuales >= 1000:
+            if self.lineas_actuales >= 500:
                 resultado = self.ejecutar_consulta(consulta_id)
-                enviar_func(canal, destino, resultado, mensaje, "")
+                self.resultados_parciales[consulta_id] = []
+                enviar_func(canal, destino, resultado, mensaje, "RESULT")
 
             mensaje['ack']()
 
@@ -82,4 +86,6 @@ class PnlNode:
 if __name__ == "__main__":
     pnl = PnlNode()
     iniciar_nodo(PNL, pnl, os.getenv("CONSULTAS", ""))
-
+    logging.info(f"aca llega")
+    pnl.shutdown_event.wait()
+    logging.info(f"Shutdown del nodo {PNL}")

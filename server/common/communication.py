@@ -84,19 +84,16 @@ def iniciar_nodo(tipo_nodo, nodo, consultas=None, joiner_id=None):
     initialize_log("INFO")
     logging.info(f"Se inicializó el {tipo_nodo} filter")
     consultas = list(map(int, consultas.split(","))) if consultas else []
-    conexion, canal = inicializar_comunicacion()
+    _, canal = inicializar_comunicacion()
     if tipo_nodo == "broker":
         escuchar_colas_broker(nodo, canal)
-    if tipo_nodo == "joiner":
+    elif tipo_nodo == "joiner":
         escuchar_colas_joiner(nodo, consultas, canal, joiner_id)
     else:
         escuchar_colas(tipo_nodo, nodo, consultas, canal)
-
-
     nodo.shutdown_event.wait()
     logging.info(f"Shutdown del nodo {tipo_nodo}")
-    canal.close()
-    conexion.close()
+
 
 def inicializar_comunicacion():
     parametros = pika.ConnectionParameters(host="rabbitmq")

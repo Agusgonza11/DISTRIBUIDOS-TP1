@@ -197,11 +197,7 @@ def agregar_workers(compose, cant_filter=1, cant_joiner=1, cant_aggregator=1, ca
                 eof_str = ",".join(f"{k}:{v}" for k, v in eof_aggregator.items())
                 env.append(f"EOF_ESPERADOS={eof_str}")
             if tipo == "filter":
-                eof_map = eof_enviar_por_filter.get(i, {})
-                if eof_map:
-                    # Ejemplo: "3:2,5:1"
-                    eof_str = ",".join(f"{k}:{v}" for k, v in eof_map.items())
-                    env.append(f"EOF_ENVIAR={eof_str}")
+                env.append(f"CANT_NODOS_PNL={cant_pnl}")
 
 
             # Agregar al compose
@@ -351,11 +347,11 @@ if __name__ == "__main__":
         archivo_salida = sys.argv[1]
         filters = joiners = aggregators = pnls = 1
     elif len(sys.argv) == 6:
-        _, archivo_salida, filters, joiners, aggregators, pnls = sys.argv
+        _, archivo_salida, filters, joiners, pnls, aggregators = sys.argv
         if int(aggregators) > 4:
             aggregators = '4'
     else:
-        print("Uso: python3 mi-generador.py <archivo_salida> [filters joiners aggregators pnls]")
+        print("Uso: python3 mi-generador.py [filters joiners pnls aggregators]")
         sys.exit(1)
 
     generar_docker_compose(archivo_salida, filters, joiners, aggregators, pnls)
