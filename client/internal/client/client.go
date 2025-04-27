@@ -76,17 +76,17 @@ func (c *Client) sendMovies(query string) error {
 	var currentBatchID int
 	var batchSizeBytes int
 
-	c.logger.Infof("Starting to send")
+	c.logger.Infof("Starting to send for query %s", query)
 
 	for {
 		line, err := reader.Read()
 		if err != nil {
 			if errors.Is(err, goIO.EOF) {
-				c.logger.Infof("reached end of file")
+				// c.logger.Infof("reached end of file")
 				break
 			}
 
-			c.logger.Infof("failed trying to read file: %v", err)
+			// c.logger.Infof("failed trying to read file: %v", err)
 			continue
 		}
 
@@ -139,17 +139,17 @@ func (c *Client) sendCredits(query string) error {
 	var currentBatchID int
 	var batchSizeBytes int
 
-	c.logger.Infof("Starting to send")
+	c.logger.Infof("Starting to send for query %s", query)
 
 	for {
 		line, err := reader.Read()
 		if err != nil {
 			if errors.Is(err, goIO.EOF) {
-				c.logger.Infof("reached end of file")
+				// c.logger.Infof("reached end of file")
 				break
 			}
 
-			c.logger.Infof("failed trying to read file: %v", err)
+			// c.logger.Infof("failed trying to read file: %v", err)
 			continue
 		}
 
@@ -202,13 +202,13 @@ func (c *Client) sendRatings(query string) error {
 	var currentBatchID int
 	var batchSizeBytes int
 
-	c.logger.Infof("Starting to send")
+	c.logger.Infof("Starting to send for query %s", query)
 
 	for {
 		line, err := reader.Read()
 		if err != nil {
 			if errors.Is(err, goIO.EOF) {
-				c.logger.Infof("reached end of file")
+				// c.logger.Infof("reached end of file")
 				break
 			}
 
@@ -287,7 +287,7 @@ func (c *Client) processArgentinianSpanishProductions(ctx context.Context) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		c.handleResults(ctx)
+		c.handleResults(ctx, models.QueryArgentinaEsp)
 	}()
 
 	wg.Wait()
@@ -308,16 +308,17 @@ func (c *Client) processTopInvestingCountries(ctx context.Context) {
 	}
 
 	wg := sync.WaitGroup{}
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		c.sendMovies(models.QueryTopInvestors)
+		c.handleResults(ctx, models.QueryTopInvestors)
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		c.handleResults(ctx)
+		c.sendMovies(models.QueryTopInvestors)
 	}()
 
 	wg.Wait()
@@ -342,7 +343,7 @@ func (c *Client) processTopArgentinianMoviesByRating(ctx context.Context) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		c.handleResults(ctx)
+		c.handleResults(ctx, models.QueryTopArgentinianMoviesByRating)
 	}()
 
 	wg.Add(1)
@@ -379,7 +380,7 @@ func (c *Client) processTopArgentinianActors(ctx context.Context) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		c.handleResults(ctx)
+		c.handleResults(ctx, models.QueryTopArgentinianActors)
 	}()
 
 	wg.Add(1)
@@ -416,7 +417,7 @@ func (c *Client) processSentimentAnalysis(ctx context.Context) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		c.handleResults(ctx)
+		c.handleResults(ctx, models.QuerySentimentAnalysis)
 	}()
 
 	wg.Add(1)
@@ -428,7 +429,7 @@ func (c *Client) processSentimentAnalysis(ctx context.Context) {
 	wg.Wait()
 }
 
-func (c *Client) handleResults(ctx context.Context) {
+func (c *Client) handleResults(ctx context.Context, query string) {
 	dialer := net.Dialer{}
 
 	conn, err := dialer.DialContext(ctx, "tcp", c.config.OutputGatewayAddress)
@@ -453,11 +454,14 @@ func (c *Client) handleResults(ctx context.Context) {
 	}
 
 	for {
+		c.logger.Infof("Handling message result for query %s", query)
 		response, err := io.ReadMessage(conn)
 		if err != nil {
 			c.logger.Errorf(fmt.Sprintf("failed trying to fetch results: %v", err))
 			return
 		}
+
+		c.logger.Infof("Received message %s", response)
 
 		lines := strings.Split(response, "\n")
 		if len(lines) < 1 {

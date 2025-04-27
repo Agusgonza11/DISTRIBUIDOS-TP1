@@ -141,7 +141,7 @@ def agregar_broker(compose, cant_filter=1, cant_joiner=1, cant_aggregator=1, can
     eof_joiner = calcular_eofs("joiner", consultas_por_nodo)
     eof_str_joiner = ",".join(f"{k}:{v}" for k, v in eof_joiner.items())
     joiners = get_joiners_consultas_from_compose(compose)
-    str_joiners = ",".join(f"{k}:{v}" for k, v in joiners.items())
+    str_joiners = "|".join(f"{k}:{v}" for k, v in joiners.items())
 
     compose["services"]["broker"] = {
                     "container_name": "broker",

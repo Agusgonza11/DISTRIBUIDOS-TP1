@@ -117,7 +117,7 @@ def cargar_broker():
     raw = os.getenv("JOINERS", "")
     eofs = {}
     if raw:
-        for par in raw.split(","):
+        for par in raw.split("|"):
             if ":" in par:
                 k, v = par.split(":")
                 eofs[int(k)] = ast.literal_eval(v)

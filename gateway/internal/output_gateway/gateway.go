@@ -200,6 +200,7 @@ func (g *Gateway) listenRabbitMQ(ctx context.Context) {
 				continue
 			}
 
+			g.logger.Infof("Message received for query %s: %s", query, body)
 			messageType := msg.Headers["type"]
 			if messageType != nil {
 				isEOF := messageType.(string) == "EOF"

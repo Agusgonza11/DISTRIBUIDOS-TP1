@@ -28,12 +28,11 @@ class JoinerNode:
         # "CSV": (datos, cantidad de datos, termino de recibir todo)
 
     def puede_enviar(self, consulta_id):
-        puede_enviar = False
         if consulta_id == 3 and (self.datos["ratings"][LINEAS] >= self.umbral_envio_ratings or self.datos["ratings"][TERMINO]):
-            puede_enviar = True
+            return True
         if consulta_id == 4 and (self.datos["credits"][LINEAS] >= self.umbral_envio_credits or self.datos["credits"][TERMINO]):
-            puede_enviar = True        
-        return puede_enviar
+            return True        
+        return False
 
 
     def guardar_datos(self, consulta_id, datos):
@@ -114,33 +113,30 @@ class JoinerNode:
     
     def procesar_mensajes(self, canal, destino, mensaje, enviar_func):
         consulta_id = obtener_query(mensaje)
+        tipo_mensaje = mensaje['headers'].get("type")
         try:
-            if mensaje['headers'].get("type") == EOF:
+            if tipo_mensaje == EOF:
                 logging.info(f"Consulta {consulta_id} recibió EOF")
                 self.termino_movies = True
 
-            if mensaje['headers'].get("type") == "EOF_RATINGS":
-                logging.info(f"Recibí todos los ratings")
+            elif tipo_mensaje == "EOF_RATINGS":
+                logging.info("Recibí todos los ratings")
                 self.datos["ratings"][TERMINO] = True
 
-            if mensaje['headers'].get("type") == "EOF_CREDITS":
-                logging.info(f"Recibí todos los credits")
+            elif tipo_mensaje == "EOF_CREDITS":
+                logging.info("Recibí todos los credits")
                 self.datos["credits"][TERMINO] = True
-
-            if mensaje['headers'].get("type") == "RATINGS":
+                
+            elif tipo_mensaje in {"RATINGS", "CREDITS"}:
                 self.almacenar_csv(consulta_id, mensaje['body'].decode('utf-8'))
-
-            if mensaje['headers'].get("type") == "CREDITS":
-                self.almacenar_csv(consulta_id, mensaje['body'].decode('utf-8'))
-
-            if mensaje['headers'].get("type") == "MOVIES":
+                
+            elif tipo_mensaje == "MOVIES":
                 self.guardar_datos(consulta_id, mensaje['body'].decode('utf-8'))
 
             if self.termino_movies and self.puede_enviar(consulta_id):
                 resultado = self.ejecutar_consulta(consulta_id)
                 enviar_func(canal, destino, resultado, mensaje, "")
             
-
             if self.consulta_completa(consulta_id):
                 enviar_func(canal, destino, EOF, mensaje, EOF)
 

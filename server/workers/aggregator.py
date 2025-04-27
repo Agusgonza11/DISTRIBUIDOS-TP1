@@ -73,10 +73,12 @@ class AggregatorNode:
             if mensaje['headers'].get("type") == EOF:
                 logging.info(f"Consulta {consulta_id} recibió EOF")
                 self.eof_esperados[consulta_id] -= 1
+                logging.info(f"Faltan {self.eof_esperados[consulta_id]} EOF restantes")
                 if self.eof_esperados[consulta_id] == 0:
                     logging.info(f"Consulta {consulta_id} recibió TODOS los EOF que esperaba")
                     resultado = self.ejecutar_consulta(consulta_id)
                     enviar_func(canal, destino, resultado, mensaje, "RESULT")
+                    enviar_func(canal, destino, EOF, mensaje, EOF)
                     self.shutdown_event.set()
             else:
                 contenido = mensaje['body'].decode('utf-8')
