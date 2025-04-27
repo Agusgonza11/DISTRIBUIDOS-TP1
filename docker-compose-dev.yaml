@@ -14,8 +14,6 @@ services:
       timeout: 3s
       retries: 10
       start_period: 50s
-    logging:
-      driver: none
   client:
     container_name: client
     image: client:latest
@@ -121,6 +119,19 @@ services:
     - WORKER_TYPE=PNL
     - CONSULTAS=5
     - EOF_ESPERADOS=5:1
+    networks:
+    - testing_net
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+  broker:
+    container_name: broker
+    image: broker:latest
+    entrypoint: python3 workers/broker.py
+    environment:
+    - EOF_ESPERADOS=3:1,4:1
+    - EOF_ENVIAR=2:1,3:1,4:1,5:1
+    - JOINERS=1:[3, 4]
     networks:
     - testing_net
     depends_on:

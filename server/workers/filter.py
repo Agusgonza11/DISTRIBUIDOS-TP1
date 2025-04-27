@@ -73,12 +73,10 @@ class FiltroNode:
 
     def procesar_mensajes(self, canal, destino, mensaje, enviar_func):
         consulta_id = obtener_query(mensaje)
-        eof_a_enviar = self.eof_a_enviar.get(consulta_id, 1) if consulta_id in [3, 4, 5] else 1
         try:
             if mensaje['headers'].get("type") == EOF:
                 logging.info(f"Consulta {consulta_id} recibió EOF")
-                for _ in range(eof_a_enviar):
-                    enviar_func(canal, destino, EOF, mensaje, EOF)
+                enviar_func(canal, destino, EOF, mensaje, EOF)
                 self.shutdown_event.set()
             else:
                 resultado = self.ejecutar_consulta(consulta_id, mensaje['body'].decode('utf-8'))

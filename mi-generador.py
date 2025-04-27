@@ -2,6 +2,24 @@ import sys
 import yaml
 
 
+def get_joiners_consultas_from_compose(compose):
+    joiners = {}
+    for service_name, service in compose.get('services', {}).items():
+        if service_name.startswith('joiner'):
+            env_vars = service.get('environment', [])
+            worker_id = None
+            consultas = None
+            for env in env_vars:
+                if env.startswith('WORKER_ID='):
+                    worker_id = int(env.split('=')[1])
+                if env.startswith('CONSULTAS='):
+                    consultas = list(map(int, env.split('=')[1].split(',')))
+            if worker_id is not None and consultas is not None:
+                joiners[worker_id] = consultas
+    return joiners
+
+
+
 def distribuir_consultas_por_nodo(cant_filter=1, cant_joiner=1, cant_aggregator=1, cant_pnl=1):
     consultas_por_tipo = {
         "filter": [1, 2, 3, 4, 5],
@@ -119,13 +137,21 @@ def calcular_eofs(tipo, distribucion):
 def agregar_broker(compose, cant_filter=1, cant_joiner=1, cant_aggregator=1, cant_pnl=1):
     consultas_por_nodo = distribuir_consultas_por_nodo(cant_filter, cant_joiner, cant_aggregator, cant_pnl)
     eof_aggregator = calcular_eofs("aggregator", consultas_por_nodo)
-    eof_str = ",".join(f"{k}:{v}" for k, v in eof_aggregator.items())
+    eof_str_agg = ",".join(f"{k}:{v}" for k, v in eof_aggregator.items())
+    eof_joiner = calcular_eofs("joiner", consultas_por_nodo)
+    eof_str_joiner = ",".join(f"{k}:{v}" for k, v in eof_joiner.items())
+    joiners = get_joiners_consultas_from_compose(compose)
+    str_joiners = ",".join(f"{k}:{v}" for k, v in joiners.items())
 
     compose["services"]["broker"] = {
                     "container_name": "broker",
                     "image": "broker:latest",
                     "entrypoint": f"python3 workers/broker.py",
-                    "environment": [f"EOF_ESPERADOS={eof_str}"],
+                    "environment": [
+                        f"EOF_ESPERADOS={eof_str_joiner}",
+                        f"EOF_ENVIAR={eof_str_agg}",
+                        f"JOINERS={str_joiners}",
+                        ],
                     "networks": ["testing_net"],
                     "depends_on": {
                             "rabbitmq": {"condition": "service_healthy"}
@@ -265,7 +291,7 @@ def generar_yaml(cant_filter, cant_joiner, cant_aggregator, cant_pnl):
     }
 
     agregar_workers(compose, cant_filter, cant_joiner, cant_aggregator, cant_pnl)
-    agregar_broker(compose, cant_aggregator)
+    agregar_broker(compose, cant_filter, cant_joiner, cant_aggregator, cant_pnl)
     return compose
 
 def construir_env_input_gateway(consultas_por_nodo):

@@ -47,15 +47,16 @@ class JoinerNode:
             csv = "ratings"
         else:
             csv = "credits"
+        datos = create_dataframe(datos)
         self.datos[csv][LINEAS] += len(datos)
-        self.datos[csv][DATOS].append(create_dataframe(datos))
+        self.datos[csv][DATOS].append(datos)
 
 
     def ejecutar_consulta(self, consulta_id):
         datos = self.resultados_parciales.get(consulta_id, [])
         if not datos:
             return False
-
+        
         datos = concat_data(datos)
         
         match consulta_id:
@@ -79,7 +80,7 @@ class JoinerNode:
         return ranking_arg_post_2000_df
 
     def consulta_4(self, datos):
-        logging.info("Procesando datos para consulta 4")
+        logging.info(f"Procesando datos para consulta 4 con credits")
         credits = prepare_data_consult_4(self.datos["credits"][DATOS])
         self.datos["credits"][DATOS] = []
         self.datos["credits"][LINEAS] = 0        
@@ -87,8 +88,6 @@ class JoinerNode:
             return False
         cast_arg_post_2000_df = datos[["id", "title"]].merge(credits, on="id")
         df_cast = cast_arg_post_2000_df.explode('cast')
-
-        # Te quedás con id y nombre del actor
         cast_and_movie_arg_post_2000_df = df_cast[['id', 'cast']].rename(columns={'cast': 'name'})
 
         return cast_and_movie_arg_post_2000_df
@@ -118,10 +117,7 @@ class JoinerNode:
         try:
             if mensaje['headers'].get("type") == EOF:
                 logging.info(f"Consulta {consulta_id} recibió EOF")
-                self.eof_esperados[consulta_id] -= 1
-                if self.eof_esperados[consulta_id] == 0:
-                    logging.info(f"Consulta {consulta_id} recibió TODOS los EOF que esperaba de movies")
-                    self.termino_movies = True
+                self.termino_movies = True
 
             if mensaje['headers'].get("type") == "EOF_RATINGS":
                 logging.info(f"Recibí todos los ratings")
@@ -144,6 +140,7 @@ class JoinerNode:
                 resultado = self.ejecutar_consulta(consulta_id)
                 enviar_func(canal, destino, resultado, mensaje, "")
             
+
             if self.consulta_completa(consulta_id):
                 enviar_func(canal, destino, EOF, mensaje, EOF)
 
@@ -165,5 +162,5 @@ if __name__ == "__main__":
     worker_id = int(os.environ.get("WORKER_ID", 0))
     consultas_atiende = list(map(int, consultas.split(","))) if consultas else []
     joiner = JoinerNode(consultas_atiende)
-    iniciar_nodo(JOINER, joiner, consultas, None, worker_id)
+    iniciar_nodo(JOINER, joiner, consultas, worker_id)
 

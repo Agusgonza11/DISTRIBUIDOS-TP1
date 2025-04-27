@@ -20,6 +20,7 @@ class AggregatorNode:
             self.resultados_parciales[consulta_id] = []
         self.resultados_parciales[consulta_id].append(create_dataframe(datos))
 
+
     def ejecutar_consulta(self, consulta_id):
         datos = self.resultados_parciales.get(consulta_id, [])
         if not datos:

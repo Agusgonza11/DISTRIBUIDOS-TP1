@@ -101,6 +101,44 @@ def prepare_data_aggregator_consult_3(min, max):
 # -------------------
 EOF = "EOF"
 
+def cargar_datos_broker():
+    diccionario = cargar_broker()
+    diccionario_invertido = {}
+    
+    for clave, valores in diccionario.items():
+        for valor in valores:
+            if valor not in diccionario_invertido:
+                diccionario_invertido[valor] = []
+            diccionario_invertido[valor].append(clave)
+    
+    return diccionario_invertido
+
+def cargar_broker():
+    raw = os.getenv("JOINERS", "")
+    eofs = {}
+    if raw:
+        for par in raw.split(","):
+            if ":" in par:
+                k, v = par.split(":")
+                eofs[int(k)] = ast.literal_eval(v)
+    return eofs
+
+
+def obtener_consultas():
+    consulta_3_join = int(os.getenv("CONSULTA_3_JOIN", 0))  # Default a 0 si no está definida
+    consulta_4_join = int(os.getenv("CONSULTA_4_JOIN", 0))  # Default a 0 si no está definida
+    return [consulta_3_join, consulta_4_join]
+
+def cargar_eofs_joiners():
+    raw = os.getenv("EOF_ENVIAR", "")
+    eofs = {}
+    if raw:
+        for par in raw.split(","):
+            if ":" in par:
+                k, v = par.split(":")
+                eofs[int(k)] = int(v)
+    return eofs
+
 def cargar_eofs():
     raw = os.getenv("EOF_ESPERADOS", "")
     eofs = {}

@@ -1,6 +1,6 @@
 import pika # type: ignore
 import logging
-from common.utils import create_body, initialize_log, puede_enviar
+from common.utils import cargar_broker, create_body, initialize_log, puede_enviar
 
 
 # ----------------------
@@ -80,13 +80,13 @@ def config_header(mensaje_original, tipo=None):
 # ---------------------
 # GENERALES
 # ---------------------
-def iniciar_nodo(tipo_nodo, nodo, consultas=None, cant_joiners=None, joiner_id=None):
+def iniciar_nodo(tipo_nodo, nodo, consultas=None, joiner_id=None):
     initialize_log("INFO")
     logging.info(f"Se inicializó el {tipo_nodo} filter")
     consultas = list(map(int, consultas.split(","))) if consultas else []
     conexion, canal = inicializar_comunicacion()
     if tipo_nodo == "broker":
-        escuchar_colas_broker(nodo, cant_joiners, canal)
+        escuchar_colas_broker(nodo, canal)
     if tipo_nodo == "joiner":
         escuchar_colas_joiner(nodo, consultas, canal, joiner_id)
     else:
@@ -108,7 +108,7 @@ def inicializar_comunicacion():
 
 def enviar_mensaje(canal, routing_key, body, mensaje_original, type=None):
     if puede_enviar(body):
-        logging.info(f"A {routing_key} le voy a enviar: {body}")
+        #logging.info(f"A {routing_key} le voy a enviar: {body}")
         propiedades = config_header(mensaje_original, type)
         canal.basic_publish(
             exchange='',
@@ -138,15 +138,14 @@ def escuchar_colas(entrada, nodo, consultas, canal):
 
 
 
-def escuchar_colas_broker(nodo, cant_joiners, canal): 
-    nombre_entrada = f"broker"
+def escuchar_colas_broker(nodo, canal): 
+    joiners = cargar_broker()
+    nombre_entrada = "broker"
     canal.queue_declare(queue=nombre_entrada, durable=True)
     colas_salida = []
-    cantidad_3, cantidad_4 = cant_joiners
-    for i in range(1, cantidad_3 + 1):
-        colas_salida.append(f"joiner_consult_3_{i}")
-    for i in range(1, cantidad_4 + 1):
-        colas_salida.append(f"joiner_consult_4_{i}")
+    for joiner_id, consultas in joiners.items():
+        for consulta_id in consultas:
+            colas_salida.append(f"joiner_consult_{consulta_id}_{joiner_id}")
 
     for nombre_salida in colas_salida:
         canal.queue_declare(queue=nombre_salida, durable=True)
