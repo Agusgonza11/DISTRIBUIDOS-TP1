@@ -139,9 +139,11 @@ def agregar_broker(compose, cant_filter=1, cant_joiner=1, cant_aggregator=1, can
     eof_aggregator = calcular_eofs("aggregator", consultas_por_nodo)
     eof_str_agg = ",".join(f"{k}:{v}" for k, v in eof_aggregator.items())
     eof_joiner = calcular_eofs("joiner", consultas_por_nodo)
+    cant_filters_pnl = calcular_eofs("pnl", consultas_por_nodo)
+    eof_joiner.update(cant_filters_pnl)
     eof_str_joiner = ",".join(f"{k}:{v}" for k, v in eof_joiner.items())
     joiners = get_joiners_consultas_from_compose(compose)
-    str_joiners = "|".join(f"{k}:{v}" for k, v in joiners.items())
+    str_joiners = ";".join(f"{k}:{v}" for k, v in joiners.items())
 
     compose["services"]["broker"] = {
                     "container_name": "broker",
@@ -196,12 +198,6 @@ def agregar_workers(compose, cant_filter=1, cant_joiner=1, cant_aggregator=1, ca
             elif tipo == "aggregator":
                 eof_str = ",".join(f"{k}:{v}" for k, v in eof_aggregator.items())
                 env.append(f"EOF_ESPERADOS={eof_str}")
-            if tipo == "filter":
-                eof_map = eof_enviar_por_filter.get(i, {})
-                if eof_map:
-                    # Ejemplo: "3:2,5:1"
-                    eof_str = ",".join(f"{k}:{v}" for k, v in eof_map.items())
-                    env.append(f"EOF_ENVIAR={eof_str}")
 
 
             # Agregar al compose
@@ -351,11 +347,11 @@ if __name__ == "__main__":
         archivo_salida = sys.argv[1]
         filters = joiners = aggregators = pnls = 1
     elif len(sys.argv) == 6:
-        _, archivo_salida, filters, joiners, aggregators, pnls = sys.argv
+        _, archivo_salida, filters, joiners, pnls, aggregators = sys.argv
         if int(aggregators) > 4:
             aggregators = '4'
     else:
-        print("Uso: python3 mi-generador.py <archivo_salida> [filters joiners aggregators pnls]")
+        print("Uso: python3 mi-generador.py [filters joiners pnls aggregators]")
         sys.exit(1)
 
     generar_docker_compose(archivo_salida, filters, joiners, aggregators, pnls)

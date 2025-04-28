@@ -1,11 +1,7 @@
+import sys
 import pika # type: ignore
 import logging
-from common.utils import cargar_broker, create_body, initialize_log, puede_enviar
-
-
-# ----------------------
-# Constantes globales
-# ----------------------
+from common.utils import cargar_broker, cargar_eof_a_enviar, create_body, graceful_quit, initialize_log, puede_enviar
 
 # ----------------------
 # ENRUTAMIENTO DE MENSAJE
@@ -15,7 +11,7 @@ COLAS = {
     "filter_consult_2": "aggregator_consult_2",
     "filter_consult_3": "broker",
     "filter_consult_4": "broker",
-    "filter_consult_5": "pnl_consult_5",
+    "filter_consult_5": "broker",
     "aggregator_consult_2": "gateway_output",
     "aggregator_consult_3": "gateway_output",
     "aggregator_consult_4": "gateway_output",
@@ -39,36 +35,6 @@ def obtener_query(mensaje):
     return QUERY[tipo]
 
 
-#Utilizar para colas unicas
-def determinar_salida(tipo_nodo, consulta_id):
-    if tipo_nodo == "filter":
-        return {
-            1: "gateway_output",
-            2: "aggregator_input",
-            3: "joiner_input",
-            4: "joiner_input",
-            5: "pnl_input"
-        }[consulta_id]
-    elif tipo_nodo == "joiner":
-        return {
-            3: "aggregator_input",
-            4: "aggregator_input"
-        }[consulta_id]
-    elif tipo_nodo == "aggregator":
-        return {
-            2: "gateway_output",
-            3: "gateway_output",
-            4: "gateway_output",
-            5: "gateway_output"
-        }[consulta_id]
-    elif tipo_nodo == "pnl":
-        return {
-            5: "aggregator_input"
-        }[consulta_id]
-    else:
-        raise ValueError(f"No se puede determinar salida para {tipo_nodo} y consulta {consulta_id}")
-
-
 def config_header(mensaje_original, tipo=None):
     headers = {"Query": mensaje_original['headers'].get("Query"), "ClientID": mensaje_original['headers'].get("ClientID")}
     if type != None:
@@ -80,23 +46,21 @@ def config_header(mensaje_original, tipo=None):
 # ---------------------
 # GENERALES
 # ---------------------
-def iniciar_nodo(tipo_nodo, nodo, consultas=None, joiner_id=None):
+def iniciar_nodo(tipo_nodo, nodo, consultas=None, worker_id=None):
     initialize_log("INFO")
     logging.info(f"Se inicializó el {tipo_nodo} filter")
     consultas = list(map(int, consultas.split(","))) if consultas else []
     conexion, canal = inicializar_comunicacion()
+    graceful_quit(conexion, canal)
     if tipo_nodo == "broker":
         escuchar_colas_broker(nodo, canal)
-    if tipo_nodo == "joiner":
-        escuchar_colas_joiner(nodo, consultas, canal, joiner_id)
+    elif tipo_nodo == "joiner":
+        escuchar_colas_joiner(nodo, consultas, canal, worker_id)
+    elif tipo_nodo == "pnl":
+        escuchar_colas_pnl(nodo, consultas, canal, worker_id)
     else:
         escuchar_colas(tipo_nodo, nodo, consultas, canal)
 
-
-    nodo.shutdown_event.wait()
-    logging.info(f"Shutdown del nodo {tipo_nodo}")
-    canal.close()
-    conexion.close()
 
 def inicializar_comunicacion():
     parametros = pika.ConnectionParameters(host="rabbitmq")
@@ -106,9 +70,10 @@ def inicializar_comunicacion():
     return conexion, canal
 
 
+
 def enviar_mensaje(canal, routing_key, body, mensaje_original, type=None):
     if puede_enviar(body):
-        #logging.info(f"A {routing_key} le voy a enviar: {body}")
+        #logging.info(f"A {routing_key} le voy a enviar: {type}")
         propiedades = config_header(mensaje_original, type)
         canal.basic_publish(
             exchange='',
@@ -116,8 +81,8 @@ def enviar_mensaje(canal, routing_key, body, mensaje_original, type=None):
             body=create_body(body).encode(),
             properties=propiedades
         )
-    #else:
-        #logging.info("No se enviará el mensaje: body vacío")
+
+
 
 
 # ---------------------
@@ -140,12 +105,15 @@ def escuchar_colas(entrada, nodo, consultas, canal):
 
 def escuchar_colas_broker(nodo, canal): 
     joiners = cargar_broker()
+    pnl = cargar_eof_a_enviar()
     nombre_entrada = "broker"
     canal.queue_declare(queue=nombre_entrada, durable=True)
     colas_salida = []
     for joiner_id, consultas in joiners.items():
         for consulta_id in consultas:
             colas_salida.append(f"joiner_consult_{consulta_id}_{joiner_id}")
+    for i in range(1, pnl[5] + 1):
+        colas_salida.append(f"pnl_consult_5_{i}")
 
     for nombre_salida in colas_salida:
         canal.queue_declare(queue=nombre_salida, durable=True)
@@ -169,7 +137,14 @@ def escuchar_colas_joiner(nodo, consultas, canal, joiner_id):
 
     canal.start_consuming()
 
+def escuchar_colas_pnl(nodo, consultas, canal, pnl_id):   
 
+    nombre_entrada = f"pnl_consult_5_{pnl_id}"
+    canal.queue_declare(queue=nombre_entrada, durable=True)
+    nombre_salida = "aggregator_consult_5"
+    canal.queue_declare(queue=nombre_salida, durable=True)
+    generalizo_callback(nombre_entrada, nombre_salida, canal, nodo)
+    canal.start_consuming()
 
 
 def generalizo_callback(nombre_entrada, nombre_salida, canal, nodo):

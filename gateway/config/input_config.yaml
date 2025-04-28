@@ -14,5 +14,5 @@ rabbitmq:
     top-argentinian-actors: "filter_consult_4"
     sentiment-analysis: "filter_consult_5"
   join_queues:
-    top-argentinian-movies-by-rating: "joiner_consult_3"
-    top-argentinian-actors: "joiner_consult_4"
+    top-argentinian-movies-by-rating: "broker"
+    top-argentinian-actors: "broker"

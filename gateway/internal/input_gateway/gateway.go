@@ -247,9 +247,9 @@ func (g *Gateway) getEOFCountByQuery(query string, file string) int {
 			return 0
 		}
 	case "RATINGS":
-		return g.config.EOFsCount["CONSULTA_3_JOIN"]
+		return 1
 	case "CREDITS":
-		return g.config.EOFsCount["CONSULTA_4_JOIN"]
+		return 1
 	default:
 		return 0
 	}

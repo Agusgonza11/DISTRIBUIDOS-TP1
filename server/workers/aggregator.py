@@ -1,6 +1,6 @@
-import threading
 import logging
 import os
+import sys
 from common.utils import EOF, cargar_eofs, concat_data, create_dataframe, prepare_data_aggregator_consult_3
 from common.communication import iniciar_nodo, obtener_query
 
@@ -12,8 +12,8 @@ AGGREGATOR = "aggregator"
 class AggregatorNode:
     def __init__(self):
         self.resultados_parciales = {}
-        self.shutdown_event = threading.Event()
         self.eof_esperados = cargar_eofs()
+
 
     def guardar_datos(self, consulta_id, datos):
         if consulta_id not in self.resultados_parciales:
@@ -71,7 +71,7 @@ class AggregatorNode:
         consulta_id = obtener_query(mensaje)
         try:
             if mensaje['headers'].get("type") == EOF:
-                logging.info(f"Consulta {consulta_id} recibió EOF")
+                logging.info(f"Consulta {consulta_id} de aggregator recibió EOF")
                 self.eof_esperados[consulta_id] -= 1
                 logging.info(f"Faltan {self.eof_esperados[consulta_id]} EOF restantes")
                 if self.eof_esperados[consulta_id] == 0:
@@ -79,10 +79,12 @@ class AggregatorNode:
                     resultado = self.ejecutar_consulta(consulta_id)
                     enviar_func(canal, destino, resultado, mensaje, "RESULT")
                     enviar_func(canal, destino, EOF, mensaje, EOF)
-                    self.shutdown_event.set()
+                    self.resultados_parciales[consulta_id] = []
             else:
                 contenido = mensaje['body'].decode('utf-8')
                 self.guardar_datos(consulta_id, contenido)
+
+
             mensaje['ack']()
 
         except Exception as e:
@@ -97,4 +99,3 @@ class AggregatorNode:
 if __name__ == "__main__":
     aggregator = AggregatorNode()
     iniciar_nodo(AGGREGATOR, aggregator, os.getenv("CONSULTAS", ""))
-

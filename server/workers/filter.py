@@ -1,7 +1,7 @@
 import logging
-import threading
 import os
-from common.utils import cargar_eof_a_enviar, prepare_data_consult_1_3_4, prepare_data_consult_2, EOF, prepare_data_consult_5
+import sys
+from common.utils import prepare_data_consult_1_3_4, prepare_data_consult_2, EOF, prepare_data_consult_5
 from common.communication import iniciar_nodo, obtener_query
 
 FILTER = "filter"
@@ -10,10 +10,6 @@ FILTER = "filter"
 # Nodo Filtro
 # -----------------------
 class FiltroNode:
-    def __init__(self):
-        self.eof_a_enviar = cargar_eof_a_enviar()
-        self.shutdown_event = threading.Event()
-
     def ejecutar_consulta(self, consulta_id, datos):
         match consulta_id:
             case 1:
@@ -33,6 +29,7 @@ class FiltroNode:
                 return []
 
     def consulta_1(self, datos):
+        logging.info("Procesando datos para consulta 1") 
         datos = prepare_data_consult_1_3_4(datos)
         movies_argentina_españa_00s_df = datos[
             (datos['production_countries'].str.contains('Argentina', case=False, na=False)) & 
@@ -77,10 +74,9 @@ class FiltroNode:
             if mensaje['headers'].get("type") == EOF:
                 logging.info(f"Consulta {consulta_id} recibió EOF")
                 enviar_func(canal, destino, EOF, mensaje, EOF)
-                self.shutdown_event.set()
             else:
                 resultado = self.ejecutar_consulta(consulta_id, mensaje['body'].decode('utf-8'))
-                enviar_func(canal, destino, resultado, mensaje)
+                enviar_func(canal, destino, resultado, mensaje, mensaje['headers'].get("type"))
             mensaje['ack']()
         except Exception as e:
             logging.error(f"Error procesando mensaje en consulta {consulta_id}: {e}")

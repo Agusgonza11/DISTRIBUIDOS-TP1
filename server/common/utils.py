@@ -1,5 +1,7 @@
 import ast
 import logging
+import signal
+import sys
 import pika # type: ignore
 from io import StringIO
 import pandas as pd # type: ignore
@@ -18,6 +20,22 @@ def initialize_log(logging_level):
         level=logging_level,
         datefmt='%Y-%m-%d %H:%M:%S',
     )
+
+def graceful_quit(conexion, canal):
+    def shutdown_handler(_, __):
+        logging.info("Apagando nodo")
+        try:
+            if canal.is_open:
+                canal.close()
+            if conexion.is_open:
+                conexion.close()
+        except Exception as e:
+            logging.error(f"Error cerrando conexión/canal: {e}")
+        finally:
+            sys.exit(0)
+
+    signal.signal(signal.SIGINT, shutdown_handler)
+    signal.signal(signal.SIGTERM, shutdown_handler)
 
 
 # -------------------
@@ -103,6 +121,7 @@ EOF = "EOF"
 
 def cargar_datos_broker():
     diccionario = cargar_broker()
+    a_enviar = cargar_eof_a_enviar()
     diccionario_invertido = {}
     
     for clave, valores in diccionario.items():
@@ -111,23 +130,22 @@ def cargar_datos_broker():
                 diccionario_invertido[valor] = []
             diccionario_invertido[valor].append(clave)
     
-    return diccionario_invertido
+    return diccionario_invertido | {5: a_enviar[5]}
+
 
 def cargar_broker():
     raw = os.getenv("JOINERS", "")
     eofs = {}
     if raw:
-        for par in raw.split("|"):
+        for par in raw.split(";"):
             if ":" in par:
                 k, v = par.split(":")
-                eofs[int(k)] = ast.literal_eval(v)
+                value = ast.literal_eval(v)
+                if not isinstance(value, list):
+                    value = [value] 
+                eofs[int(k)] = value
     return eofs
 
-
-def obtener_consultas():
-    consulta_3_join = int(os.getenv("CONSULTA_3_JOIN", 0))  # Default a 0 si no está definida
-    consulta_4_join = int(os.getenv("CONSULTA_4_JOIN", 0))  # Default a 0 si no está definida
-    return [consulta_3_join, consulta_4_join]
 
 def cargar_eofs_joiners():
     raw = os.getenv("EOF_ENVIAR", "")
@@ -139,8 +157,8 @@ def cargar_eofs_joiners():
                 eofs[int(k)] = int(v)
     return eofs
 
-def cargar_eofs():
-    raw = os.getenv("EOF_ESPERADOS", "")
+def cargar_eof_a_enviar():
+    raw = os.getenv("EOF_ENVIAR")
     eofs = {}
     if raw:
         for par in raw.split(","):
@@ -149,8 +167,10 @@ def cargar_eofs():
                 eofs[int(k)] = int(v)
     return eofs
 
-def cargar_eof_a_enviar():
-    raw = os.getenv("EOF_ENVIAR")
+
+
+def cargar_eofs():
+    raw = os.getenv("EOF_ESPERADOS", "")
     eofs = {}
     if raw:
         for par in raw.split(","):
