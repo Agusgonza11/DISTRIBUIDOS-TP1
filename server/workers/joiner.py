@@ -26,12 +26,11 @@ class JoinerNode:
 
 
     def puede_enviar(self, consulta_id):
-        puede_enviar = False
         if consulta_id == 3 and self.datos["ratings"][LINEAS] >= BATCH_RATINGS and self.termino_movies:
-            puede_enviar = True
+            return True
         if consulta_id == 4 and self.datos["credits"][LINEAS] >= BATCH_CREDITS and self.termino_movies:
-            puede_enviar = True        
-        return puede_enviar
+            return True        
+        return False
 
 
     def guardar_datos(self, consulta_id, datos):

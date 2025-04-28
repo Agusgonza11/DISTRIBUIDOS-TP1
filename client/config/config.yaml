@@ -1,4 +1,16 @@
-queries: ["ARGENTINIAN-SPANISH-PRODUCTIONS"]
+# queries: ["ARGENTINIAN-SPANISH-PRODUCTIONS"]
+# queries: ["TOP-INVESTING-COUNTRIES"]
+# queries: ["TOP-ARGENTINIAN-MOVIES-BY-RATING"]
+# queries: ["TOP-ARGENTINIAN-ACTORS"]
+# queries: ["SENTIMENT-ANALYSIS"]
+queries: [
+ "ARGENTINIAN-SPANISH-PRODUCTIONS",
+ "TOP-INVESTING-COUNTRIES", 
+ "TOP-ARGENTINIAN-MOVIES-BY-RATING", 
+ "TOP-ARGENTINIAN-ACTORS", 
+ "SENTIMENT-ANALYSIS"
+ ]
+
 gateway:
   input_movies_address: "input_gateway:5000"
   input_credits_address: "input_gateway:5001"

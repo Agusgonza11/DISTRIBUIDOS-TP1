@@ -7,11 +7,13 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
-	"tp1-sistemas-distribuidos/gateway/internal/config"
-	"tp1-sistemas-distribuidos/gateway/internal/output_gateway"
 
 	"github.com/op/go-logging"
 	"github.com/spf13/viper"
+
+	"tp1-sistemas-distribuidos/gateway/internal/config"
+	"tp1-sistemas-distribuidos/gateway/internal/message_broker"
+	"tp1-sistemas-distribuidos/gateway/internal/output_gateway"
 )
 
 func main() {
@@ -48,7 +50,13 @@ func main() {
 		},
 	}
 
-	gateway, err := output_gateway.NewGateway(config, logging.MustGetLogger("gateway"))
+	broker, err := message_broker.NewBroker(config.RabbitMQ, logging.MustGetLogger("message_broker"))
+	if err != nil {
+		log.Criticalf("Error starting message broker: %s", err)
+		os.Exit(1)
+	}
+
+	gateway, err := output_gateway.NewGateway(broker, config, logging.MustGetLogger("gateway"))
 	if err != nil {
 		log.Criticalf("Error starting gateway: %s", err)
 		os.Exit(1)

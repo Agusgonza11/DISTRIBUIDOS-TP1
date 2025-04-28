@@ -9,11 +9,13 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
-	"tp1-sistemas-distribuidos/gateway/internal/config"
-	"tp1-sistemas-distribuidos/gateway/internal/input_gateway"
 
 	"github.com/op/go-logging"
 	"github.com/spf13/viper"
+
+	"tp1-sistemas-distribuidos/gateway/internal/config"
+	"tp1-sistemas-distribuidos/gateway/internal/input_gateway"
+	"tp1-sistemas-distribuidos/gateway/internal/message_broker"
 )
 
 func main() {
@@ -70,7 +72,13 @@ func main() {
 		},
 	}
 
-	gateway, err := input_gateway.NewGateway(config, logging.MustGetLogger("gateway"))
+	broker, err := message_broker.NewBroker(config.RabbitMQ, logging.MustGetLogger("message_broker"))
+	if err != nil {
+		log.Criticalf("Error starting message broker: %s", err)
+		os.Exit(1)
+	}
+
+	gateway, err := input_gateway.NewGateway(broker, config, logging.MustGetLogger("gateway"))
 	if err != nil {
 		log.Criticalf("Error starting gateway: %s", err)
 		os.Exit(1)
