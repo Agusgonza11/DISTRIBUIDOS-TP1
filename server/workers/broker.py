@@ -1,7 +1,6 @@
-import threading
+import sys
 import logging
-import os
-from common.utils import EOF, cargar_datos_broker, cargar_eofs, cargar_eofs_joiners, cargar_eof_a_enviar
+from common.utils import EOF, cargar_datos_broker, cargar_eofs
 from common.communication import iniciar_nodo, obtener_query
 
 BROKER = "broker"

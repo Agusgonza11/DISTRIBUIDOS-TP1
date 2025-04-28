@@ -1,7 +1,7 @@
-import threading
+import sys
 import logging
 import os
-from common.utils import EOF, cargar_eofs, concat_data, create_dataframe, prepare_data_consult_4
+from common.utils import EOF, concat_data, create_dataframe, prepare_data_consult_4
 from common.communication import iniciar_nodo, obtener_query
 import pandas as pd # type: ignore
 
@@ -23,6 +23,7 @@ class JoinerNode:
         self.termino_movies = False
         self.datos = {"ratings": [[], 0, False], "credits": [[], 0, False]}
         # "CSV": (datos, cantidad de datos, recibio el EOF correspondiente)
+
 
     def puede_enviar(self, consulta_id):
         puede_enviar = False
@@ -155,4 +156,3 @@ if __name__ == "__main__":
     worker_id = int(os.environ.get("WORKER_ID", 0))
     joiner = JoinerNode()
     iniciar_nodo(JOINER, joiner, consultas, worker_id)
-

@@ -1,6 +1,7 @@
+import sys
 import pika # type: ignore
 import logging
-from common.utils import cargar_broker, cargar_eof_a_enviar, create_body, initialize_log, puede_enviar
+from common.utils import cargar_broker, cargar_eof_a_enviar, create_body, graceful_quit, initialize_log, puede_enviar
 
 # ----------------------
 # ENRUTAMIENTO DE MENSAJE
@@ -34,36 +35,6 @@ def obtener_query(mensaje):
     return QUERY[tipo]
 
 
-#Utilizar para colas unicas
-def determinar_salida(tipo_nodo, consulta_id):
-    if tipo_nodo == "filter":
-        return {
-            1: "gateway_output",
-            2: "aggregator_input",
-            3: "joiner_input",
-            4: "joiner_input",
-            5: "pnl_input"
-        }[consulta_id]
-    elif tipo_nodo == "joiner":
-        return {
-            3: "aggregator_input",
-            4: "aggregator_input"
-        }[consulta_id]
-    elif tipo_nodo == "aggregator":
-        return {
-            2: "gateway_output",
-            3: "gateway_output",
-            4: "gateway_output",
-            5: "gateway_output"
-        }[consulta_id]
-    elif tipo_nodo == "pnl":
-        return {
-            5: "aggregator_input"
-        }[consulta_id]
-    else:
-        raise ValueError(f"No se puede determinar salida para {tipo_nodo} y consulta {consulta_id}")
-
-
 def config_header(mensaje_original, tipo=None):
     headers = {"Query": mensaje_original['headers'].get("Query"), "ClientID": mensaje_original['headers'].get("ClientID")}
     if type != None:
@@ -79,7 +50,8 @@ def iniciar_nodo(tipo_nodo, nodo, consultas=None, worker_id=None):
     initialize_log("INFO")
     logging.info(f"Se inicializó el {tipo_nodo} filter")
     consultas = list(map(int, consultas.split(","))) if consultas else []
-    _, canal = inicializar_comunicacion()
+    conexion, canal = inicializar_comunicacion()
+    graceful_quit(conexion, canal)
     if tipo_nodo == "broker":
         escuchar_colas_broker(nodo, canal)
     elif tipo_nodo == "joiner":
@@ -88,8 +60,6 @@ def iniciar_nodo(tipo_nodo, nodo, consultas=None, worker_id=None):
         escuchar_colas_pnl(nodo, consultas, canal, worker_id)
     else:
         escuchar_colas(tipo_nodo, nodo, consultas, canal)
-    nodo.shutdown_event.wait()
-    logging.info(f"Shutdown del nodo {tipo_nodo}")
 
 
 def inicializar_comunicacion():
@@ -98,6 +68,7 @@ def inicializar_comunicacion():
     canal = conexion.channel()
     canal.basic_qos(prefetch_count=1)
     return conexion, canal
+
 
 
 def enviar_mensaje(canal, routing_key, body, mensaje_original, type=None):
@@ -110,6 +81,8 @@ def enviar_mensaje(canal, routing_key, body, mensaje_original, type=None):
             body=create_body(body).encode(),
             properties=propiedades
         )
+
+
 
 
 # ---------------------

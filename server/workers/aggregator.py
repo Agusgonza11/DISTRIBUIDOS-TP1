@@ -1,6 +1,6 @@
-import threading
 import logging
 import os
+import sys
 from common.utils import EOF, cargar_eofs, concat_data, create_dataframe, prepare_data_aggregator_consult_3
 from common.communication import iniciar_nodo, obtener_query
 
@@ -12,8 +12,8 @@ AGGREGATOR = "aggregator"
 class AggregatorNode:
     def __init__(self):
         self.resultados_parciales = {}
-        self.shutdown_event = threading.Event()
         self.eof_esperados = cargar_eofs()
+
 
     def guardar_datos(self, consulta_id, datos):
         if consulta_id not in self.resultados_parciales:
@@ -97,4 +97,3 @@ class AggregatorNode:
 if __name__ == "__main__":
     aggregator = AggregatorNode()
     iniciar_nodo(AGGREGATOR, aggregator, os.getenv("CONSULTAS", ""))
-

@@ -198,8 +198,6 @@ def agregar_workers(compose, cant_filter=1, cant_joiner=1, cant_aggregator=1, ca
             elif tipo == "aggregator":
                 eof_str = ",".join(f"{k}:{v}" for k, v in eof_aggregator.items())
                 env.append(f"EOF_ESPERADOS={eof_str}")
-            if tipo == "filter":
-                env.append(f"CANT_NODOS_PNL={cant_pnl}")
 
 
             # Agregar al compose

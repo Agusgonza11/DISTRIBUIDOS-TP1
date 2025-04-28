@@ -1,6 +1,7 @@
 import logging
 import os
-from common.utils import cargar_cant_pnls, prepare_data_consult_1_3_4, prepare_data_consult_2, EOF, prepare_data_consult_5
+import sys
+from common.utils import prepare_data_consult_1_3_4, prepare_data_consult_2, EOF, prepare_data_consult_5
 from common.communication import iniciar_nodo, obtener_query
 
 FILTER = "filter"
@@ -9,9 +10,6 @@ FILTER = "filter"
 # Nodo Filtro
 # -----------------------
 class FiltroNode:
-    def __init__(self):
-        self.nodos_pnl = cargar_cant_pnls()
-
     def ejecutar_consulta(self, consulta_id, datos):
         match consulta_id:
             case 1:

@@ -1,5 +1,7 @@
 import ast
 import logging
+import signal
+import sys
 import pika # type: ignore
 from io import StringIO
 import pandas as pd # type: ignore
@@ -18,6 +20,22 @@ def initialize_log(logging_level):
         level=logging_level,
         datefmt='%Y-%m-%d %H:%M:%S',
     )
+
+def graceful_quit(conexion, canal):
+    def shutdown_handler(_, __):
+        logging.info("Apagando nodo")
+        try:
+            if canal.is_open:
+                canal.close()
+            if conexion.is_open:
+                conexion.close()
+        except Exception as e:
+            logging.error(f"Error cerrando conexión/canal: {e}")
+        finally:
+            sys.exit(0)
+
+    signal.signal(signal.SIGINT, shutdown_handler)
+    signal.signal(signal.SIGTERM, shutdown_handler)
 
 
 # -------------------
@@ -129,12 +147,6 @@ def cargar_broker():
     return eofs
 
 
-
-def obtener_consultas():
-    consulta_3_join = int(os.getenv("CONSULTA_3_JOIN", 0))  # Default a 0 si no está definida
-    consulta_4_join = int(os.getenv("CONSULTA_4_JOIN", 0))  # Default a 0 si no está definida
-    return [consulta_3_join, consulta_4_join]
-
 def cargar_eofs_joiners():
     raw = os.getenv("EOF_ENVIAR", "")
     eofs = {}
@@ -166,7 +178,3 @@ def cargar_eofs():
                 k, v = par.split(":")
                 eofs[int(k)] = int(v)
     return eofs
-
-def cargar_cant_pnls():
-    return int(os.environ.get("CANT_NODOS_PNL", 1))
-

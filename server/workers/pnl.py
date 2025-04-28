@@ -1,10 +1,9 @@
-import threading
 import logging
 import os
+import sys
 from common.utils import EOF, concat_data, create_dataframe
 from common.communication import iniciar_nodo, obtener_query
 from transformers import pipeline # type: ignore
-import time
 
 PNL = "pnl"
 BATCH = 200
