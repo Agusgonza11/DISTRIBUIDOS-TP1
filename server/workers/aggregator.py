@@ -71,7 +71,7 @@ class AggregatorNode:
         consulta_id = obtener_query(mensaje)
         try:
             if mensaje['headers'].get("type") == EOF:
-                logging.info(f"Consulta {consulta_id} de aggregator recibió EOF {self.eof_esperados}")
+                logging.info(f"Consulta {consulta_id} de aggregator recibió EOF")
                 self.eof_esperados[consulta_id] -= 1
                 if self.eof_esperados[consulta_id] == 0:
                     logging.info(f"Consulta {consulta_id} recibió TODOS los EOF que esperaba")

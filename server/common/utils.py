@@ -103,6 +103,7 @@ EOF = "EOF"
 
 def cargar_datos_broker():
     diccionario = cargar_broker()
+    a_enviar = cargar_eof_a_enviar()
     diccionario_invertido = {}
     
     for clave, valores in diccionario.items():
@@ -111,17 +112,22 @@ def cargar_datos_broker():
                 diccionario_invertido[valor] = []
             diccionario_invertido[valor].append(clave)
     
-    return diccionario_invertido
+    return diccionario_invertido | {5: a_enviar[5]}
+
 
 def cargar_broker():
     raw = os.getenv("JOINERS", "")
     eofs = {}
     if raw:
-        for par in raw.split(","):
+        for par in raw.split(";"):
             if ":" in par:
                 k, v = par.split(":")
-                eofs[int(k)] = ast.literal_eval(v)
+                value = ast.literal_eval(v)
+                if not isinstance(value, list):
+                    value = [value] 
+                eofs[int(k)] = value
     return eofs
+
 
 
 def obtener_consultas():

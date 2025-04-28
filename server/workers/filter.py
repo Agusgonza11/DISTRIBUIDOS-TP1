@@ -1,5 +1,4 @@
 import logging
-import threading
 import os
 from common.utils import cargar_cant_pnls, prepare_data_consult_1_3_4, prepare_data_consult_2, EOF, prepare_data_consult_5
 from common.communication import iniciar_nodo, obtener_query
@@ -11,7 +10,6 @@ FILTER = "filter"
 # -----------------------
 class FiltroNode:
     def __init__(self):
-        self.shutdown_event = threading.Event()
         self.nodos_pnl = cargar_cant_pnls()
 
     def ejecutar_consulta(self, consulta_id, datos):
@@ -77,15 +75,10 @@ class FiltroNode:
         try:
             if mensaje['headers'].get("type") == EOF:
                 logging.info(f"Consulta {consulta_id} recibió EOF")
-                if consulta_id == 5:
-                    for _ in range(self.nodos_pnl):
-                        enviar_func(canal, destino, EOF, mensaje, EOF)
-                else:
-                    enviar_func(canal, destino, EOF, mensaje, EOF)
-                self.shutdown_event.set()
+                enviar_func(canal, destino, EOF, mensaje, EOF)
             else:
                 resultado = self.ejecutar_consulta(consulta_id, mensaje['body'].decode('utf-8'))
-                enviar_func(canal, destino, resultado, mensaje)
+                enviar_func(canal, destino, resultado, mensaje, mensaje['headers'].get("type"))
             mensaje['ack']()
         except Exception as e:
             logging.error(f"Error procesando mensaje en consulta {consulta_id}: {e}")

@@ -34,11 +34,11 @@ services:
     entrypoint: /input_gateway
     environment:
     - CLI_LOG_LEVEL=DEBUG
-    - CONSULTA_1_FILTER=2
-    - CONSULTA_2_FILTER=2
-    - CONSULTA_3_FILTER=2
-    - CONSULTA_4_FILTER=2
-    - CONSULTA_5_FILTER=2
+    - CONSULTA_1_FILTER=1
+    - CONSULTA_2_FILTER=1
+    - CONSULTA_3_FILTER=1
+    - CONSULTA_4_FILTER=1
+    - CONSULTA_5_FILTER=1
     - CONSULTA_3_JOIN=1
     - CONSULTA_4_JOIN=1
     ports:
@@ -58,7 +58,7 @@ services:
     entrypoint: /output_gateway
     environment:
     - CLI_LOG_LEVEL=DEBUG
-    - CONSULTA_1_EOF_COUNT=2
+    - CONSULTA_1_EOF_COUNT=1
     ports:
     - 6000:6000
     networks:
@@ -75,134 +75,8 @@ services:
     environment:
     - WORKER_ID=1
     - WORKER_TYPE=FILTER
-    - CONSULTAS=1
-    - CANT_NODOS_PNL=3
-    networks:
-    - testing_net
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-  filter2:
-    container_name: filter2
-    image: filter:latest
-    entrypoint: python3 workers/filter.py
-    environment:
-    - WORKER_ID=2
-    - WORKER_TYPE=FILTER
-    - CONSULTAS=2
-    - CANT_NODOS_PNL=3
-    networks:
-    - testing_net
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-  filter3:
-    container_name: filter3
-    image: filter:latest
-    entrypoint: python3 workers/filter.py
-    environment:
-    - WORKER_ID=3
-    - WORKER_TYPE=FILTER
-    - CONSULTAS=3
-    - CANT_NODOS_PNL=3
-    networks:
-    - testing_net
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-  filter4:
-    container_name: filter4
-    image: filter:latest
-    entrypoint: python3 workers/filter.py
-    environment:
-    - WORKER_ID=4
-    - WORKER_TYPE=FILTER
-    - CONSULTAS=4
-    - CANT_NODOS_PNL=3
-    networks:
-    - testing_net
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-  filter5:
-    container_name: filter5
-    image: filter:latest
-    entrypoint: python3 workers/filter.py
-    environment:
-    - WORKER_ID=5
-    - WORKER_TYPE=FILTER
-    - CONSULTAS=5
-    - CANT_NODOS_PNL=3
-    networks:
-    - testing_net
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-  filter6:
-    container_name: filter6
-    image: filter:latest
-    entrypoint: python3 workers/filter.py
-    environment:
-    - WORKER_ID=6
-    - WORKER_TYPE=FILTER
-    - CONSULTAS=1
-    - CANT_NODOS_PNL=3
-    networks:
-    - testing_net
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-  filter7:
-    container_name: filter7
-    image: filter:latest
-    entrypoint: python3 workers/filter.py
-    environment:
-    - WORKER_ID=7
-    - WORKER_TYPE=FILTER
-    - CONSULTAS=2
-    - CANT_NODOS_PNL=3
-    networks:
-    - testing_net
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-  filter8:
-    container_name: filter8
-    image: filter:latest
-    entrypoint: python3 workers/filter.py
-    environment:
-    - WORKER_ID=8
-    - WORKER_TYPE=FILTER
-    - CONSULTAS=3
-    - CANT_NODOS_PNL=3
-    networks:
-    - testing_net
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-  filter9:
-    container_name: filter9
-    image: filter:latest
-    entrypoint: python3 workers/filter.py
-    environment:
-    - WORKER_ID=9
-    - WORKER_TYPE=FILTER
-    - CONSULTAS=4
-    - CANT_NODOS_PNL=3
-    networks:
-    - testing_net
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-  filter10:
-    container_name: filter10
-    image: filter:latest
-    entrypoint: python3 workers/filter.py
-    environment:
-    - WORKER_ID=10
-    - WORKER_TYPE=FILTER
-    - CONSULTAS=5
-    - CANT_NODOS_PNL=3
+    - CONSULTAS=1,2,3,4,5
+    - CANT_NODOS_PNL=4
     networks:
     - testing_net
     depends_on:
@@ -216,7 +90,7 @@ services:
     - WORKER_ID=1
     - WORKER_TYPE=JOINER
     - CONSULTAS=3,4
-    - EOF_ESPERADOS=3:2,4:2
+    - EOF_ESPERADOS=3:1,4:1
     networks:
     - testing_net
     depends_on:
@@ -230,7 +104,7 @@ services:
     - WORKER_ID=1
     - WORKER_TYPE=AGGREGATOR
     - CONSULTAS=2,3,4,5
-    - EOF_ESPERADOS=2:2,3:1,4:1,5:3
+    - EOF_ESPERADOS=2:1,3:1,4:1,5:4
     networks:
     - testing_net
     depends_on:
@@ -244,7 +118,7 @@ services:
     - WORKER_ID=1
     - WORKER_TYPE=PNL
     - CONSULTAS=5
-    - EOF_ESPERADOS=5:2
+    - EOF_ESPERADOS=5:1
     networks:
     - testing_net
     depends_on:
@@ -258,7 +132,7 @@ services:
     - WORKER_ID=2
     - WORKER_TYPE=PNL
     - CONSULTAS=5
-    - EOF_ESPERADOS=5:2
+    - EOF_ESPERADOS=5:1
     networks:
     - testing_net
     depends_on:
@@ -272,7 +146,21 @@ services:
     - WORKER_ID=3
     - WORKER_TYPE=PNL
     - CONSULTAS=5
-    - EOF_ESPERADOS=5:2
+    - EOF_ESPERADOS=5:1
+    networks:
+    - testing_net
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+  pnl4:
+    container_name: pnl4
+    image: pnl:latest
+    entrypoint: python3 workers/pnl.py
+    environment:
+    - WORKER_ID=4
+    - WORKER_TYPE=PNL
+    - CONSULTAS=5
+    - EOF_ESPERADOS=5:1
     networks:
     - testing_net
     depends_on:
@@ -283,8 +171,8 @@ services:
     image: broker:latest
     entrypoint: python3 workers/broker.py
     environment:
-    - EOF_ESPERADOS=3:2,4:2
-    - EOF_ENVIAR=2:2,3:1,4:1,5:3
+    - EOF_ESPERADOS=3:1,4:1,5:1
+    - EOF_ENVIAR=2:1,3:1,4:1,5:4
     - JOINERS=1:[3, 4]
     networks:
     - testing_net

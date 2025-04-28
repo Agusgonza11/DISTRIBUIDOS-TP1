@@ -13,24 +13,20 @@ PNL = "pnl"
 # -----------------------
 class PnlNode:
     def __init__(self):
-        self.resultados_parciales = {}
+        self.resultados_parciales = []
         self.lineas_actuales = 0
-        self.eof_esperados = cargar_eofs()
-        self.shutdown_event = threading.Event()
 
-    def guardar_datos(self, consulta_id, datos):
-        if consulta_id not in self.resultados_parciales:
-            self.resultados_parciales[consulta_id] = []
+    def guardar_datos(self, datos):
         data = create_dataframe(datos)
-        self.resultados_parciales[consulta_id].append(data)
+        self.resultados_parciales.append(data)
         self.lineas_actuales += len(data)
 
-
+    def borrar_info(self):
+        self.resultados_parciales = []
+        self.lineas_actuales = 0
 
     def ejecutar_consulta(self, consulta_id):
-        datos = self.resultados_parciales.get(consulta_id, [])
-        self.resultados_parciales[consulta_id] = []
-        self.lineas_actuales = 0
+        datos = self.resultados_parciales
         if not datos:
             return False
         datos = concat_data(datos)
@@ -46,30 +42,24 @@ class PnlNode:
         logging.info("Procesando datos para consulta 5")
         sentiment_analyzer = pipeline('sentiment-analysis', model='distilbert-base-uncased-finetuned-sst-2-english', truncation=True)
         datos['sentiment'] = datos['overview'].fillna('').apply(lambda x: sentiment_analyzer(x)[0]['label'])
+        self.borrar_info()
         return datos
     
     def procesar_mensajes(self, canal, destino, mensaje, enviar_func):
         consulta_id = obtener_query(mensaje)
         try:
             if mensaje['headers'].get("type") == EOF:
-                logging.info(f"Consulta {consulta_id} de pnl recibió EOF {self.eof_esperados}")
-                self.eof_esperados[consulta_id] -= 1
-                if self.eof_esperados[consulta_id] == 0:
-                    logging.info(f"Consulta {consulta_id} recibió TODOS los EOF que esperaba")
+                logging.info(f"Consulta {consulta_id} de pnl recibió EOF")
+                if self.resultados_parciales:
                     resultado = self.ejecutar_consulta(consulta_id)
-                    self.resultados_parciales[consulta_id] = []
                     enviar_func(canal, destino, resultado, mensaje, "RESULT")
-                    enviar_func(canal, destino, EOF, mensaje, EOF)
-                    logging.info(f"voy a cerrar el nodo")
-                    self.shutdown_event.set()
-                    logging.info(f"lo cerre")
+                enviar_func(canal, destino, EOF, mensaje, EOF)
             else:
                 contenido = mensaje['body'].decode('utf-8')
-                self.guardar_datos(consulta_id, contenido)
-            if self.lineas_actuales >= 500:
-                resultado = self.ejecutar_consulta(consulta_id)
-                self.resultados_parciales[consulta_id] = []
-                enviar_func(canal, destino, resultado, mensaje, "RESULT")
+                self.guardar_datos(contenido)
+                if self.lineas_actuales >= 500:
+                    resultado = self.ejecutar_consulta(consulta_id)
+                    enviar_func(canal, destino, resultado, mensaje, "RESULT")
 
             mensaje['ack']()
 
@@ -85,7 +75,5 @@ class PnlNode:
 
 if __name__ == "__main__":
     pnl = PnlNode()
-    iniciar_nodo(PNL, pnl, os.getenv("CONSULTAS", ""))
-    logging.info(f"aca llega")
-    pnl.shutdown_event.wait()
-    logging.info(f"Shutdown del nodo {PNL}")
+    worker_id = int(os.environ.get("WORKER_ID", 0))
+    iniciar_nodo(PNL, pnl, os.getenv("CONSULTAS", ""), worker_id)

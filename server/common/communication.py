@@ -1,6 +1,6 @@
 import pika # type: ignore
 import logging
-from common.utils import cargar_broker, create_body, initialize_log, puede_enviar
+from common.utils import cargar_broker, cargar_eof_a_enviar, create_body, initialize_log, puede_enviar
 
 
 # ----------------------
@@ -15,7 +15,7 @@ COLAS = {
     "filter_consult_2": "aggregator_consult_2",
     "filter_consult_3": "broker",
     "filter_consult_4": "broker",
-    "filter_consult_5": "pnl_consult_5",
+    "filter_consult_5": "broker",
     "aggregator_consult_2": "gateway_output",
     "aggregator_consult_3": "gateway_output",
     "aggregator_consult_4": "gateway_output",
@@ -80,7 +80,7 @@ def config_header(mensaje_original, tipo=None):
 # ---------------------
 # GENERALES
 # ---------------------
-def iniciar_nodo(tipo_nodo, nodo, consultas=None, joiner_id=None):
+def iniciar_nodo(tipo_nodo, nodo, consultas=None, worker_id=None):
     initialize_log("INFO")
     logging.info(f"Se inicializó el {tipo_nodo} filter")
     consultas = list(map(int, consultas.split(","))) if consultas else []
@@ -88,7 +88,9 @@ def iniciar_nodo(tipo_nodo, nodo, consultas=None, joiner_id=None):
     if tipo_nodo == "broker":
         escuchar_colas_broker(nodo, canal)
     elif tipo_nodo == "joiner":
-        escuchar_colas_joiner(nodo, consultas, canal, joiner_id)
+        escuchar_colas_joiner(nodo, consultas, canal, worker_id)
+    elif tipo_nodo == "pnl":
+        escuchar_colas_pnl(nodo, consultas, canal, worker_id)
     else:
         escuchar_colas(tipo_nodo, nodo, consultas, canal)
     nodo.shutdown_event.wait()
@@ -137,12 +139,15 @@ def escuchar_colas(entrada, nodo, consultas, canal):
 
 def escuchar_colas_broker(nodo, canal): 
     joiners = cargar_broker()
+    pnl = cargar_eof_a_enviar()
     nombre_entrada = "broker"
     canal.queue_declare(queue=nombre_entrada, durable=True)
     colas_salida = []
     for joiner_id, consultas in joiners.items():
         for consulta_id in consultas:
             colas_salida.append(f"joiner_consult_{consulta_id}_{joiner_id}")
+    for i in range(1, pnl[5] + 1):
+        colas_salida.append(f"pnl_consult_5_{i}")
 
     for nombre_salida in colas_salida:
         canal.queue_declare(queue=nombre_salida, durable=True)
@@ -166,7 +171,14 @@ def escuchar_colas_joiner(nodo, consultas, canal, joiner_id):
 
     canal.start_consuming()
 
+def escuchar_colas_pnl(nodo, consultas, canal, pnl_id):   
 
+    nombre_entrada = f"pnl_consult_5_{pnl_id}"
+    canal.queue_declare(queue=nombre_entrada, durable=True)
+    nombre_salida = "aggregator_consult_5"
+    canal.queue_declare(queue=nombre_salida, durable=True)
+    generalizo_callback(nombre_entrada, nombre_salida, canal, nodo)
+    canal.start_consuming()
 
 
 def generalizo_callback(nombre_entrada, nombre_salida, canal, nodo):
