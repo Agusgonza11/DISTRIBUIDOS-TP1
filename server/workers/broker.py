@@ -42,7 +42,8 @@ class Broker:
         else:
             for joiner_id in self.nodos_enviar[consulta_id]:
                 destino = f'joiner_consult_{consulta_id}_{joiner_id}'
-                enviar_func(canal, destino, mensaje['body'].decode('utf-8'), mensaje, tipo)
+                body = EOF if tipo != "MOVIES" else mensaje['body'].decode('utf-8')
+                enviar_func(canal, destino, body, mensaje, tipo)
 
 
     def distribuir_informacion_random(self, consulta_id, mensaje, canal, enviar_func, tipo=None):

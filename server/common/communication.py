@@ -2,11 +2,6 @@ import pika # type: ignore
 import logging
 from common.utils import cargar_broker, cargar_eof_a_enviar, create_body, initialize_log, puede_enviar
 
-
-# ----------------------
-# Constantes globales
-# ----------------------
-
 # ----------------------
 # ENRUTAMIENTO DE MENSAJE
 # ----------------------
@@ -107,7 +102,7 @@ def inicializar_comunicacion():
 
 def enviar_mensaje(canal, routing_key, body, mensaje_original, type=None):
     if puede_enviar(body):
-        #logging.info(f"A {routing_key} le voy a enviar: {body}")
+        #logging.info(f"A {routing_key} le voy a enviar: {type}")
         propiedades = config_header(mensaje_original, type)
         canal.basic_publish(
             exchange='',
@@ -115,8 +110,6 @@ def enviar_mensaje(canal, routing_key, body, mensaje_original, type=None):
             body=create_body(body).encode(),
             properties=propiedades
         )
-    #else:
-        #logging.info("No se enviará el mensaje: body vacío")
 
 
 # ---------------------

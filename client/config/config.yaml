@@ -1,4 +1,4 @@
-queries: ["SENTIMENT-ANALYSIS"]
+queries: ["TOP-ARGENTINIAN-MOVIES-BY-RATING"]
 gateway:
   input_movies_address: "input_gateway:5000"
   input_credits_address: "input_gateway:5001"

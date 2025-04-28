@@ -1,12 +1,13 @@
 import threading
 import logging
 import os
-from common.utils import EOF, cargar_eofs, concat_data, create_dataframe
+from common.utils import EOF, concat_data, create_dataframe
 from common.communication import iniciar_nodo, obtener_query
 from transformers import pipeline # type: ignore
 import time
 
 PNL = "pnl"
+BATCH = 200
 
 # -----------------------
 # Nodo PNL
@@ -57,7 +58,7 @@ class PnlNode:
             else:
                 contenido = mensaje['body'].decode('utf-8')
                 self.guardar_datos(contenido)
-                if self.lineas_actuales >= 500:
+                if self.lineas_actuales >= BATCH:
                     resultado = self.ejecutar_consulta(consulta_id)
                     enviar_func(canal, destino, resultado, mensaje, "RESULT")
 
