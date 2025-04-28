@@ -107,7 +107,6 @@ def inicializar_comunicacion():
 
 
 def enviar_mensaje(canal, routing_key, body, mensaje_original, type=None):
-    logging.info(f"Mensaje: {mensaje_original}")
     if puede_enviar(body):
         #logging.info(f"A {routing_key} le voy a enviar: {body}")
         propiedades = config_header(mensaje_original, type)

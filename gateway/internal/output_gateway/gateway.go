@@ -18,43 +18,26 @@ import (
 	"github.com/streadway/amqp"
 )
 
+type Broker interface {
+	Consume(queueName string) (<-chan amqp.Delivery, error)
+	Close()
+}
+
 type Gateway struct {
 	config       config.OutputGatewayConfig
-	amqpChannel  *amqp.Channel
+	broker       Broker
+	eofByClient  map[string]int
 	clients      map[string]net.Conn
 	clientsMutex sync.RWMutex
-	eofByClient  map[string]int
 	running      bool
 	runningMutex sync.RWMutex
 	logger       *logging.Logger
 }
 
-func NewGateway(config config.OutputGatewayConfig, logger *logging.Logger) (*Gateway, error) {
-	conn, err := amqp.Dial(config.RabbitMQ.Address)
-	if err != nil {
-		return nil, err
-	}
-
-	channel, err := conn.Channel()
-	if err != nil {
-		return nil, fmt.Errorf("failed trying to open a channel: %w", err)
-	}
-
-	_, err = channel.QueueDeclare(
-		config.RabbitMQ.OutputQueueName,
-		true,
-		false,
-		false,
-		false,
-		nil,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to declare output queue: %w", err)
-	}
-
+func NewGateway(broker Broker, config config.OutputGatewayConfig, logger *logging.Logger) (*Gateway, error) {
 	return &Gateway{
 		config:      config,
-		amqpChannel: channel,
+		broker:      broker,
 		eofByClient: make(map[string]int),
 		clients:     make(map[string]net.Conn),
 		running:     true,
@@ -148,17 +131,8 @@ func (g *Gateway) handleConnection(conn net.Conn) {
 }
 
 func (g *Gateway) listenRabbitMQ(ctx context.Context) {
-	msgs, err := g.amqpChannel.Consume(
-		g.config.RabbitMQ.OutputQueueName,
-		"",
-		true,
-		false,
-		false,
-		false,
-		nil,
-	)
+	msgsChan, err := g.broker.Consume(g.config.RabbitMQ.OutputQueueName)
 	if err != nil {
-		g.logger.Errorf("failed to consume RabbitMQ queue: %v", err)
 		return
 	}
 
@@ -167,7 +141,7 @@ func (g *Gateway) listenRabbitMQ(ctx context.Context) {
 		case <-ctx.Done():
 			g.logger.Info("stopping RabbitMQ listener")
 			return
-		case msg, ok := <-msgs:
+		case msg, ok := <-msgsChan:
 			if !ok {
 				g.logger.Warning("rabbitMQ channel closed")
 				return
