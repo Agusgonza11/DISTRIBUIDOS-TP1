@@ -21,9 +21,14 @@ def initialize_log(logging_level):
         datefmt='%Y-%m-%d %H:%M:%S',
     )
 
-def graceful_quit(conexion, canal):
+def graceful_quit(conexion, canal, nodo):
     def shutdown_handler(_, __):
         logging.info("Apagando nodo")
+        try:
+            nodo.eliminar() 
+            logging.info("Datos eliminados del nodo.")
+        except Exception as e:
+            logging.error(f"Error al eliminar datos del nodo: {e}")
         try:
             if canal.is_open:
                 canal.close()
