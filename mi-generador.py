@@ -2,6 +2,24 @@ import sys
 import yaml
 
 
+def get_joiners_consultas_from_compose(compose):
+    joiners = {}
+    for service_name, service in compose.get('services', {}).items():
+        if service_name.startswith('joiner'):
+            env_vars = service.get('environment', [])
+            worker_id = None
+            consultas = None
+            for env in env_vars:
+                if env.startswith('WORKER_ID='):
+                    worker_id = int(env.split('=')[1])
+                if env.startswith('CONSULTAS='):
+                    consultas = list(map(int, env.split('=')[1].split(',')))
+            if worker_id is not None and consultas is not None:
+                joiners[worker_id] = consultas
+    return joiners
+
+
+
 def distribuir_consultas_por_nodo(cant_filter=1, cant_joiner=1, cant_aggregator=1, cant_pnl=1):
     consultas_por_tipo = {
         "filter": [1, 2, 3, 4, 5],
@@ -116,6 +134,31 @@ def calcular_eofs(tipo, distribucion):
 
     return eof_dict
 
+def agregar_broker(compose, cant_filter=1, cant_joiner=1, cant_aggregator=1, cant_pnl=1):
+    consultas_por_nodo = distribuir_consultas_por_nodo(cant_filter, cant_joiner, cant_aggregator, cant_pnl)
+    eof_aggregator = calcular_eofs("aggregator", consultas_por_nodo)
+    eof_str_agg = ",".join(f"{k}:{v}" for k, v in eof_aggregator.items())
+    eof_joiner = calcular_eofs("joiner", consultas_por_nodo)
+    cant_filters_pnl = calcular_eofs("pnl", consultas_por_nodo)
+    eof_joiner.update(cant_filters_pnl)
+    eof_str_joiner = ",".join(f"{k}:{v}" for k, v in eof_joiner.items())
+    joiners = get_joiners_consultas_from_compose(compose)
+    str_joiners = ";".join(f"{k}:{v}" for k, v in joiners.items())
+
+    compose["services"]["broker"] = {
+                    "container_name": "broker",
+                    "image": "broker:latest",
+                    "entrypoint": f"python3 workers/broker.py",
+                    "environment": [
+                        f"EOF_ESPERADOS={eof_str_joiner}",
+                        f"EOF_ENVIAR={eof_str_agg}",
+                        f"JOINERS={str_joiners}",
+                        ],
+                    "networks": ["testing_net"],
+                    "depends_on": {
+                            "rabbitmq": {"condition": "service_healthy"}
+                    }
+                }
 
 
 def agregar_workers(compose, cant_filter=1, cant_joiner=1, cant_aggregator=1, cant_pnl=1):
@@ -132,7 +175,7 @@ def agregar_workers(compose, cant_filter=1, cant_joiner=1, cant_aggregator=1, ca
         "filter": cant_filter,
         "joiner": cant_joiner,
         "aggregator": cant_aggregator,
-        "pnl": cant_pnl
+        "pnl": cant_pnl,
     }
 
     for tipo, cantidad in tipos.items():
@@ -156,13 +199,6 @@ def agregar_workers(compose, cant_filter=1, cant_joiner=1, cant_aggregator=1, ca
                 eof_str = ",".join(f"{k}:{v}" for k, v in eof_aggregator.items())
                 env.append(f"EOF_ESPERADOS={eof_str}")
 
-            if tipo == "filter":
-                eof_map = eof_enviar_por_filter.get(i, {})
-                if eof_map:
-                    # Ejemplo: "3:2,5:1"
-                    eof_str = ",".join(f"{k}:{v}" for k, v in eof_map.items())
-                    env.append(f"EOF_ENVIAR={eof_str}")
-
 
             # Agregar al compose
             compose["services"][nombre] = {
@@ -172,7 +208,6 @@ def agregar_workers(compose, cant_filter=1, cant_joiner=1, cant_aggregator=1, ca
                 "environment": env,
                 "networks": ["testing_net"],
                 "depends_on": {
-                        "server": {"condition": "service_started"},
                         "rabbitmq": {"condition": "service_healthy"}
                 }
             }
@@ -198,37 +233,6 @@ def generar_yaml(cant_filter, cant_joiner, cant_aggregator, cant_pnl):
                     "start_period": "50s"
                 }
             },
-            "postgres": {
-                "container_name": "postgres",
-                "image": "postgres:15",
-                "environment": [
-                    "POSTGRES_USER=user",
-                    "POSTGRES_PASSWORD=password",
-                    "POSTGRES_DB=datos"
-                ],
-                "networks": ["testing_net"],
-                "healthcheck": {
-                    "test": ["CMD-SHELL", "pg_isready -U user -d datos"],
-                    "interval": "5s",
-                    "retries": 5,
-                    "timeout": "5s"
-                }
-            },
-            "server": {
-                "container_name": "server",
-                "image": "server:latest",
-                "entrypoint": "python3 /main.py",
-                "environment": [
-                    "PYTHONUNBUFFERED=1",
-                    "LOGGING_LEVEL=DEBUG"
-                ],
-                "networks": ["testing_net"],
-                "depends_on": {
-                    "postgres": {
-                        "condition": "service_healthy"
-                    }
-                } 
-            },
             "client": {
                 "container_name": "client",
                 "image": "client:latest",
@@ -239,7 +243,7 @@ def generar_yaml(cant_filter, cant_joiner, cant_aggregator, cant_pnl):
                 ],
                 "volumes": ["./client/data:/app/data"],
                 "networks": ["testing_net"],
-                "depends_on": ["server", "input_gateway", "output_gateway"]
+                "depends_on": ["input_gateway", "output_gateway"]
             },
             "input_gateway": {
                 "container_name": "input_gateway",
@@ -283,7 +287,7 @@ def generar_yaml(cant_filter, cant_joiner, cant_aggregator, cant_pnl):
     }
 
     agregar_workers(compose, cant_filter, cant_joiner, cant_aggregator, cant_pnl)
-
+    agregar_broker(compose, cant_filter, cant_joiner, cant_aggregator, cant_pnl)
     return compose
 
 def construir_env_input_gateway(consultas_por_nodo):
@@ -343,11 +347,11 @@ if __name__ == "__main__":
         archivo_salida = sys.argv[1]
         filters = joiners = aggregators = pnls = 1
     elif len(sys.argv) == 6:
-        _, archivo_salida, filters, joiners, aggregators, pnls = sys.argv
+        _, archivo_salida, filters, joiners, pnls, aggregators = sys.argv
         if int(aggregators) > 4:
             aggregators = '4'
     else:
-        print("Uso: python3 mi-generador.py <archivo_salida> [filters joiners aggregators pnls]")
+        print("Uso: python3 mi-generador.py [filters joiners pnls aggregators]")
         sys.exit(1)
 
     generar_docker_compose(archivo_salida, filters, joiners, aggregators, pnls)

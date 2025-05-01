@@ -14,7 +14,7 @@ type Movie struct {
 // Movies CSV file index columns
 const (
 	IDColumn                  = 5
-	TitleColumn               = 19
+	TitleColumn               = 20
 	OverviewColumn            = 9
 	BudgetColumn              = 2
 	RevenueColumn             = 15

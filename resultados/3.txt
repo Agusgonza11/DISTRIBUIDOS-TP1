@@ -1,0 +1,11 @@
+MAX
+id                         125619
+title     The forbidden education
+rating                        4.0
+Name: 23, dtype: object
+
+MIN
+id               128598
+title     Left for Dead
+rating              1.0
+Name: 27, dtype: object

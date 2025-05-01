@@ -9,52 +9,33 @@ import (
 	"net"
 	"strings"
 	"sync"
+
+	"github.com/op/go-logging"
+
 	"tp1-sistemas-distribuidos/gateway/internal/config"
 	"tp1-sistemas-distribuidos/gateway/internal/models"
 	"tp1-sistemas-distribuidos/gateway/internal/utils"
-
-	"github.com/op/go-logging"
-	"github.com/streadway/amqp"
 )
+
+type Broker interface {
+	PublishMessage(queueName string, headers map[string]interface{}, body []byte) error
+	Close()
+}
 
 type Gateway struct {
 	config       config.InputGatewayConfig
 	running      bool
 	runningMutex sync.RWMutex
-	amqpChannel  *amqp.Channel
+	broker       Broker
 	logger       *logging.Logger
 }
 
-func NewGateway(config config.InputGatewayConfig, logger *logging.Logger) (*Gateway, error) {
-	conn, err := amqp.Dial(config.RabbitMQ.Address)
-	if err != nil {
-		return nil, err
-	}
-
-	channel, err := conn.Channel()
-	if err != nil {
-		return nil, fmt.Errorf("failed trying to open a channel: %w", err)
-	}
-
-	for _, queueName := range config.RabbitMQ.FilterQueues {
-		_, err := channel.QueueDeclare(
-			queueName,
-			true,
-			false,
-			false,
-			false,
-			nil,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to declare a queue (%s): %w", queueName, err)
-		}
-	}
-
+func NewGateway(broker Broker, config config.InputGatewayConfig, logger *logging.Logger) (*Gateway, error) {
 	return &Gateway{
-		config:      config,
-		amqpChannel: channel,
-		running:     true,
-		logger:      logger,
+		config:  config,
+		broker:  broker,
+		running: true,
+		logger:  logger,
 	}, nil
 }
 
@@ -129,13 +110,14 @@ func (g *Gateway) handleMessage(
 		splittedHeader := strings.Split(header, ",")
 
 		messageType := strings.TrimSpace(splittedHeader[0])
+
 		file := splittedHeader[1]
 		clientID := splittedHeader[2]
 		batchID := splittedHeader[3]
 
 		queueName, exists := g.getQueueNameByQuery(messageType, file)
 		if !exists {
-			g.logger.Errorf("QUEUE NOT FOUND: message_type: %s, file: %s", messageType, file)
+			g.logger.Errorf("queue not found: message_type: %s, file: %s", messageType, file)
 			return
 		}
 
@@ -168,20 +150,14 @@ func (g *Gateway) handleCommonMessage(
 		return
 	}
 
-	err = g.amqpChannel.Publish(
-		"",
+	err = g.broker.PublishMessage(
 		queueName,
-		true,
-		false,
-		amqp.Publishing{
-			Headers: map[string]interface{}{
-				"Query":    query,
-				"ClientID": clientID,
-				"type":     file,
-			},
-			ContentType: "text/plain; charset=utf-8",
-			Body:        body,
+		map[string]interface{}{
+			"Query":    query,
+			"ClientID": clientID,
+			"type":     file,
 		},
+		body,
 	)
 	if err != nil {
 		g.logger.Errorf("failed trying to publish message: %v", err)
@@ -203,19 +179,15 @@ func (g *Gateway) handleEOFMessage(conn net.Conn, queueName, query, file, client
 	g.logger.Infof("Sending %d EOF's: %s to %s queue", messagesToSend, eofHeader, queueName)
 
 	for range messagesToSend {
-		err = g.amqpChannel.Publish(
-			"",
+
+		err = g.broker.PublishMessage(
 			queueName,
-			true,
-			false,
-			amqp.Publishing{
-				Headers: map[string]interface{}{
-					"Query":    query,
-					"ClientID": clientID,
-					"type":     eofHeader,
-				},
-				ContentType: "text/plain; charset=utf-8",
+			map[string]interface{}{
+				"Query":    query,
+				"ClientID": clientID,
+				"type":     eofHeader,
 			},
+			nil,
 		)
 		if err != nil {
 			g.logger.Errorf("failed trying to publish message: %v", err)
@@ -275,9 +247,9 @@ func (g *Gateway) getEOFCountByQuery(query string, file string) int {
 			return 0
 		}
 	case "RATINGS":
-		return g.config.EOFsCount["CONSULTA_3_JOIN"]
+		return 1
 	case "CREDITS":
-		return g.config.EOFsCount["CONSULTA_4_JOIN"]
+		return 1
 	default:
 		return 0
 	}
@@ -330,6 +302,7 @@ func (g *Gateway) acceptConnections(listener net.Listener, messageBuilderFunc fu
 func (g *Gateway) gracefulShutdown(ctx context.Context, listener net.Listener) {
 	<-ctx.Done()
 	listener.Close()
+	g.broker.Close()
 	g.stopRunning()
 }
 
