@@ -76,7 +76,6 @@ services:
     - WORKER_ID=1
     - WORKER_TYPE=FILTER
     - CONSULTAS=1,2,3,4,5
-    - CANT_NODOS_PNL=1
     networks:
     - testing_net
     depends_on:

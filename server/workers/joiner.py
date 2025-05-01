@@ -87,6 +87,7 @@ class JoinerNode:
         cast_arg_post_2000_df = datos[["id", "title"]].merge(credits, on="id")
         df_cast = cast_arg_post_2000_df.explode('cast')
         cast_and_movie_arg_post_2000_df = df_cast[['id', 'cast']].rename(columns={'cast': 'name'})
+        logging.info(f"lo que devuelve consulta 4 es {cast_and_movie_arg_post_2000_df}")
         return cast_and_movie_arg_post_2000_df
 
 
@@ -110,6 +111,7 @@ class JoinerNode:
             (consulta_id == 4 and self.datos["credits"][TERMINO])
         ):
             enviar_func(canal, destino, EOF, mensaje, EOF)
+            self.termino_movies = False
 
 
 
