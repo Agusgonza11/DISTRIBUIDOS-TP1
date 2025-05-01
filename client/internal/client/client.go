@@ -31,7 +31,7 @@ type Client struct {
 
 func NewClient(config config.Config, logger *logging.Logger) *Client {
 	return &Client{
-		id:          "TESTING",
+		id:          os.Getenv("CLI_ID"),
 		config:      config,
 		logger:      logger,
 		conns:       make(map[string]net.Conn),
@@ -414,7 +414,7 @@ func (c *Client) sendRatings(query string) error {
 }
 
 func (c *Client) createOutputFile(query string) error {
-	path := fmt.Sprintf("/app/data/results_%s.txt", query)
+	path := fmt.Sprintf("/app/data/%s_results_%s.txt", c.id, query)
 
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
 	if err != nil {
