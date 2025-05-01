@@ -40,7 +40,7 @@ class PnlNode:
         if not datos_cliente:
             return False 
         
-        datos = concat_data(datos_cliente)
+        datos = concat_data(datos_cliente[consulta_id])
 
         match consulta_id:
             case 5:
