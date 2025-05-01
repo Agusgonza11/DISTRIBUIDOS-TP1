@@ -135,35 +135,37 @@ class JoinerNode:
         consulta_id = obtener_query(mensaje)
         tipo_mensaje = obtener_tipo_mensaje(mensaje)
         client_id = obtener_client_id(mensaje)
+        try:
+            if tipo_mensaje == "EOF":
+                logging.info(f"Consulta {consulta_id} recibió EOF")
+                self.termino_movies[client_id] = True
+                self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
+                self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func, client_id)
+            
+            elif tipo_mensaje in ["MOVIES", "RATINGS", "CREDITS"]:
+                self.procesar_datos(consulta_id, tipo_mensaje, mensaje, client_id)
+                if tipo_mensaje != "MOVIES":
+                    self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
 
-        if tipo_mensaje == "EOF":
-            logging.info(f"Consulta {consulta_id} recibió EOF")
-            self.termino_movies[client_id] = True
-            self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
-            self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func, client_id)
+            elif tipo_mensaje == "EOF_RATINGS":
+                logging.info("Recibí todos los ratings")
+                self.datos[client_id]["ratings"][TERMINO] = True
+                if self.datos[client_id]["ratings"][LINEAS] != 0:
+                    self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
+                self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func, client_id)
+
+            elif tipo_mensaje == "EOF_CREDITS":
+                logging.info("Recibí todos los credits")
+                self.datos[client_id]["credits"][TERMINO] = True
+                if self.datos[client_id]["credits"][LINEAS] != 0:
+                    self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
+                self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func, client_id)
+
+            mensaje['ack']() 
+        except Exception as e:
+            logging.error(f"Error procesando mensaje en consulta {consulta_id}: {e}")
+
         
-        elif tipo_mensaje in ["MOVIES", "RATINGS", "CREDITS"]:
-            self.procesar_datos(consulta_id, tipo_mensaje, mensaje, client_id)
-            if tipo_mensaje != "MOVIES":
-                self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
-
-        elif tipo_mensaje == "EOF_RATINGS":
-            logging.info("Recibí todos los ratings")
-            self.datos[client_id]["ratings"][TERMINO] = True
-            if self.datos[client_id]["ratings"][LINEAS] != 0:
-                self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
-            self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func, client_id)
-
-
-        elif tipo_mensaje == "EOF_CREDITS":
-            logging.info("Recibí todos los credits")
-            self.datos[client_id]["credits"][TERMINO] = True
-            if self.datos[client_id]["credits"][LINEAS] != 0:
-                self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
-            self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func, client_id)
-
-        mensaje['ack']() 
-
 
 # -----------------------
 # Ejecutando nodo joiner
