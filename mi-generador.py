@@ -212,8 +212,25 @@ def agregar_workers(compose, cant_filter=1, cant_joiner=1, cant_aggregator=1, ca
                 }
             }
 
+def agregar_clientes(compose, cantidad_clientes):
+    for i in range(1, int(cantidad_clientes) + 1):
+        nombre_servicio = f"client_{i}"
+        compose["services"][nombre_servicio] = {
+            "container_name": nombre_servicio,
+            "image": "client:latest",
+            "entrypoint": "/client",
+            "environment": [
+                f"CLI_ID={i}",
+                "CLI_LOG_LEVEL=DEBUG"
+            ],
+            "volumes": ["./client/data:/app/data"],
+            "networks": ["testing_net"],
+            "depends_on": ["input_gateway", "output_gateway"]
+        }
 
-def generar_yaml(cant_filter, cant_joiner, cant_aggregator, cant_pnl):
+
+
+def generar_yaml(clients, cant_filter, cant_joiner, cant_aggregator, cant_pnl):
     """Genera un docker-compose.yaml"""
     consultas_por_nodo = distribuir_consultas_por_nodo(cant_filter, cant_joiner, cant_aggregator, cant_pnl)
     
@@ -232,18 +249,6 @@ def generar_yaml(cant_filter, cant_joiner, cant_aggregator, cant_pnl):
                     "retries": 10,
                     "start_period": "50s"
                 }
-            },
-            "client": {
-                "container_name": "client",
-                "image": "client:latest",
-                "entrypoint": "/client",
-                "environment": [
-                    "CLI_ID=1",
-                    "CLI_LOG_LEVEL=DEBUG"
-                ],
-                "volumes": ["./client/data:/app/data"],
-                "networks": ["testing_net"],
-                "depends_on": ["input_gateway", "output_gateway"]
             },
             "input_gateway": {
                 "container_name": "input_gateway",
@@ -286,6 +291,7 @@ def generar_yaml(cant_filter, cant_joiner, cant_aggregator, cant_pnl):
         }
     }
 
+    agregar_clientes(compose, clients)
     agregar_workers(compose, cant_filter, cant_joiner, cant_aggregator, cant_pnl)
     agregar_broker(compose, cant_filter, cant_joiner, cant_aggregator, cant_pnl)
     return compose
@@ -337,21 +343,20 @@ def construir_env_output_gateway(consultas_por_nodo):
 
     return envs
 
-def generar_docker_compose(nombre_archivo, cant_filter, cant_joiner, cant_aggregator, cant_pnl):
-    compose = generar_yaml(int(cant_filter), int(cant_joiner), int(cant_aggregator), int(cant_pnl))
-    with open(nombre_archivo, "w") as archivo:
+def generar_docker_compose(clients, cant_filter, cant_joiner, cant_aggregator, cant_pnl):
+    compose = generar_yaml(clients, int(cant_filter), int(cant_joiner), int(cant_aggregator), int(cant_pnl))
+    with open("docker-compose-dev.yaml", "w") as archivo:
         yaml.dump(compose, archivo, sort_keys=False)
 
 if __name__ == "__main__":
-    if len(sys.argv) == 2:
-        archivo_salida = sys.argv[1]
-        filters = joiners = aggregators = pnls = 1
+    if len(sys.argv) == 1:
+        clients = filters = joiners = aggregators = pnls = 1
     elif len(sys.argv) == 6:
-        _, archivo_salida, filters, joiners, pnls, aggregators = sys.argv
+        _, clients, filters, joiners, pnls, aggregators = sys.argv
         if int(aggregators) > 4:
             aggregators = '4'
     else:
-        print("Uso: python3 mi-generador.py [filters joiners pnls aggregators]")
+        print("Uso: python3 mi-generador.py [clients filters joiners pnls aggregators]")
         sys.exit(1)
 
-    generar_docker_compose(archivo_salida, filters, joiners, aggregators, pnls)
+    generar_docker_compose(clients, filters, joiners, aggregators, pnls)
