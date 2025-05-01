@@ -43,7 +43,7 @@ class Broker:
             self.ultimo_nodo_consulta[client_id][CONSULTA_3] = lista_nodos[idx_siguiente]            
         else:
             lista_nodos = self.nodos_enviar[client_id][4]
-            idx_actual = lista_nodos.index(self.ultimo_nodo_consulta[CONSULTA_4])
+            idx_actual = lista_nodos.index(self.ultimo_nodo_consulta[client_id][CONSULTA_4])
             idx_siguiente = (idx_actual + 1) % len(lista_nodos)
             self.ultimo_nodo_consulta[client_id][CONSULTA_4] = lista_nodos[idx_siguiente]        
 
