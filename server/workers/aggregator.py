@@ -48,6 +48,10 @@ class AggregatorNode:
 
     def consulta_3(self, datos):
         logging.info("Procesando datos para consulta 3")
+        datos_size_bytes = sys.getsizeof(datos)
+        logging.info(f"Valor neto: {datos_size_bytes}")
+        logging.info(f"Uso de memoria: {(datos_size_bytes) / (1024 * 1024):.4f} MB")
+
         mean_ratings = datos.groupby(["id", "title"])['rating'].mean().reset_index()
         max_rated = mean_ratings.iloc[mean_ratings['rating'].idxmax()]
         min_rated = mean_ratings.iloc[mean_ratings['rating'].idxmin()]
@@ -55,6 +59,11 @@ class AggregatorNode:
         return result
 
     def consulta_4(self, datos):
+        logging.info("Procesando datos para consulta 3")
+        datos_size_bytes = sys.getsizeof(datos)
+        logging.info(f"Valor neto: {datos_size_bytes}")
+        logging.info(f"Uso de memoria: {(datos_size_bytes) / (1024 * 1024):.4f} MB")
+        
         logging.info("Procesando datos para consulta 4")
         cast_per_movie_quantities = datos.groupby(["name"]).count().reset_index().rename(columns={"id":"count"})
         top_ten = cast_per_movie_quantities.nlargest(10, 'count')

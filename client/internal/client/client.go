@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/op/go-logging"
 
@@ -150,11 +151,11 @@ func (c *Client) processTopArgentinianMoviesByRating(ctx context.Context) {
 		c.sendMovies(QueryTopArgentinianMoviesByRating)
 	}()
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		c.sendRatings(QueryTopArgentinianMoviesByRating)
-	}()
+	// wg.Add(1)
+	// go func() {
+	// 	defer wg.Done()
+	// 	c.sendRatings(QueryTopArgentinianMoviesByRating)
+	// }()
 
 	wg.Wait()
 }
@@ -188,6 +189,7 @@ func (c *Client) processTopArgentinianActors(ctx context.Context) {
 	}()
 
 	wg.Add(1)
+	time.Sleep(time.Second * 5)
 	go func() {
 		defer wg.Done()
 		c.sendCredits(QueryTopArgentinianActors)

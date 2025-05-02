@@ -1,17 +1,17 @@
 import sys
 import logging
 import os
+import gc  
 from common.utils import EOF, concat_data, create_dataframe, prepare_data_consult_4
 from common.communication import iniciar_nodo, obtener_query
 import pandas as pd # type: ignore
-
 
 JOINER = "joiner"
 
 DATOS = 0
 LINEAS = 1
 TERMINO = 2
-BATCH_CREDITS = 10000
+BATCH_CREDITS = 1000
 BATCH_RATINGS = 100000
 
 # -----------------------
@@ -49,16 +49,27 @@ class JoinerNode:
         self.datos[csv][DATOS].append(datos)
 
     def borrar_info(self, csv):
+        datos_size_bytes = sys.getsizeof(self.datos[csv][DATOS])
+        lineas_size_bytes = sys.getsizeof(self.datos[csv][LINEAS])
+        logging.info(f"Valor neto: {datos_size_bytes+lineas_size_bytes}")
+        logging.info(f"Uso de memoria de '{csv}': {(datos_size_bytes+lineas_size_bytes) / (1024 * 1024):.4f} MB")
+
         self.datos[csv][DATOS] = []
         self.datos[csv][LINEAS] = 0
-
+        
+        gc.collect()
+    
     def ejecutar_consulta(self, consulta_id):
         datos = self.resultados_parciales.get(consulta_id, [])
         if not datos:
             return False
-        
+
         datos = concat_data(datos)
         
+        datos_size_bytes = sys.getsizeof(datos)
+        logging.info(f"1Valor neto: {datos_size_bytes}")
+        logging.info(f"1Uso de memoria de: {(datos_size_bytes) / (1024 * 1024):.4f} MB")
+
         match consulta_id:
             case 3:
                 return self.consulta_3(datos)
@@ -120,6 +131,16 @@ class JoinerNode:
         if tipo_mensaje == "EOF":
             logging.info(f"Consulta {consulta_id} recibió EOF")
             self.termino_movies = True
+            
+            logging.info("Procesando datos para consulta 3")
+            datos_size_bytes = sys.getsizeof(self.resultados_parciales.get(1, []))
+            logging.info(f"Valor neto MOVIES: {datos_size_bytes}")
+            logging.info(f"Uso de memoria MOVIES: {(datos_size_bytes) / (1024 * 1024):.4f} MB")
+             
+            datos_size_bytes2 = sys.getsizeof(self.resultados_parciales.get(3, []))
+            logging.info(f"Valor neto RATINGS: {datos_size_bytes2}")
+            logging.info(f"Uso de memoria RATINGS: {(datos_size_bytes2) / (1024 * 1024):.4f} MB")
+            
             self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func)
             self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func)
         
