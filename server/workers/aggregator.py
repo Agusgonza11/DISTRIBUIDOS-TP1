@@ -12,18 +12,16 @@ AGGREGATOR = "aggregator"
 class AggregatorNode:
     def __init__(self):
         self.resultados_parciales = {}
-        self.eof_esperados_base = cargar_eofs()
         self.eof_esperados = {}
 
     def eliminar(self):
         self.resultados_parciales = {}
-        self.eof_esperados_base = {}
         self.eof_esperados = {}
 
     def guardar_datos(self, consulta_id, datos, client_id):
         if client_id not in self.resultados_parciales:
             self.resultados_parciales[client_id] = {}
-            self.eof_esperados[client_id] = self.eof_esperados_base
+            self.eof_esperados[client_id] = cargar_eofs()
         if consulta_id not in self.resultados_parciales[client_id]:
             self.resultados_parciales[client_id][consulta_id] = []
         self.resultados_parciales[client_id][consulta_id].append(create_dataframe(datos))
