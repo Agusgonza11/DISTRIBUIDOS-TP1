@@ -61,7 +61,7 @@ def puede_enviar(body):
     return bool(body)
 
 def concat_data(data):
-    return pd.concat(data, ignore_index=True)
+    return pd.concat(data, ignore_index=True) if data else pd.DataFrame()
 
 def dictionary_to_list(dictionary_str):
     try:

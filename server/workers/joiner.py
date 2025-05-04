@@ -1,6 +1,8 @@
 import sys
 import logging
 import os
+import tempfile
+import threading
 from common.utils import EOF, concat_data, create_dataframe, prepare_data_consult_4
 from common.communication import iniciar_nodo, obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje
 import pandas as pd # type: ignore
@@ -12,8 +14,8 @@ DATOS = 0
 LINEAS = 1
 TERMINO = 2
 
-BATCH_CREDITS = 10000
-BATCH_RATINGS = 100000
+BATCH_CREDITS = 100
+BATCH_RATINGS = 200000
 
 # -----------------------
 # Nodo Joiner
@@ -23,6 +25,10 @@ class JoinerNode:
         self.resultados_parciales = {}
         self.termino_movies = {}
         self.datos = {}
+        
+        self.locks = {}
+        self.files_on_disk = {}
+        self.file_paths = {}
 
     def eliminar(self):
         self.resultados_parciales = {}
@@ -34,12 +40,30 @@ class JoinerNode:
         # "CSV": (datos, cantidad de datos, recibio el EOF correspondiente)
         self.termino_movies[client_id] = False
         self.resultados_parciales[client_id] = {}
-
+        
+        self.locks[client_id] = {
+            "ratings": threading.Lock(),
+            "credits": threading.Lock(),
+        }
+        self.files_on_disk[client_id] = {
+            "ratings": False,
+            "credits": False,
+        }
+        self.file_paths[client_id] = {
+            "ratings": tempfile.NamedTemporaryFile(delete=False).name,
+            "credits": tempfile.NamedTemporaryFile(delete=False).name,
+        }
+        
+        
     def puede_enviar(self, consulta_id, client_id):
-        if consulta_id == 3 and self.datos[client_id]["ratings"][LINEAS] >= BATCH_RATINGS and self.termino_movies[client_id]:
-            return True
-        if consulta_id == 4 and self.datos[client_id]["credits"][LINEAS] >= BATCH_CREDITS and self.termino_movies[client_id]:
+        if not self.termino_movies[client_id]:
+            return False
+        
+        if consulta_id == 3:
+            return (self.datos[client_id]["ratings"][LINEAS] >= BATCH_RATINGS) or self.files_on_disk[client_id]["ratings"]
+        if consulta_id == 4 and self.datos[client_id]["credits"][LINEAS] >= BATCH_CREDITS:
             return True        
+        
         return False
 
 
@@ -50,14 +74,35 @@ class JoinerNode:
 
 
     def almacenar_csv(self, consulta, datos, client_id):
-        if consulta == 3:
-            csv = "ratings"
-        else:
-            csv = "credits"
+        csv = "ratings" if consulta == 3 else "credits"
         datos = create_dataframe(datos)
+        
         self.datos[client_id][csv][LINEAS] += len(datos)
         self.datos[client_id][csv][DATOS].append(datos)
-
+        
+        if not self.termino_movies[client_id]:
+            if self.datos[client_id][csv][LINEAS] >= (BATCH_RATINGS if csv == "ratings" else BATCH_CREDITS):
+                logging.info(f"Guardando batch en disco.")
+                
+                with self.locks[client_id][csv]:
+                    datos.to_csv(self.file_paths[client_id][csv], mode='a', header=not self.files_on_disk[client_id][csv], index=False)
+                    self.files_on_disk[client_id][csv] = True
+                    logging.info(f"DONE")
+                self.borrar_info(csv, client_id)
+        
+    def leer_batches_de_disco(self, client_id, csv, batch_size):
+        with self.locks[client_id][csv]:
+            file_path = self.file_paths[client_id][csv]
+            if not os.path.exists(file_path):
+                logging.info(f"Filepath doesn't exists {file_path}")
+                
+                return
+            with open(file_path, 'r', newline='') as f:
+                reader = pd.read_csv(f, chunksize=batch_size)
+                for chunk in reader:
+                    logging.info(f"Reading chunk...")
+                    yield chunk
+                
     def borrar_info(self, csv, client_id):
         self.datos[client_id][csv][DATOS] = []
         self.datos[client_id][csv][LINEAS] = 0
@@ -84,12 +129,45 @@ class JoinerNode:
 
     def consulta_3(self, datos, client_id):
         logging.info("Procesando datos para consulta 3")
+        logging.info(f"Ejecutando consulta 3")
+        """ 
+            logging.info("Procesando datos para consulta 3")
+            ratings = concat_data(self.datos[client_id]["ratings"][DATOS])
+            self.borrar_info("ratings", client_id)
+            if ratings.empty:
+                return False
+            ranking_arg_post_2000_df = datos[["id", "title"]].merge(ratings, on="id")
+            return ranking_arg_post_2000_df
+        """
+        resultados = []
+        
+        logging.info(self.datos[client_id]["ratings"][DATOS])
+        
         ratings = concat_data(self.datos[client_id]["ratings"][DATOS])
+        if not ratings.empty:
+            logging.info(f"Usando lo que esta en memoria")
+            df_merge = datos[["id", "title"]].merge(ratings, on="id")
+            if not df_merge.empty:
+                resultados.append(df_merge)
+            
         self.borrar_info("ratings", client_id)
-        if ratings.empty:
-            return False
-        ranking_arg_post_2000_df = datos[["id", "title"]].merge(ratings, on="id")
-        return ranking_arg_post_2000_df
+        
+        ratings_batches = []
+            
+        logging.info(f"LEN antes de usar de disco: {len(resultados)}")
+        if self.files_on_disk[client_id]["ratings"]:
+            logging.info(f"Leyendo de disco...")
+            for batch in self.leer_batches_de_disco(client_id, "ratings", BATCH_RATINGS):
+                logging.info(f"")
+                resultados.append(datos[["id", "title"]].merge(batch, on="id"))
+                # ratings_batches.append(batch)
+                
+            os.remove(self.file_paths[client_id]["ratings"])
+            self.files_on_disk[client_id]["ratings"] = False
+            
+        logging.info(f"LEN despues de usar de disco: {len(resultados)}")
+            
+        return pd.concat(resultados) if resultados else False
 
     def consulta_4(self, datos, client_id):
         logging.info(f"Procesando datos para consulta 4")
@@ -150,7 +228,7 @@ class JoinerNode:
             elif tipo_mensaje == "EOF_RATINGS":
                 logging.info("Recibí todos los ratings")
                 self.datos[client_id]["ratings"][TERMINO] = True
-                if self.datos[client_id]["ratings"][LINEAS] != 0:
+                if self.datos[client_id]["ratings"][LINEAS] != 0 or self.files_on_disk[client_id]["ratings"]:
                     self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
                 self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func, client_id)
 
