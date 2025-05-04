@@ -183,3 +183,22 @@ def cargar_eofs():
                 k, v = par.split(":")
                 eofs[int(k)] = int(v)
     return eofs
+
+########################
+# NORMALIZATION
+########################
+
+def normalize_ratings_df(df):
+    df['id'] = df['id'].astype(str)
+    return df
+
+def normalize_credits_df(df):
+    df['id'] = df['id'].astype(str)
+    if 'cast' in df.columns:
+        df['cast'] = df['cast'].apply(dictionary_to_list)
+    return df
+
+def normalize_movies_df(df):
+    if 'id' in df.columns:
+        df['id'] = df['id'].astype(str)
+    return df
