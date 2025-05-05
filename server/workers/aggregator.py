@@ -25,8 +25,6 @@ class AggregatorNode:
         if consulta_id not in self.resultados_parciales[client_id]:
             self.resultados_parciales[client_id][consulta_id] = []
         self.resultados_parciales[client_id][consulta_id].append(create_dataframe(datos))
-        logging.info(f"Guardando datos en Aggregator este es el total: {len(self.resultados_parciales[client_id][consulta_id])}")
-
 
     def ejecutar_consulta(self, consulta_id, client_id):
         if client_id not in self.resultados_parciales:
