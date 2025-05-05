@@ -95,9 +95,7 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
-    volumes:
-    - shared_data:/app/shared
-    
+
   aggregator1:
     container_name: aggregator1
     image: aggregator:latest
@@ -139,9 +137,6 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
-
-volumes:
-  shared_data:
 
 networks:
   testing_net:
