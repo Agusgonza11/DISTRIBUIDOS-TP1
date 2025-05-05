@@ -68,6 +68,20 @@ services:
     depends_on:
     - input_gateway
     - output_gateway
+  client_2:
+    container_name: client_2
+    image: client:latest
+    entrypoint: /client
+    environment:
+    - CLI_ID=2
+    - CLI_LOG_LEVEL=DEBUG
+    volumes:
+    - ./client/data:/app/data
+    networks:
+    - testing_net
+    depends_on:
+    - input_gateway
+    - output_gateway
   filter1:
     container_name: filter1
     image: filter:latest
@@ -95,7 +109,6 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
-
   aggregator1:
     container_name: aggregator1
     image: aggregator:latest
@@ -137,7 +150,6 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
-
 networks:
   testing_net:
     ipam:

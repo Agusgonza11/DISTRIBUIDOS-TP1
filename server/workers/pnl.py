@@ -1,12 +1,12 @@
 import logging
 import os
 import sys
-from common.utils import EOF, concat_data, create_dataframe
+from common.utils import EOF, concat_data, create_dataframe, get_batches
 from common.communication import iniciar_nodo, obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje
 from transformers import pipeline # type: ignore
 
 PNL = "pnl"
-BATCH = 200
+BATCH_PNL = get_batches(PNL)
 
 # -----------------------
 # Nodo PNL
@@ -69,7 +69,7 @@ class PnlNode:
                 enviar_func(canal, destino, EOF, mensaje, EOF)
             else:
                 self.guardar_datos(obtener_body(mensaje), client_id)
-                if self.lineas_actuales[client_id] >= BATCH:
+                if self.lineas_actuales[client_id] >= BATCH_PNL:
                     resultado = self.ejecutar_consulta(consulta_id, client_id)
                     enviar_func(canal, destino, resultado, mensaje, "RESULT")
 

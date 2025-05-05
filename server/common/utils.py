@@ -6,7 +6,21 @@ import pika # type: ignore
 from io import StringIO
 import pandas as pd # type: ignore
 import os
+import configparser
 
+
+def get_batches(worker):
+    config = configparser.ConfigParser()
+    config_path = os.path.join(os.path.dirname(__file__), 'batches.ini')
+    config.read(config_path)
+
+    v1 = int(config['DEFAULT']['BATCH_CREDITS'])
+    v2 = int(config['DEFAULT']['BATCH_RATINGS'])    
+    v3 = int(config['DEFAULT']['BATCH_PNL'])    
+    if worker == "pnl":
+        return v3
+    if worker == "joiner":
+        return v1, v2
 
 def initialize_log(logging_level):
     """

@@ -16,9 +16,15 @@ def comparar_archivos(correctos, verificados, cliente):
         archivo_comp = os.path.join("resultados", correctos[i])
         iguales = True
 
-        with open(archivo_ref, 'r') as ref, open(archivo_comp, 'r') as comp:
-            lineas_ref = ref.readlines()
-            lineas_comp = comp.readlines()
+        try:
+            with open(archivo_ref, 'r') as ref, open(archivo_comp, 'r') as comp:
+                lineas_ref = ref.readlines()
+                lineas_comp = comp.readlines()
+        except FileNotFoundError as e:
+            print(f"\n❌ No se pudo abrir uno de los archivos:\n  {e.filename} no existe.")
+            todos_iguales = False
+            continue  # Saltea la comparación de este par y sigue con el siguiente
+
 
         max_lineas = max(len(lineas_ref), len(lineas_comp))
 
