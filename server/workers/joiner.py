@@ -167,6 +167,7 @@ class JoinerNode:
         if not credits.empty:
             credits = normalize_credits_df(credits)
             df_merge_1 = datos[["id", "title"]].merge(credits, on="id", how="inner")
+            df_merge_1 = df_merge_1[df_merge_1['cast'].map(lambda x: len(x) > 0)]
             if not df_merge_1.empty:
                 df_cast = df_merge_1.explode('cast')
                 result = df_cast[['id', 'cast']].rename(columns={'cast': 'name'})
@@ -176,11 +177,14 @@ class JoinerNode:
 
         if self.files_on_disk[client_id]["credits"]:
             for batch in self.leer_batches_de_disco(client_id, "credits", BATCH_CREDITS):
-                df_merge_2 = datos[["id", "title"]].merge(batch, on="id", how="inner")
-                if not df_merge_2.empty:
-                    df_cast = df_merge_2.explode('cast')
-                    result = df_cast[['id', 'cast']].rename(columns={'cast': 'name'})
-                    resultados.append(result)
+                if not batch.empty:
+                    batch = normalize_credits_df(batch)
+                    df_merge_2 = datos[["id", "title"]].merge(batch, on="id", how="inner")
+                    df_merge_2 = df_merge_2[df_merge_2['cast'].map(lambda x: len(x) > 0)]
+                    if not df_merge_2.empty:
+                        df_cast = df_merge_2.explode('cast')
+                        result = df_cast[['id', 'cast']].rename(columns={'cast': 'name'})
+                        resultados.append(result)
             try:
                 os.remove(self.file_paths[client_id]["credits"])
             except Exception as e:
@@ -190,7 +194,7 @@ class JoinerNode:
 
         if resultados:
             df_final = pd.concat(resultados, ignore_index=True)
-            logging.info(f"lo que devuelve consulta 4 es {df_final}")
+            logging.info(f"lo que devuelve consulta 4 es \n{df_final}")
             return df_final
 
         return False

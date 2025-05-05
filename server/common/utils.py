@@ -184,9 +184,9 @@ def cargar_eofs():
                 eofs[int(k)] = int(v)
     return eofs
 
-########################
+# -------------------
 # NORMALIZATION
-########################
+# -------------------
 
 def normalize_ratings_df(df):
     df['id'] = df['id'].astype(str)
@@ -195,7 +195,24 @@ def normalize_ratings_df(df):
 def normalize_credits_df(df):
     df['id'] = df['id'].astype(str)
     if 'cast' in df.columns:
-        df['cast'] = df['cast'].apply(dictionary_to_list)
+        df['cast'] = df['cast'].fillna('[]')
+        def process_cast(cell):
+            if isinstance(cell, list):
+                if all(isinstance(x, dict) for x in cell):
+                    return [x['name'] for x in cell if 'name' in x]
+                elif all(isinstance(x, str) for x in cell):
+                    return cell
+                else:
+                    return []
+            elif isinstance(cell, str):
+                try:
+                    valor = ast.literal_eval(cell)
+                    return process_cast(valor)
+                except Exception:
+                    return []
+            else:
+                return []
+        df['cast'] = df['cast'].apply(process_cast)
     return df
 
 def normalize_movies_df(df):
