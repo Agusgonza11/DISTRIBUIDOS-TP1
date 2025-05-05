@@ -2,6 +2,8 @@ import sys
 import logging
 import os
 import tempfile
+import gc
+
 import threading
 from common.utils import EOF, concat_data, create_dataframe, prepare_data_consult_4, dictionary_to_list
 from common.utils import normalize_movies_df, normalize_credits_df, normalize_ratings_df
@@ -86,7 +88,6 @@ class JoinerNode:
         if not self.termino_movies[client_id]:
             bsize = BATCH_RATINGS if csv == "ratings" else BATCH_CREDITS
             if self.datos[client_id][csv][LINEAS] >= bsize:
-                logging.info(f"Guardando batch en disco para {csv}.")
                 with self.locks[client_id][csv]:
                     df_total = concat_data(self.datos[client_id][csv][DATOS])
                     df_total.to_csv(
@@ -116,15 +117,7 @@ class JoinerNode:
         self.datos[client_id][csv][DATOS] = []
         self.datos[client_id][csv][LINEAS] = 0
 
-    def ejecutar_consulta(self, consulta_id, client_id):
-        if client_id not in self.resultados_parciales:
-            return False
-        datos_cliente = self.resultados_parciales[client_id]
-        if not datos_cliente or consulta_id not in datos_cliente:
-            return False
-        datos = concat_data(datos_cliente[consulta_id])
-        datos = normalize_movies_df(datos)
-
+    def ejecutar_consulta(self, datos, consulta_id, client_id):
         match consulta_id:
             case 3:
                 return self.consulta_3(datos, client_id)
@@ -140,20 +133,10 @@ class JoinerNode:
         ratings = concat_data(self.datos[client_id]["ratings"][DATOS])
         if not ratings.empty:
             ratings = normalize_ratings_df(ratings)
-            df_merge_1 = datos[["id", "title"]].merge(ratings, on="id", how="inner")
-            resultados.append(df_merge_1)
+            df_merge = datos[["id", "title"]].merge(ratings, on="id", how="inner")
+            resultados.append(df_merge)
 
         self.borrar_info("ratings", client_id)
-
-        if self.files_on_disk[client_id]["ratings"]:
-            for batch in self.leer_batches_de_disco(client_id, "ratings", BATCH_RATINGS):
-                df_merge_2 = datos[["id", "title"]].merge(batch, on="id", how="inner")
-                resultados.append(df_merge_2)
-            try:
-                os.remove(self.file_paths[client_id]["ratings"])
-            except Exception as e:
-                logging.error(f"No se pudo borrar el archivo temporal ratings: {e}")
-            self.files_on_disk[client_id]["ratings"] = False
 
         if resultados:
             return pd.concat(resultados, ignore_index=True)
@@ -166,36 +149,17 @@ class JoinerNode:
         credits = concat_data(self.datos[client_id]["credits"][DATOS])
         if not credits.empty:
             credits = normalize_credits_df(credits)
-            df_merge_1 = datos[["id", "title"]].merge(credits, on="id", how="inner")
-            df_merge_1 = df_merge_1[df_merge_1['cast'].map(lambda x: len(x) > 0)]
-            if not df_merge_1.empty:
-                df_cast = df_merge_1.explode('cast')
+            df_merge = datos[["id", "title"]].merge(credits, on="id", how="inner")
+            df_merge = df_merge[df_merge['cast'].map(lambda x: len(x) > 0)]
+            if not df_merge.empty:
+                df_cast = df_merge.explode('cast')
                 result = df_cast[['id', 'cast']].rename(columns={'cast': 'name'})
                 resultados.append(result)
 
         self.borrar_info("credits", client_id)
 
-        if self.files_on_disk[client_id]["credits"]:
-            for batch in self.leer_batches_de_disco(client_id, "credits", BATCH_CREDITS):
-                if not batch.empty:
-                    batch = normalize_credits_df(batch)
-                    df_merge_2 = datos[["id", "title"]].merge(batch, on="id", how="inner")
-                    df_merge_2 = df_merge_2[df_merge_2['cast'].map(lambda x: len(x) > 0)]
-                    if not df_merge_2.empty:
-                        df_cast = df_merge_2.explode('cast')
-                        result = df_cast[['id', 'cast']].rename(columns={'cast': 'name'})
-                        resultados.append(result)
-            try:
-                os.remove(self.file_paths[client_id]["credits"])
-            except Exception as e:
-                logging.error(f"No se pudo borrar el archivo temporal credits: {e}")
-
-            self.files_on_disk[client_id]["credits"] = False
-
         if resultados:
-            df_final = pd.concat(resultados, ignore_index=True)
-            logging.info(f"lo que devuelve consulta 4 es \n{df_final}")
-            return df_final
+            return pd.concat(resultados, ignore_index=True)
 
         return False
 
@@ -210,8 +174,62 @@ class JoinerNode:
 
     def procesar_resultado(self, consulta_id, canal, destino, mensaje, enviar_func, client_id):
         if self.puede_enviar(consulta_id, client_id):
-            resultado = self.ejecutar_consulta(consulta_id, client_id)
+            if client_id not in self.resultados_parciales:
+                return False
+            datos_cliente = self.resultados_parciales[client_id]
+            if not datos_cliente or consulta_id not in datos_cliente:
+                return False
+            datos = concat_data(datos_cliente[consulta_id])
+            datos = normalize_movies_df(datos)
+
+            resultado = self.ejecutar_consulta(datos, consulta_id, client_id)
             enviar_func(canal, destino, resultado, mensaje, "RESULT")
+
+            if consulta_id == 3 and self.files_on_disk[client_id]["ratings"]:
+              self.enviar_resultados_ratings_disco(datos, client_id, canal, destino, mensaje, enviar_func)
+            elif consulta_id == 4 and self.files_on_disk[client_id]["credits"]:
+              self.enviar_resultados_credits_disco(datos, client_id, canal, destino, mensaje, enviar_func)
+
+
+    def enviar_resultados_credits_disco(self, datos, client_id, canal, destino, mensaje, enviar_func):
+        for batch in self.leer_batches_de_disco(client_id, "credits", BATCH_CREDITS):
+            self.procesar_y_enviar_batch_credit(batch, datos, canal, destino, mensaje, enviar_func)
+            del batch
+            gc.collect()
+        try:
+            os.remove(self.file_paths[client_id]["credits"])
+        except Exception as e:
+            logging.error(f"No se pudo borrar el archivo temporal credits: {e}")
+
+        self.files_on_disk[client_id]["credits"] = False
+
+    def enviar_resultados_ratings_disco(self, datos, client_id, canal, destino, mensaje, enviar_func):
+        for batch in self.leer_batches_de_disco(client_id, "ratings", BATCH_RATINGS):
+            self.procesar_y_enviar_batch_ratings(batch, datos, canal, destino, mensaje, enviar_func)
+            del batch
+            gc.collect()
+        try:
+            os.remove(self.file_paths[client_id]["ratings"])
+        except Exception as e:
+            logging.error(f"No se pudo borrar el archivo temporal ratings: {e}")
+        self.files_on_disk[client_id]["ratings"] = False
+
+    def procesar_y_enviar_batch_credit(self, batch, datos, canal, destino, mensaje, enviar_func):
+        if batch is not None and not batch.empty:
+            batch = normalize_credits_df(batch)
+            df_merge = datos[["id", "title"]].merge(batch, on="id", how="inner")
+            df_merge = df_merge[df_merge['cast'].map(lambda x: len(x) > 0)]
+            if not df_merge.empty:
+                df_cast = df_merge.explode('cast')
+                result = df_cast[['id', 'cast']].rename(columns={'cast': 'name'})
+                enviar_func(canal, destino, result, mensaje, "RESULT")
+
+    def procesar_y_enviar_batch_ratings(self, batch, datos, canal, destino, mensaje, enviar_func):
+        if batch is not None and not batch.empty:
+            batch = normalize_ratings_df(batch)
+            df_merge = datos[["id", "title"]].merge(batch, on="id", how="inner")
+            if not df_merge.empty:
+                enviar_func(canal, destino, df_merge, mensaje, "RESULT")
 
     def enviar_eof(self, consulta_id, canal, destino, mensaje, enviar_func, client_id):
         if self.termino_movies[client_id] and (
