@@ -14,20 +14,6 @@ services:
       timeout: 3s
       retries: 10
       start_period: 50s
-  client:
-    container_name: client
-    image: client:latest
-    entrypoint: /client
-    environment:
-    - CLI_ID=1
-    - CLI_LOG_LEVEL=DEBUG
-    volumes:
-    - ./client/data:/app/data
-    networks:
-    - testing_net
-    depends_on:
-    - input_gateway
-    - output_gateway
   input_gateway:
     container_name: input_gateway
     image: input_gateway:latest
@@ -68,6 +54,34 @@ services:
         condition: service_healthy
     links:
     - rabbitmq
+  client_1:
+    container_name: client_1
+    image: client:latest
+    entrypoint: /client
+    environment:
+    - CLI_ID=1
+    - CLI_LOG_LEVEL=DEBUG
+    volumes:
+    - ./client/data:/app/data
+    networks:
+    - testing_net
+    depends_on:
+    - input_gateway
+    - output_gateway
+  client_2:
+    container_name: client_2
+    image: client:latest
+    entrypoint: /client
+    environment:
+    - CLI_ID=2
+    - CLI_LOG_LEVEL=DEBUG
+    volumes:
+    - ./client/data:/app/data
+    networks:
+    - testing_net
+    depends_on:
+    - input_gateway
+    - output_gateway
   filter1:
     container_name: filter1
     image: filter:latest

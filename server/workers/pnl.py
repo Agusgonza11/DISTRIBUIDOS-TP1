@@ -1,64 +1,76 @@
 import logging
 import os
 import sys
-from common.utils import EOF, concat_data, create_dataframe
-from common.communication import iniciar_nodo, obtener_query
+from common.utils import EOF, concat_data, create_dataframe, get_batches
+from common.communication import iniciar_nodo, obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje
 from transformers import pipeline # type: ignore
 
 PNL = "pnl"
-BATCH = 200
+BATCH_PNL = get_batches(PNL)
 
 # -----------------------
 # Nodo PNL
 # -----------------------
 class PnlNode:
     def __init__(self):
-        self.resultados_parciales = []
-        self.lineas_actuales = 0
+        self.resultados_parciales = {}
+        self.lineas_actuales = {}
 
-    def guardar_datos(self, datos):
+    def eliminar(self):
+        self.resultados_parciales = {}
+        self.lineas_actuales = {}
+
+    def guardar_datos(self, datos, client_id):
+        if not client_id in self.resultados_parciales:
+            self.resultados_parciales[client_id] = []
+            self.lineas_actuales[client_id] = 0
         data = create_dataframe(datos)
-        self.resultados_parciales.append(data)
-        self.lineas_actuales += len(data)
+        self.resultados_parciales[client_id].append(data)
+        self.lineas_actuales[client_id] += len(data)
 
-    def borrar_info(self):
-        self.resultados_parciales = []
-        self.lineas_actuales = 0
+    def borrar_info(self, client_id):
+        self.resultados_parciales[client_id] = []
+        self.lineas_actuales[client_id] = 0
 
-    def ejecutar_consulta(self, consulta_id):
-        datos = self.resultados_parciales
-        if not datos:
+    def ejecutar_consulta(self, consulta_id, client_id):
+        if client_id not in self.resultados_parciales:
             return False
-        datos = concat_data(datos)
+        
+        datos_cliente = self.resultados_parciales[client_id]
+        if not datos_cliente:
+            return False 
+        
+        datos = concat_data(datos_cliente)
+
         match consulta_id:
             case 5:
-                return self.consulta_5(datos)
+                return self.consulta_5(datos, client_id)
             case _:
                 logging.warning(f"Consulta desconocida: {consulta_id}")
                 return []
     
 
-    def consulta_5(self, datos):
+    def consulta_5(self, datos, client_id):
         logging.info("Procesando datos para consulta 5")
         sentiment_analyzer = pipeline('sentiment-analysis', model='distilbert-base-uncased-finetuned-sst-2-english', truncation=True)
         datos['sentiment'] = datos['overview'].fillna('').apply(lambda x: sentiment_analyzer(x)[0]['label'])
-        self.borrar_info()
+        self.borrar_info(client_id)
         return datos
     
     def procesar_mensajes(self, canal, destino, mensaje, enviar_func):
         consulta_id = obtener_query(mensaje)
+        client_id = obtener_client_id(mensaje)
         try:
-            if mensaje['headers'].get("type") == EOF:
+            if obtener_tipo_mensaje(mensaje) == EOF:
                 logging.info(f"Consulta {consulta_id} de pnl recibió EOF")
-                if self.resultados_parciales:
-                    resultado = self.ejecutar_consulta(consulta_id)
+                if self.resultados_parciales[client_id]:
+                    resultado = self.ejecutar_consulta(consulta_id, client_id)
                     enviar_func(canal, destino, resultado, mensaje, "RESULT")
                 enviar_func(canal, destino, EOF, mensaje, EOF)
             else:
-                contenido = mensaje['body'].decode('utf-8')
-                self.guardar_datos(contenido)
-                if self.lineas_actuales >= BATCH:
-                    resultado = self.ejecutar_consulta(consulta_id)
+                self.guardar_datos(obtener_body(mensaje), client_id)
+                if self.lineas_actuales[client_id] >= BATCH_PNL:
+                    resultado = self.ejecutar_consulta(consulta_id, client_id)
                     enviar_func(canal, destino, resultado, mensaje, "RESULT")
 
             mensaje['ack']()

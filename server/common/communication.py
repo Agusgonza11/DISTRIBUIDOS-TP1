@@ -41,7 +41,14 @@ def config_header(mensaje_original, tipo=None):
         headers["type"] = tipo
     return pika.BasicProperties(headers=headers)  
 
+def obtener_client_id(mensaje):
+    return mensaje['headers'].get("ClientID")
 
+def obtener_tipo_mensaje(mensaje):
+    return mensaje['headers'].get("type")
+
+def obtener_body(mensaje):
+    return mensaje['body'].decode('utf-8')
 
 # ---------------------
 # GENERALES
@@ -51,7 +58,7 @@ def iniciar_nodo(tipo_nodo, nodo, consultas=None, worker_id=None):
     logging.info(f"Se inicializó el {tipo_nodo} filter")
     consultas = list(map(int, consultas.split(","))) if consultas else []
     conexion, canal = inicializar_comunicacion()
-    graceful_quit(conexion, canal)
+    graceful_quit(conexion, canal, nodo)
     if tipo_nodo == "broker":
         escuchar_colas_broker(nodo, canal)
     elif tipo_nodo == "joiner":

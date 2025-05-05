@@ -2,7 +2,7 @@ import logging
 import os
 import sys
 from common.utils import prepare_data_consult_1_3_4, prepare_data_consult_2, EOF, prepare_data_consult_5
-from common.communication import iniciar_nodo, obtener_query
+from common.communication import iniciar_nodo, obtener_body, obtener_query, obtener_tipo_mensaje
 
 FILTER = "filter"
 
@@ -10,6 +10,9 @@ FILTER = "filter"
 # Nodo Filtro
 # -----------------------
 class FiltroNode:
+    def eliminar(self):
+        pass
+
     def ejecutar_consulta(self, consulta_id, datos):
         match consulta_id:
             case 1:
@@ -70,13 +73,14 @@ class FiltroNode:
 
     def procesar_mensajes(self, canal, destino, mensaje, enviar_func):
         consulta_id = obtener_query(mensaje)
+        tipo_mensaje = obtener_tipo_mensaje(mensaje)
         try:
-            if mensaje['headers'].get("type") == EOF:
+            if tipo_mensaje == EOF:
                 logging.info(f"Consulta {consulta_id} recibió EOF")
                 enviar_func(canal, destino, EOF, mensaje, EOF)
             else:
-                resultado = self.ejecutar_consulta(consulta_id, mensaje['body'].decode('utf-8'))
-                enviar_func(canal, destino, resultado, mensaje, mensaje['headers'].get("type"))
+                resultado = self.ejecutar_consulta(consulta_id, obtener_body(mensaje))
+                enviar_func(canal, destino, resultado, mensaje, tipo_mensaje)
             mensaje['ack']()
         except Exception as e:
             logging.error(f"Error procesando mensaje en consulta {consulta_id}: {e}")

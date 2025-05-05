@@ -2,7 +2,7 @@ import logging
 import os
 import sys
 from common.utils import EOF, cargar_eofs, concat_data, create_dataframe, prepare_data_aggregator_consult_3
-from common.communication import iniciar_nodo, obtener_query
+from common.communication import iniciar_nodo, obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje
 
 AGGREGATOR = "aggregator"
 
@@ -12,20 +12,30 @@ AGGREGATOR = "aggregator"
 class AggregatorNode:
     def __init__(self):
         self.resultados_parciales = {}
-        self.eof_esperados = cargar_eofs()
+        self.eof_esperados = {}
 
+    def eliminar(self):
+        self.resultados_parciales = {}
+        self.eof_esperados = {}
 
-    def guardar_datos(self, consulta_id, datos):
-        if consulta_id not in self.resultados_parciales:
-            self.resultados_parciales[consulta_id] = []
-        self.resultados_parciales[consulta_id].append(create_dataframe(datos))
+    def guardar_datos(self, consulta_id, datos, client_id):
+        if client_id not in self.resultados_parciales:
+            self.resultados_parciales[client_id] = {}
+            self.eof_esperados[client_id] = cargar_eofs()
+        if consulta_id not in self.resultados_parciales[client_id]:
+            self.resultados_parciales[client_id][consulta_id] = []
+        self.resultados_parciales[client_id][consulta_id].append(create_dataframe(datos))
 
-
-    def ejecutar_consulta(self, consulta_id):
-        datos = self.resultados_parciales.get(consulta_id, [])
-        if not datos:
+    def ejecutar_consulta(self, consulta_id, client_id):
+        if client_id not in self.resultados_parciales:
             return False
-        datos = concat_data(datos)
+        
+        datos_cliente = self.resultados_parciales[client_id]
+        if not datos_cliente:
+            return False 
+        
+        datos = concat_data(datos_cliente[consulta_id])
+
         match consulta_id:
             case 2:
                 return self.consulta_2(datos)
@@ -48,6 +58,8 @@ class AggregatorNode:
 
     def consulta_3(self, datos):
         logging.info("Procesando datos para consulta 3")
+        logging.info(f"Datos recibidos con shape: {datos.shape}")
+        
         mean_ratings = datos.groupby(["id", "title"])['rating'].mean().reset_index()
         max_rated = mean_ratings.iloc[mean_ratings['rating'].idxmax()]
         min_rated = mean_ratings.iloc[mean_ratings['rating'].idxmin()]
@@ -69,20 +81,21 @@ class AggregatorNode:
 
     def procesar_mensajes(self, canal, destino, mensaje, enviar_func):
         consulta_id = obtener_query(mensaje)
+        tipo_mensaje = obtener_tipo_mensaje(mensaje)
+        client_id = obtener_client_id(mensaje)
+
         try:
-            if mensaje['headers'].get("type") == EOF:
+            if tipo_mensaje == EOF:
                 logging.info(f"Consulta {consulta_id} de aggregator recibió EOF")
-                self.eof_esperados[consulta_id] -= 1
-                logging.info(f"Faltan {self.eof_esperados[consulta_id]} EOF restantes")
-                if self.eof_esperados[consulta_id] == 0:
+                self.eof_esperados[client_id][consulta_id] -= 1
+                if self.eof_esperados[client_id][consulta_id] == 0:
                     logging.info(f"Consulta {consulta_id} recibió TODOS los EOF que esperaba")
-                    resultado = self.ejecutar_consulta(consulta_id)
+                    resultado = self.ejecutar_consulta(consulta_id, client_id)
                     enviar_func(canal, destino, resultado, mensaje, "RESULT")
                     enviar_func(canal, destino, EOF, mensaje, EOF)
-                    self.resultados_parciales[consulta_id] = []
+                    self.resultados_parciales[client_id][consulta_id] = []
             else:
-                contenido = mensaje['body'].decode('utf-8')
-                self.guardar_datos(consulta_id, contenido)
+                self.guardar_datos(consulta_id, obtener_body(mensaje), client_id)
 
 
             mensaje['ack']()

@@ -1,11 +1,10 @@
-name	count
-1010	Ricardo Darín	17
-47	Alejandro Awada	7
-489	Inés Efron	7
-664	Leonardo Sbaraglia	7
-1125	Valeria Bertuccelli	7
-111	Arturo Goetz	6
-285	Diego Peretti	6
-948	Pablo Echarri	6
-998	Rafael Spregelburd	6
-1033	Rodrigo de la Serna	6
+Ricardo Darín,18
+Alejandro Awada,7
+Diego Peretti,7
+Inés Efron,7
+Leonardo Sbaraglia,7
+Valeria Bertuccelli,7
+Arturo Goetz,6
+Pablo Echarri,6
+Rafael Spregelburd,6
+Rodrigo de la Serna,6

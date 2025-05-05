@@ -6,7 +6,21 @@ import pika # type: ignore
 from io import StringIO
 import pandas as pd # type: ignore
 import os
+import configparser
 
+
+def get_batches(worker):
+    config = configparser.ConfigParser()
+    config_path = os.path.join(os.path.dirname(__file__), 'batches.ini')
+    config.read(config_path)
+
+    v1 = int(config['DEFAULT']['BATCH_CREDITS'])
+    v2 = int(config['DEFAULT']['BATCH_RATINGS'])    
+    v3 = int(config['DEFAULT']['BATCH_PNL'])    
+    if worker == "pnl":
+        return v3
+    if worker == "joiner":
+        return v1, v2
 
 def initialize_log(logging_level):
     """
@@ -21,9 +35,14 @@ def initialize_log(logging_level):
         datefmt='%Y-%m-%d %H:%M:%S',
     )
 
-def graceful_quit(conexion, canal):
+def graceful_quit(conexion, canal, nodo):
     def shutdown_handler(_, __):
         logging.info("Apagando nodo")
+        try:
+            nodo.eliminar() 
+            logging.info("Datos eliminados del nodo.")
+        except Exception as e:
+            logging.error(f"Error al eliminar datos del nodo: {e}")
         try:
             if canal.is_open:
                 canal.close()
@@ -56,7 +75,7 @@ def puede_enviar(body):
     return bool(body)
 
 def concat_data(data):
-    return pd.concat(data, ignore_index=True)
+    return pd.concat(data, ignore_index=True) if data else pd.DataFrame()
 
 def dictionary_to_list(dictionary_str):
     try:
@@ -178,3 +197,39 @@ def cargar_eofs():
                 k, v = par.split(":")
                 eofs[int(k)] = int(v)
     return eofs
+
+# -------------------
+# NORMALIZATION
+# -------------------
+
+def normalize_ratings_df(df):
+    df['id'] = df['id'].astype(str)
+    return df
+
+def normalize_credits_df(df):
+    df['id'] = df['id'].astype(str)
+    if 'cast' in df.columns:
+        df['cast'] = df['cast'].fillna('[]')
+        def process_cast(cell):
+            if isinstance(cell, list):
+                if all(isinstance(x, dict) for x in cell):
+                    return [x['name'] for x in cell if 'name' in x]
+                elif all(isinstance(x, str) for x in cell):
+                    return cell
+                else:
+                    return []
+            elif isinstance(cell, str):
+                try:
+                    valor = ast.literal_eval(cell)
+                    return process_cast(valor)
+                except Exception:
+                    return []
+            else:
+                return []
+        df['cast'] = df['cast'].apply(process_cast)
+    return df
+
+def normalize_movies_df(df):
+    if 'id' in df.columns:
+        df['id'] = df['id'].astype(str)
+    return df
