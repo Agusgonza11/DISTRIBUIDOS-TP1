@@ -26,7 +26,6 @@ class AggregatorNode:
             self.resultados_parciales[client_id][consulta_id] = []
         self.resultados_parciales[client_id][consulta_id].append(create_dataframe(datos))
 
-
     def ejecutar_consulta(self, consulta_id, client_id):
         if client_id not in self.resultados_parciales:
             return False
@@ -59,6 +58,8 @@ class AggregatorNode:
 
     def consulta_3(self, datos):
         logging.info("Procesando datos para consulta 3")
+        logging.info(f"Datos recibidos con shape: {datos.shape}")
+        
         mean_ratings = datos.groupby(["id", "title"])['rating'].mean().reset_index()
         max_rated = mean_ratings.iloc[mean_ratings['rating'].idxmax()]
         min_rated = mean_ratings.iloc[mean_ratings['rating'].idxmin()]

@@ -95,6 +95,7 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
+
   aggregator1:
     container_name: aggregator1
     image: aggregator:latest
@@ -136,6 +137,7 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
+
 networks:
   testing_net:
     ipam:
