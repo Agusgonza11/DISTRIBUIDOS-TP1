@@ -15,6 +15,7 @@ import (
 	"tp1-sistemas-distribuidos/gateway/internal/config"
 	"tp1-sistemas-distribuidos/gateway/internal/models"
 	"tp1-sistemas-distribuidos/gateway/internal/utils"
+	io "tp1-sistemas-distribuidos/gateway/internal/utils"
 )
 
 type Broker interface {
@@ -84,6 +85,21 @@ func (g *Gateway) Start(ctx context.Context) {
 	wg.Wait()
 }
 
+func (g *Gateway) acceptConnections(listener net.Listener, messageBuilderFunc func([]string, string) ([]byte, error)) {
+	for g.isRunning() {
+		conn, err := listener.Accept()
+		if err != nil {
+			if g.isRunning() {
+				g.logger.Errorf("failed to accept connection: %v", err)
+			}
+
+			continue
+		}
+
+		go g.handleMessage(conn, messageBuilderFunc)
+	}
+}
+
 func (g *Gateway) handleMessage(
 	conn net.Conn,
 	messageBuilderFunc func([]string, string) ([]byte, error),
@@ -113,6 +129,13 @@ func (g *Gateway) handleMessage(
 
 		file := splittedHeader[1]
 		clientID := splittedHeader[2]
+
+		const emptyUserID = "EMPTY"
+
+		if clientID == emptyUserID {
+			clientID = g.assignIDToClient(conn)
+		}
+
 		batchID := splittedHeader[3]
 
 		queueName, exists := g.getQueueNameByQuery(messageType, file)
@@ -128,6 +151,18 @@ func (g *Gateway) handleMessage(
 			g.handleCommonMessage(conn, queueName, messageType, file, batchID, clientID, lines, messageBuilderFunc)
 		}
 	}
+}
+func (g *Gateway) assignIDToClient(conn net.conn) string {
+	clientID := uuid.New()
+
+	err := io.WriteMessage(conn, []byte(clientID))
+	if err != nil {
+		errMessage := fmt.Sprintf("error sending id to client: %v", err)
+		c.logger.Errorf(errMessage)
+		return ""
+	}
+
+	return clientID
 }
 
 func (g *Gateway) handleCommonMessage(
@@ -282,20 +317,6 @@ func (g *Gateway) getEOFHeaderByQuery(query string, file string) string {
 		}
 	default:
 		return ""
-	}
-}
-
-func (g *Gateway) acceptConnections(listener net.Listener, messageBuilderFunc func([]string, string) ([]byte, error)) {
-	for g.isRunning() {
-		conn, err := listener.Accept()
-		if err != nil {
-			if g.isRunning() {
-				g.logger.Errorf("failed to accept connection: %v", err)
-			}
-
-			continue
-		}
-		go g.handleMessage(conn, messageBuilderFunc)
 	}
 }
 
