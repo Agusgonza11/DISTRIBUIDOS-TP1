@@ -48,6 +48,7 @@ func main() {
 	}
 
 	config := config.Config{
+		ConnectionsGatewayAddress:  v.GetString("gateway.connections_address"),
 		InputMoviesGatewayAddress:  v.GetString("gateway.input_movies_address"),
 		InputCreditsGatewayAddress: v.GetString("gateway.input_credits_address"),
 		InputRatingsGatewayAddress: v.GetString("gateway.input_ratings_address"),
@@ -84,6 +85,7 @@ func InitConfig() (*viper.Viper, error) {
 
 	// Add env variables supported
 	v.BindEnv("query")
+	v.BindEnv("gateway.connections_address")
 	v.BindEnv("gateway.input_movies_address")
 	v.BindEnv("gateway.input_credits_address")
 	v.BindEnv("gateway.input_ratings_address")
@@ -133,8 +135,9 @@ func InitLogger(logLevel string) error {
 // For debugging purposes only
 func PrintConfig(logger *logging.Logger, v *viper.Viper) {
 	logger.Infof(
-		"action: config | result: success | input_movies_address: %s | input_credits_address: %s | input_ratings_address: %s | output_server_address: %s | log_level: %s | "+
+		"action: config | result: success | connections_gateway_address: %s | input_movies_address: %s | input_credits_address: %s | input_ratings_address: %s | output_server_address: %s | log_level: %s | "+
 			"movies_file_path: %s | ratings_file_path: %s | credits_file_path: %s | query: %s | batch_max_size: %d | batch_max_amount: %d",
+		v.GetString("gateway.connections_address"),
 		v.GetString("gateway.input_movies_address"),
 		v.GetString("gateway.input_credits_address"),
 		v.GetString("gateway.input_ratings_address"),

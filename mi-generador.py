@@ -220,7 +220,6 @@ def agregar_clientes(compose, cantidad_clientes):
             "image": "client:latest",
             "entrypoint": "/client",
             "environment": [
-                f"CLI_ID={i}",
                 "CLI_LOG_LEVEL=DEBUG"
             ],
             "volumes": ["./client/data:/app/data"],

@@ -1,11 +1,12 @@
 package config
 
 type InputGatewayConfig struct {
-	MoviesAddress  string
-	CreditsAddress string
-	RatingsAddress string
-	RabbitMQ       RabbitMQConfig
-	EOFsCount      map[string]int
+	ConnectionsAddress string
+	MoviesAddress      string
+	CreditsAddress     string
+	RatingsAddress     string
+	RabbitMQ           RabbitMQConfig
+	EOFsCount          map[string]int
 }
 
 type OutputGatewayConfig struct {

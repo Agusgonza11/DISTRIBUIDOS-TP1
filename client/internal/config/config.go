@@ -1,6 +1,7 @@
 package config
 
 type Config struct {
+	ConnectionsGatewayAddress  string
 	InputMoviesGatewayAddress  string
 	InputCreditsGatewayAddress string
 	InputRatingsGatewayAddress string

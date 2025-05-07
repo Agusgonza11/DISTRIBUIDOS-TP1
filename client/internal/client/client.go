@@ -30,8 +30,13 @@ type Client struct {
 }
 
 func NewClient(config config.Config, logger *logging.Logger) *Client {
+	clientID, err := getClientIDFromGateway(config.ConnectionsGatewayAddress, logger)
+	if err != nil {
+		logger.Fatalf("Failed to obtain client ID from gateway: %v", err)
+	}
+
 	return &Client{
-		id:          os.Getenv("CLI_ID"),
+		id:          clientID,
 		config:      config,
 		logger:      logger,
 		conns:       make(map[string]net.Conn),
@@ -715,128 +720,20 @@ func (c *Client) gracefulShutdown(ctx context.Context) {
 	}
 }
 
-func convertToInterfaceSlice[T any](input []*T) []interface{} {
-	result := make([]interface{}, len(input))
-	for i, v := range input {
-		result[i] = v
+func getClientIDFromGateway(connectionAddr string, logger *logging.Logger) (string, error) {
+	conn, err := net.Dial("tcp", connectionAddr)
+	if err != nil {
+		return "", fmt.Errorf("could not connect to gateway in %s: %w", connectionAddr, err)
 	}
-	return result
+
+	defer conn.Close()
+
+	id, err := io.ReadMessage(conn)
+	if err != nil {
+		return "", fmt.Errorf("could not read client-id from gateway: %w", err)
+	}
+
+	logger.Infof("assigned client-id from gateway: %s", id)
+
+	return strings.TrimSpace(id), nil
 }
-
-//func sendData[T any](
-//	filePath string,
-//	mapFunc func([]string) *T,
-//	sendBatchFunc func([]interface{}, string, string, int) error,
-//	eofFunc func(string) error,
-//	service string,
-//	query string,
-//	batchSize int,
-//	batchLimitAmount int,
-//	logger *logging.Logger) error {
-//	file, err := os.Open(filePath)
-//	if err != nil {
-//		log.Fatal(err)
-//	}
-//
-//	defer file.Close()
-//
-//	reader := csv.NewReader(file)
-//	io.IgnoreFirstCSVLine(reader)
-//
-//	var batch []*T
-//	var batchID int
-//	var batchSize int
-//
-//	logger.Infof("Starting to send %s", service)
-//
-//	for {
-//		line, err := reader.Read()
-//		if err != nil {
-//			if errors.Is(err, goIO.EOF) {
-//				logger.Infof("Reached end of file")
-//				break
-//			}
-//
-//			logger.Infof("Failed trying to read file: %v", err)
-//			continue
-//		}
-//
-//		item := mapFunc(line)
-//
-//		itemSize, _ := json.Marshal(item)
-//
-//		if len(batch) >= batchSize || batchSize+len(itemSize) > batchLimitAmount {
-//			if err := sendBatchFunc(convertToInterfaceSlice(batch), service, query, batchID); err != nil {
-//				logger.Errorf("Failed trying to send %s batch: %v", service, err)
-//				return err
-//			}
-//
-//			batch = []*T{}
-//			batchSize = 0
-//			batchID++
-//		}
-//
-//		batch = append(batch, item)
-//		batchSize += len(itemSize)
-//	}
-//
-//	if err := sendBatchFunc(convertToInterfaceSlice(batch), service, query, batchID); err != nil {
-//		logger.Errorf("Failed trying to send %s batch: %v", service, err)
-//		return err
-//	}
-//
-//	err = eofFunc(service)
-//	if err != nil {
-//		logger.Errorf("Failed trying to send EOF message: %v", err)
-//		return err
-//	}
-//
-//	return nil
-//}
-//var batchMappingByService = map[string]func(interface{}, string, string, int) string{
-//	MoviesService:  buildMoviesBatchMessage,
-//	CreditsService: buildCreditsBatchMessage,
-//	RatingsService: buildRatingsBatchMessage,
-//}
-
-//func (c *Client) sendMovies(query string) error {
-//return sendData(
-//c.config.MoviesFilePath,
-//c.mapMovieFromCSVLine,
-//c.sendBatch,
-//c.sendEOF,
-//MoviesService,
-//query,
-//c.config.BatchSize,
-//c.config.BatchLimitAmount,
-//c.logger,
-//)
-//}
-
-//	func (c *Client) sendRatings(query string) error {
-//		return sendData(
-//			c.config.RatingsFilePath,
-//			c.mapRatingFromCSVLine,
-//			c.sendBatch,
-//			c.sendEOF,
-//			RatingsService,
-//			query,
-//			c.config.BatchSize,
-//			c.config.BatchLimitAmount,
-//			c.logger,
-//		)
-//	}
-//
-//	func (c *Client) sendCredits(query string) error {
-//		return sendData(
-//			c.config.CreditsFilePath,
-//			c.mapCreditFromCSVLine,
-//			c.sendBatch,
-//			c.sendEOF,
-//			CreditsService,
-//			query,
-//			c.config.BatchSize,
-//			c.config.BatchLimitAmount,
-//			c.logger,
-//		)
-//	}

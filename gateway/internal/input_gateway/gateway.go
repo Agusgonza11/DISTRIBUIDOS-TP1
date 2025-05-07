@@ -5,7 +5,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
+	"github.com/google/uuid"
+	goIO "io"
 	"net"
 	"strings"
 	"sync"
@@ -14,7 +15,6 @@ import (
 
 	"tp1-sistemas-distribuidos/gateway/internal/config"
 	"tp1-sistemas-distribuidos/gateway/internal/models"
-	"tp1-sistemas-distribuidos/gateway/internal/utils"
 	io "tp1-sistemas-distribuidos/gateway/internal/utils"
 )
 
@@ -40,7 +40,58 @@ func NewGateway(broker Broker, config config.InputGatewayConfig, logger *logging
 	}, nil
 }
 
+func (g *Gateway) listenForConnections(ctx context.Context) {
+	listener, err := net.Listen("tcp", g.config.ConnectionsAddress)
+	if err != nil {
+		g.logger.Errorf("failed to start connections listener: %v", err)
+		return
+	}
+	defer listener.Close()
+
+	go func() {
+		g.gracefulShutdown(ctx, listener)
+	}()
+
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			g.logger.Errorf("failed to accept connection in connections listener: %v", err)
+			continue
+		}
+
+		go g.handleConnectionRequest(conn)
+	}
+}
+
+func (g *Gateway) handleConnectionRequest(conn net.Conn) {
+	defer conn.Close()
+
+	clientID := uuid.New().String()
+	
+	err := io.WriteMessage(conn, []byte(clientID))
+	if err != nil {
+		g.logger.Errorf("failed to send id to client: %v", err)
+		return
+	}
+
+	g.logger.Infof("assigned id %s to new client", clientID)
+}
+
 func (g *Gateway) Start(ctx context.Context) {
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+
+	go func() {
+		defer wg.Done()
+		g.listenForConnections(ctx)
+	}()
+
 	addresses := map[string]struct {
 		address            string
 		messageBuilderFunc func([]string, string) ([]byte, error)
@@ -58,8 +109,6 @@ func (g *Gateway) Start(ctx context.Context) {
 			messageBuilderFunc: g.buildRatingsMessage,
 		},
 	}
-
-	wg := sync.WaitGroup{}
 
 	for key, data := range addresses {
 		wg.Add(1)
@@ -109,9 +158,9 @@ func (g *Gateway) handleMessage(
 	reader := bufio.NewReader(conn)
 
 	for g.isRunning() {
-		response, err := utils.ReadMessage(reader)
+		response, err := io.ReadMessage(reader)
 		if err != nil {
-			if !errors.Is(err, io.EOF) {
+			if !errors.Is(err, goIO.EOF) {
 				g.logger.Errorf(fmt.Sprintf("error reading message: %v", err))
 			}
 			return
@@ -152,17 +201,17 @@ func (g *Gateway) handleMessage(
 		}
 	}
 }
-func (g *Gateway) assignIDToClient(conn net.conn) string {
+func (g *Gateway) assignIDToClient(conn net.Conn) string {
 	clientID := uuid.New()
 
-	err := io.WriteMessage(conn, []byte(clientID))
+	err := io.WriteMessage(conn, []byte(clientID.String()))
 	if err != nil {
 		errMessage := fmt.Sprintf("error sending id to client: %v", err)
-		c.logger.Errorf(errMessage)
+		g.logger.Errorf(errMessage)
 		return ""
 	}
 
-	return clientID
+	return clientID.String()
 }
 
 func (g *Gateway) handleCommonMessage(
@@ -173,7 +222,7 @@ func (g *Gateway) handleCommonMessage(
 ) {
 	g.logger.Infof(fmt.Sprintf("%s_ACK:%s", batchID, file))
 
-	err := utils.WriteMessage(conn, []byte(fmt.Sprintf("%s_ACK:%s", file, batchID)))
+	err := io.WriteMessage(conn, []byte(fmt.Sprintf("%s_ACK:%s", file, batchID)))
 	if err != nil {
 		g.logger.Errorf("failed trying to send movies ack: %v", err)
 		return
@@ -202,7 +251,7 @@ func (g *Gateway) handleCommonMessage(
 
 func (g *Gateway) handleEOFMessage(conn net.Conn, queueName, query, file, clientID string) {
 	g.logger.Infof("EOF_ACK sent")
-	err := utils.WriteMessage(conn, []byte("EOF_ACK"))
+	err := io.WriteMessage(conn, []byte("EOF_ACK"))
 	if err != nil {
 		g.logger.Errorf("failed trying to eof ack: %v", err)
 		return
