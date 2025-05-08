@@ -39,7 +39,7 @@ def config_header(mensaje_original, tipo=None):
     headers = {"Query": mensaje_original['headers'].get("Query"), "ClientID": mensaje_original['headers'].get("ClientID")}
     if type != None:
         headers["type"] = tipo
-    return pika.BasicProperties(headers=headers)  
+    return pika.BasicProperties(headers=headers)
 
 def obtener_client_id(mensaje):
     return mensaje['headers'].get("ClientID")
@@ -80,7 +80,7 @@ def inicializar_comunicacion():
 
 def enviar_mensaje(canal, routing_key, body, mensaje_original, type=None):
     if puede_enviar(body):
-        #logging.info(f"A {routing_key} le voy a enviar: {type}")
+        logging.info(f"A {routing_key} le voy a enviar: {type}")
         propiedades = config_header(mensaje_original, type)
         canal.basic_publish(
             exchange='',

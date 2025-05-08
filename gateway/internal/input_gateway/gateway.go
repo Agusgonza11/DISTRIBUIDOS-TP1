@@ -73,7 +73,7 @@ func (g *Gateway) handleConnectionRequest(conn net.Conn) {
 	defer conn.Close()
 
 	clientID := uuid.New().String()
-	
+
 	err := io.WriteMessage(conn, []byte(clientID))
 	if err != nil {
 		g.logger.Errorf("failed to send id to client: %v", err)
@@ -173,31 +173,23 @@ func (g *Gateway) handleMessage(
 
 		header := lines[0]
 		splittedHeader := strings.Split(header, ",")
-
-		messageType := strings.TrimSpace(splittedHeader[0])
-
+		rawQueries := strings.TrimSpace(splittedHeader[0])
 		file := splittedHeader[1]
 		clientID := splittedHeader[2]
-
-		const emptyUserID = "EMPTY"
-
-		if clientID == emptyUserID {
-			clientID = g.assignIDToClient(conn)
-		}
-
 		batchID := splittedHeader[3]
+		isEOF := splittedHeader[len(splittedHeader)-1] == models.MessageEOF
 
-		queueName, exists := g.getQueueNameByQuery(messageType, file)
-		if !exists {
-			g.logger.Errorf("queue not found: message_type: %s, file: %s", messageType, file)
-			return
+		var queries []string
+		if file == "MOVIES" {
+			queries = strings.Split(rawQueries, "|")
+		} else {
+			queries = []string{rawQueries}
 		}
 
-		isEOF := splittedHeader[len(splittedHeader)-1] == models.MessageEOF
 		if isEOF {
-			g.handleEOFMessage(conn, queueName, messageType, file, clientID)
+			g.handleEOFMessage(conn, queries, file, clientID)
 		} else {
-			g.handleCommonMessage(conn, queueName, messageType, file, batchID, clientID, lines, messageBuilderFunc)
+			g.handleCommonMessage(conn, queries, file, batchID, clientID, lines, messageBuilderFunc)
 		}
 	}
 }
@@ -216,11 +208,12 @@ func (g *Gateway) assignIDToClient(conn net.Conn) string {
 
 func (g *Gateway) handleCommonMessage(
 	conn net.Conn,
-	queueName, query, file, batchID, clientID string,
+	queries []string,
+	file, batchID, clientID string,
 	lines []string,
 	messageBuilderFunc func([]string, string) ([]byte, error),
 ) {
-	g.logger.Infof(fmt.Sprintf("%s_ACK:%s", batchID, file))
+	g.logger.Infof(fmt.Sprintf("%s_ACK:%s", file, batchID))
 
 	err := io.WriteMessage(conn, []byte(fmt.Sprintf("%s_ACK:%s", file, batchID)))
 	if err != nil {
@@ -228,54 +221,73 @@ func (g *Gateway) handleCommonMessage(
 		return
 	}
 
-	body, err := messageBuilderFunc(lines[1:], query)
-	if err != nil {
-		g.logger.Errorf("error trying to build message: %v", err)
-		return
-	}
+	for _, query := range queries {
 
-	err = g.broker.PublishMessage(
-		queueName,
-		map[string]interface{}{
-			"Query":    query,
-			"ClientID": clientID,
-			"type":     file,
-		},
-		body,
-	)
-	if err != nil {
-		g.logger.Errorf("failed trying to publish message: %v", err)
-		return
-	}
-}
+		queueName, exists := g.getQueueNameByQuery(query, file)
+		if !exists {
+			g.logger.Errorf("queue not found: message_type: %s, file: %s", query, file)
+			continue
+		}
 
-func (g *Gateway) handleEOFMessage(conn net.Conn, queueName, query, file, clientID string) {
-	g.logger.Infof("EOF_ACK sent")
-	err := io.WriteMessage(conn, []byte("EOF_ACK"))
-	if err != nil {
-		g.logger.Errorf("failed trying to eof ack: %v", err)
-		return
-	}
-
-	messagesToSend := g.getEOFCountByQuery(query, file)
-
-	eofHeader := g.getEOFHeaderByQuery(query, file)
-	g.logger.Infof("Sending %d EOF's: %s to %s queue", messagesToSend, eofHeader, queueName)
-
-	for range messagesToSend {
+		body, err := messageBuilderFunc(lines[1:], query)
+		if err != nil {
+			g.logger.Errorf("error trying to build message: %v", err)
+			continue
+		}
 
 		err = g.broker.PublishMessage(
 			queueName,
 			map[string]interface{}{
 				"Query":    query,
 				"ClientID": clientID,
-				"type":     eofHeader,
+				"type":     file,
 			},
-			nil,
+			body,
 		)
 		if err != nil {
 			g.logger.Errorf("failed trying to publish message: %v", err)
-			return
+			continue
+		}
+	}
+}
+
+func (g *Gateway) handleEOFMessage(conn net.Conn, queries []string, file, clientID string) {
+	eofACK := fmt.Sprintf("%s_EOF_ACK", file)
+
+	g.logger.Infof("%s sent", eofACK)
+
+	err := io.WriteMessage(conn, []byte(eofACK))
+	if err != nil {
+		g.logger.Errorf("failed trying to eof ack: %v", err)
+		return
+	}
+
+	for _, query := range queries {
+
+		messagesToSend := g.getEOFCountByQuery(query, file)
+		eofHeader := g.getEOFHeaderByQuery(query, file)
+		queueName, exists := g.getQueueNameByQuery(query, file)
+		if !exists {
+			g.logger.Errorf("queue not found: message_type: %s, file: %s", query, file)
+			continue
+		}
+
+		g.logger.Infof("sending %d EOF's: %s to %s queue", messagesToSend, eofHeader, queueName)
+
+		for i := 0; i < messagesToSend; i++ {
+			err = g.broker.PublishMessage(
+				queueName,
+				map[string]interface{}{
+					"Query":    query,
+					"ClientID": clientID,
+					"type":     eofHeader,
+				},
+				nil,
+			)
+			if err != nil {
+				g.logger.Errorf("failed trying to publish message: %v", err)
+				break
+			}
 		}
 	}
 }
