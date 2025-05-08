@@ -86,6 +86,8 @@ class Broker:
                 else:
                     self.distribuir_informacion_random(client_id, consulta_id, mensaje, canal, enviar_func)
             else:
+                if tipo_mensaje in {"EOF_CREDITS", "EOF_RATINGS"}:
+                    logging.info(f"Recibi EOF: {tipo_mensaje}")
                 if tipo_mensaje in {"MOVIES", "EOF_CREDITS", "EOF_RATINGS"}:
                     self.distribuir_informacion(client_id, consulta_id, mensaje, canal, enviar_func, tipo_mensaje)
 
