@@ -1,4 +1,5 @@
 gateway:
+  connections_address: ":6000"
   movies_address: ":5000"
   credits_address: ":5001"
   ratings_address: ":5002"

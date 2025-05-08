@@ -44,9 +44,10 @@ func main() {
 	}()
 
 	config := config.InputGatewayConfig{
-		MoviesAddress:  v.GetString("gateway.movies_address"),
-		CreditsAddress: v.GetString("gateway.credits_address"),
-		RatingsAddress: v.GetString("gateway.ratings_address"),
+		ConnectionsAddress: v.GetString("gateway.connections_address"),
+		MoviesAddress:      v.GetString("gateway.movies_address"),
+		CreditsAddress:     v.GetString("gateway.credits_address"),
+		RatingsAddress:     v.GetString("gateway.ratings_address"),
 		RabbitMQ: config.RabbitMQConfig{
 			Address: v.GetString("rabbitmq.address"),
 			FilterQueues: map[string]string{
@@ -104,6 +105,7 @@ func InitConfig() (*viper.Viper, error) {
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
 	// Add env variables supported
+	v.BindEnv("gateway.connections_address")
 	v.BindEnv("gateway.movies_address")
 	v.BindEnv("gateway.credits_address")
 	v.BindEnv("gateway.ratings_address")
@@ -154,7 +156,8 @@ func InitLogger(logLevel string) error {
 // For debugging purposes only
 func PrintConfig(logger *logging.Logger, v *viper.Viper) {
 	logger.Infof(
-		"action: config | result: success | movies_address: %s | credits_address: %s | ratings_address: %s | log_level: %s | rabbitmq address: %s",
+		"action: config | result: success | connections_address: %s | movies_address: %s | credits_address: %s | ratings_address: %s | log_level: %s | rabbitmq address: %s",
+		v.GetString("gateway.connections_address"),
 		v.GetString("gateway.movies_address"),
 		v.GetString("gateway.credits_address"),
 		v.GetString("gateway.ratings_address"),

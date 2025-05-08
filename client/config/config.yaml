@@ -8,10 +8,11 @@ queries: [
   "TOP-INVESTING-COUNTRIES", 
   "TOP-ARGENTINIAN-MOVIES-BY-RATING", 
   "TOP-ARGENTINIAN-ACTORS", 
-  "SENTIMENT-ANALYSIS"
+ "SENTIMENT-ANALYSIS"
 ]
 
 gateway:
+  connections_address: "input_gateway:6000"
   input_movies_address: "input_gateway:5000"
   input_credits_address: "input_gateway:5001"
   input_ratings_address: "input_gateway:5002"
