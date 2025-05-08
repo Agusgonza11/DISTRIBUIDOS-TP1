@@ -1,8 +1,10 @@
 import logging
 import os
+import gc
 import sys
 from common.utils import EOF, cargar_eofs, concat_data, create_dataframe, prepare_data_aggregator_consult_3
 from common.communication import iniciar_nodo, obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje
+import tracemalloc
 
 AGGREGATOR = "aggregator"
 
@@ -11,6 +13,7 @@ AGGREGATOR = "aggregator"
 # -----------------------
 class AggregatorNode:
     def __init__(self):
+        tracemalloc.start()
         self.resultados_parciales = {}
         self.eof_esperados = {}
 
@@ -21,9 +24,14 @@ class AggregatorNode:
     def guardar_datos(self, consulta_id, datos, client_id):
         if client_id not in self.resultados_parciales:
             self.resultados_parciales[client_id] = {}
-            self.eof_esperados[client_id] = cargar_eofs()
+            self.eof_esperados[client_id] = {}
+            
         if consulta_id not in self.resultados_parciales[client_id]:
             self.resultados_parciales[client_id][consulta_id] = []
+            
+        if consulta_id not in self.eof_esperados[client_id]:
+            self.eof_esperados[client_id][consulta_id] = cargar_eofs()[consulta_id]
+
         self.resultados_parciales[client_id][consulta_id].append(create_dataframe(datos))
 
     def ejecutar_consulta(self, consulta_id, client_id):
@@ -35,7 +43,14 @@ class AggregatorNode:
             return False 
         
         datos = concat_data(datos_cliente[consulta_id])
-
+        
+        logging.info(tracemalloc.get_traced_memory())
+        tracemalloc.stop()
+        logging.info("Memoria usada: \n")
+        size_bytes = sys.getsizeof(datos)
+        size_mb = size_bytes / (1024 ** 2)
+        logging.info(f"Uso de memoria: {size_mb:.2f} MB")
+        
         match consulta_id:
             case 2:
                 return self.consulta_2(datos)
@@ -93,7 +108,15 @@ class AggregatorNode:
                     resultado = self.ejecutar_consulta(consulta_id, client_id)
                     enviar_func(canal, destino, resultado, mensaje, "RESULT")
                     enviar_func(canal, destino, EOF, mensaje, EOF)
-                    self.resultados_parciales[client_id][consulta_id] = []
+                    del self.resultados_parciales[client_id][consulta_id]
+                    del self.eof_esperados[client_id][consulta_id]
+
+                    if not self.resultados_parciales[client_id]:
+                        del self.resultados_parciales[client_id]
+                    if not self.eof_esperados[client_id]:
+                        del self.eof_esperados[client_id]
+
+                    gc.collect()
             else:
                 self.guardar_datos(consulta_id, obtener_body(mensaje), client_id)
 

@@ -61,7 +61,7 @@ func (c *Client) ProcessQuery(ctx context.Context, queries []string) {
 	wg := sync.WaitGroup{}
 
 	var moviesQueries []string
-
+	var sendCredits, sendRatings bool
 	for _, query := range queries {
 		if err := c.createOutputFile(query); err != nil {
 			c.logger.Errorf("failed to create output file: %v", err)
@@ -71,19 +71,11 @@ func (c *Client) ProcessQuery(ctx context.Context, queries []string) {
 		moviesQueries = append(moviesQueries, query)
 
 		if query == QueryTopArgentinianMoviesByRating {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				_ = c.sendRatings(QueryTopArgentinianMoviesByRating)
-			}()
+			sendRatings = true
 		}
 
 		if query == QueryTopArgentinianActors {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				_ = c.sendCredits(QueryTopArgentinianActors)
-			}()
+			sendCredits = true
 		}
 	}
 
@@ -92,6 +84,22 @@ func (c *Client) ProcessQuery(ctx context.Context, queries []string) {
 		defer wg.Done()
 		_ = c.sendMovies(moviesQueries)
 	}()
+
+	if sendCredits {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_ = c.sendCredits(QueryTopArgentinianActors)
+		}()
+	}
+
+	if sendRatings {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_ = c.sendRatings(QueryTopArgentinianMoviesByRating)
+		}()
+	}
 
 	wg.Add(1)
 	go func() {
