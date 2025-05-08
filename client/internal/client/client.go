@@ -257,7 +257,6 @@ func (c *Client) sendMovies(query string) error {
 				break
 			}
 
-			c.logger.Infof("failed trying to read file: %v", err)
 			continue
 		}
 
@@ -319,7 +318,6 @@ func (c *Client) sendCredits(query string) error {
 				break
 			}
 
-			c.logger.Infof("failed trying to read file: %v", err)
 			continue
 		}
 
@@ -381,7 +379,6 @@ func (c *Client) sendRatings(query string) error {
 				break
 			}
 
-			c.logger.Infof("failed trying to read file: %v", err)
 			continue
 		}
 

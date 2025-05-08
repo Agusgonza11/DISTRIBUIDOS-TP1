@@ -222,7 +222,11 @@ def agregar_clientes(compose, cantidad_clientes):
             "environment": [
                 "CLI_LOG_LEVEL=DEBUG"
             ],
-            "volumes": ["./client/data:/app/data"],
+            "volumes": [
+                "./client/data/movies.csv:/app/data/movies.csv:ro",
+                "./client/data/ratings.csv:/app/data/ratings.csv:ro",
+                "./client/data/credits.csv:/app/data/credits.csv:ro"
+            ],
             "networks": ["testing_net"],
             "depends_on": ["input_gateway", "output_gateway"]
         }
