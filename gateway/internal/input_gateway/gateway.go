@@ -220,6 +220,7 @@ func (g *Gateway) handleCommonMessage(
 		g.logger.Errorf("failed trying to send movies ack: %v", err)
 		return
 	}
+	g.logger.Infof(fmt.Sprintf("La queries que atiendo es:%s y mi line de mensaje es ", queries, lines[1:]))
 
 	for _, query := range queries {
 

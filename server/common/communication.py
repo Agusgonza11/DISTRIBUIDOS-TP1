@@ -80,7 +80,7 @@ def inicializar_comunicacion():
 
 def enviar_mensaje(canal, routing_key, body, mensaje_original, type=None):
     if puede_enviar(body):
-        logging.info(f"A {routing_key} le voy a enviar: {type}")
+        #logging.info(f"A {routing_key} le voy a enviar: {type}")
         propiedades = config_header(mensaje_original, type)
         canal.basic_publish(
             exchange='',

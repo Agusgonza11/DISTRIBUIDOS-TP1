@@ -60,7 +60,7 @@ class Broker:
                 enviar_func(canal, destino, body, mensaje, tipo)
 
 
-    def distribuir_informacion_random(self, client_id, consulta_id, mensaje, canal, enviar_func, tipo=None):
+    def distribuir_informacion_round_robin(self, client_id, consulta_id, mensaje, canal, enviar_func, tipo=None):
         if consulta_id == 5:
             destino = f'pnl_consult_5_{self.ultimo_nodo_consulta[client_id][CONSULTA_5]}'
         elif consulta_id == 3:
@@ -84,7 +84,7 @@ class Broker:
                     if self.eof_esperar[client_id][consulta_id] == 0:
                         self.distribuir_informacion(client_id, consulta_id, mensaje, canal, enviar_func, EOF)
                 else:
-                    self.distribuir_informacion_random(client_id, consulta_id, mensaje, canal, enviar_func)
+                    self.distribuir_informacion_round_robin(client_id, consulta_id, mensaje, canal, enviar_func)
             else:
                 if tipo_mensaje in {"EOF_CREDITS", "EOF_RATINGS"}:
                     logging.info(f"Recibi EOF: {tipo_mensaje}")
@@ -92,7 +92,7 @@ class Broker:
                     self.distribuir_informacion(client_id, consulta_id, mensaje, canal, enviar_func, tipo_mensaje)
 
                 elif tipo_mensaje in {"CREDITS", "RATINGS"}:
-                    self.distribuir_informacion_random(client_id, consulta_id, mensaje, canal, enviar_func, tipo_mensaje)
+                    self.distribuir_informacion_round_robin(client_id, consulta_id, mensaje, canal, enviar_func, tipo_mensaje)
 
                 elif tipo_mensaje == EOF:
                     self.eof_esperar[client_id][consulta_id] -= 1
