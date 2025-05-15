@@ -3,6 +3,7 @@ import os
 import sys
 from common.utils import prepare_data_consult_1_3_4, prepare_data_consult_2, EOF, prepare_data_consult_5
 from common.communication import iniciar_nodo, obtener_body, obtener_query, obtener_tipo_mensaje
+from common.excepciones import ConsultaInexistente
 
 FILTER = "filter"
 
@@ -29,7 +30,7 @@ class FiltroNode:
                 return self.consulta_5(datos)
             case _:
                 logging.warning(f"Consulta desconocida: {consulta_id}")
-                return []
+                raise ConsultaInexistente(f"Consulta {consulta_id} no encontrada")
 
     def consulta_1(self, datos):
         logging.info("Procesando datos para consulta 1") 
@@ -74,6 +75,7 @@ class FiltroNode:
     def procesar_mensajes(self, canal, destino, mensaje, enviar_func):
         consulta_id = obtener_query(mensaje)
         tipo_mensaje = obtener_tipo_mensaje(mensaje)
+        mensaje['ack']()
         try:
             if tipo_mensaje == EOF:
                 logging.info(f"Consulta {consulta_id} recibió EOF")
@@ -81,7 +83,8 @@ class FiltroNode:
             else:
                 resultado = self.ejecutar_consulta(consulta_id, obtener_body(mensaje))
                 enviar_func(canal, destino, resultado, mensaje, tipo_mensaje)
-            mensaje['ack']()
+        except ConsultaInexistente as e:
+            logging.warning(f"Consulta inexistente: {e}")
         except Exception as e:
             logging.error(f"Error procesando mensaje en consulta {consulta_id}: {e}")
 

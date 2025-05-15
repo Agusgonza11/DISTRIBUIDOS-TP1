@@ -213,14 +213,13 @@ func (g *Gateway) handleCommonMessage(
 	lines []string,
 	messageBuilderFunc func([]string, string) ([]byte, error),
 ) {
-	g.logger.Infof(fmt.Sprintf("%s_ACK:%s", file, batchID))
+	//g.logger.Infof(fmt.Sprintf("%s_ACK:%s", file, batchID))
 
 	err := io.WriteMessage(conn, []byte(fmt.Sprintf("%s_ACK:%s", file, batchID)))
 	if err != nil {
 		g.logger.Errorf("failed trying to send movies ack: %v", err)
 		return
 	}
-	g.logger.Infof(fmt.Sprintf("La queries que atiendo es:%s y mi line de mensaje es ", queries, lines[1:]))
 
 	for _, query := range queries {
 

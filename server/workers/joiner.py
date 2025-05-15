@@ -3,12 +3,12 @@ import logging
 import os
 import tempfile
 import gc
-
 import threading
-from common.utils import EOF, concat_data, create_dataframe, get_batches
+from common.utils import EOF, concat_data, create_dataframe, get_batches, prepare_data_consult_4
 from common.utils import normalize_movies_df, normalize_credits_df, normalize_ratings_df
 from common.communication import iniciar_nodo, obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje
 import pandas as pd # type: ignore
+from common.excepciones import ConsultaInexistente 
 
 JOINER = "joiner"
 
@@ -192,45 +192,27 @@ class JoinerNode:
                 return self.consulta_4(datos, client_id)
             case _:
                 logging.warning(f"Consulta desconocida: {consulta_id}")
-                return []
+                raise ConsultaInexistente(f"Consulta {consulta_id} no encontrada")
 
     def consulta_3(self, datos, client_id):
-        logging.info("Procesando datos para consulta 3")
-        resultados = []
-
+        logging.info("Procesando datos para consulta 3") 
         ratings = concat_data(self.datos[client_id]["ratings"][DATOS])
-        if not ratings.empty:
-            ratings = normalize_ratings_df(ratings)
-            df_merge = datos[["id", "title"]].merge(ratings, on="id", how="inner")
-            resultados.append(df_merge)
-
         self.borrar_info("ratings", client_id)
-
-        if resultados:
-            return pd.concat(resultados, ignore_index=True)
-
-        return False
+        if ratings.empty:
+            return False
+        ranking_arg_post_2000_df = datos[["id", "title"]].merge(ratings, on="id")
+        return ranking_arg_post_2000_df
 
     def consulta_4(self, datos, client_id):
-        logging.info("Procesando datos para consulta 4")
-        resultados = []
-
-        credits = concat_data(self.datos[client_id]["credits"][DATOS])
-        if not credits.empty:
-            credits = normalize_credits_df(credits)
-            df_merge = datos[["id", "title"]].merge(credits, on="id", how="inner")
-            df_merge = df_merge[df_merge['cast'].map(lambda x: len(x) > 0)]
-            if not df_merge.empty:
-                df_cast = df_merge.explode('cast')
-                result = df_cast[['id', 'cast']].rename(columns={'cast': 'name'})
-                resultados.append(result)
-
+        logging.info(f"Procesando datos para consulta 4")
+        credits = prepare_data_consult_4(self.datos[client_id]["credits"][DATOS])
         self.borrar_info("credits", client_id)
-
-        if resultados:
-            return pd.concat(resultados, ignore_index=True)
-
-        return False
+        if credits.empty:
+            return False
+        cast_arg_post_2000_df = datos[["id", "title"]].merge(credits, on="id")
+        df_cast = cast_arg_post_2000_df.explode('cast')
+        cast_and_movie_arg_post_2000_df = df_cast[['id', 'cast']].rename(columns={'cast': 'name'})
+        return cast_and_movie_arg_post_2000_df
 
     def procesar_datos(self, consulta_id, tipo_mensaje, mensaje, client_id):
         contenido = obtener_body(mensaje)
@@ -250,11 +232,10 @@ class JoinerNode:
             datos_cliente = self.resultados_parciales[client_id]
             if not datos_cliente or consulta_id not in datos_cliente:
                 logging.info(f"Para la consulta {consulta_id} NO esta en resultados parciales[{client_id}]")
-                logging.info(resultados_parciales)
                 return False
             datos = concat_data(datos_cliente[consulta_id])
-            datos = normalize_movies_df(datos)
-            logging.info(f"Ejecutando consulta {consulta_id}")
+            #datos = normalize_movies_df(datos)
+            #logging.info(f"Ejecutando consulta {consulta_id}")
 
             resultado = self.ejecutar_consulta(datos, consulta_id, client_id)
             enviar_func(canal, destino, resultado, mensaje, "RESULT")
@@ -283,6 +264,7 @@ class JoinerNode:
         consulta_id = obtener_query(mensaje)
         tipo_mensaje = obtener_tipo_mensaje(mensaje)
         client_id = obtener_client_id(mensaje)
+        mensaje['ack']()
         try:
             if tipo_mensaje == "EOF":
                 logging.info(f"Se recibio todo Movies, consulta {consulta_id} recibió EOF")
@@ -305,7 +287,8 @@ class JoinerNode:
                 if self.datos[client_id]["credits"][LINEAS] != 0 or self.files_on_disk[client_id]["credits"]:
                     self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
                 self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func, client_id)
-            mensaje['ack']()
+        except ConsultaInexistente as e:
+            logging.warning(f"Consulta inexistente: {e}")
         except Exception as e:
             logging.error(f"Error procesando mensaje en consulta {consulta_id}: {e}")
 

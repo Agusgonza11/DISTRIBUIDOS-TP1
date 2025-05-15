@@ -5,6 +5,8 @@ import sys
 from common.utils import EOF, cargar_eofs, concat_data, create_dataframe, prepare_data_aggregator_consult_3
 from common.communication import iniciar_nodo, obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje
 import tracemalloc
+from common.excepciones import ConsultaInexistente
+
 
 AGGREGATOR = "aggregator"
 
@@ -61,8 +63,8 @@ class AggregatorNode:
             case 5:
                 return self.consulta_5(datos)
             case _:
-                logging.warning(f"Consulta desconocida: {consulta_id}")
-                return []
+                logging.warning(f"Consulta desconocida {consulta_id}")
+                raise ConsultaInexistente(f"Consulta {consulta_id} no encontrada")
     
 
     def consulta_2(self, datos):
@@ -98,7 +100,7 @@ class AggregatorNode:
         consulta_id = obtener_query(mensaje)
         tipo_mensaje = obtener_tipo_mensaje(mensaje)
         client_id = obtener_client_id(mensaje)
-
+        mensaje['ack']()
         try:
             if tipo_mensaje == EOF:
                 logging.info(f"Consulta {consulta_id} de aggregator recibió EOF")
@@ -119,10 +121,8 @@ class AggregatorNode:
                     gc.collect()
             else:
                 self.guardar_datos(consulta_id, obtener_body(mensaje), client_id)
-
-
-            mensaje['ack']()
-
+        except ConsultaInexistente as e:
+            logging.warning(f"Consulta inexistente: {e}")
         except Exception as e:
             logging.error(f"Error procesando mensaje en consulta {consulta_id}: {e}")
 

@@ -2,6 +2,7 @@ import sys
 import logging
 from common.utils import EOF, cargar_datos_broker, cargar_eofs
 from common.communication import iniciar_nodo, obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje
+from common.excepciones import ConsultaInexistente
 
 BROKER = "broker"
 
@@ -75,6 +76,7 @@ class Broker:
         consulta_id = obtener_query(mensaje)
         tipo_mensaje = obtener_tipo_mensaje(mensaje)
         client_id = obtener_client_id(mensaje)
+        mensaje['ack']()
         if client_id not in self.clients:
             self.create_client(client_id)
         try:
@@ -101,9 +103,8 @@ class Broker:
 
                 else:
                     logging.error(f"Tipo de mensaje inesperado en consulta {consulta_id}: {tipo_mensaje}")
-
-            mensaje['ack']()
-
+        except ConsultaInexistente as e:
+            logging.warning(f"Consulta inexistente: {e}")    
         except Exception as e:
             logging.error(f"Error procesando mensaje en consulta {consulta_id}: {e}")
 
