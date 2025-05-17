@@ -9,7 +9,6 @@ from common.utils import normalize_movies_df, normalize_credits_df, normalize_ra
 from common.communication import iniciar_nodo, obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje
 import pandas as pd # type: ignore
 from common.excepciones import ConsultaInexistente 
-import time
 
 
 JOINER = "joiner"
@@ -218,14 +217,10 @@ class JoinerNode:
             resultado = self.ejecutar_consulta(datos, consulta_id, client_id)
             enviar_func(canal, destino, resultado, mensaje, "RESULT")
 
-            start = time.perf_counter()
-
             if consulta_id == 3 and self.files_on_disk[client_id]["ratings"]:
                 self.enviar_resultados_disco(datos, client_id, canal, destino, mensaje, enviar_func, consulta_id)
             elif consulta_id == 4 and self.files_on_disk[client_id]["credits"]:
                 self.enviar_resultados_disco(datos, client_id, canal, destino, mensaje, enviar_func, consulta_id)
-            end = time.perf_counter()
-            logging.info(f"Tiempo en ejecutar disco: {end - start:.4f} segundos")
 
         if self.termino_movies[client_id][consulta_id]:
             if self.datos[client_id]["ratings"][TERMINO] or self.datos[client_id]["credits"][TERMINO]:
