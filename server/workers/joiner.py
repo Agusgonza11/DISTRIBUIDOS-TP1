@@ -9,6 +9,8 @@ from common.utils import normalize_movies_df, normalize_credits_df, normalize_ra
 from common.communication import iniciar_nodo, obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje
 import pandas as pd # type: ignore
 from common.excepciones import ConsultaInexistente 
+import time
+
 
 JOINER = "joiner"
 
@@ -160,29 +162,19 @@ class JoinerNode:
         self.datos[client_id][csv][DATOS] = []
         self.datos[client_id][csv][LINEAS] = 0
 
-    def limpiar_consulta_3(self, client_id):
-        path = self.file_paths[client_id]["ratings"]
+    def limpiar_consulta(self, client_id, consulta_id):
+        csv = "ratings" if consulta_id == 3 else "credits"
+        path = self.file_paths[client_id][csv]
         if os.path.exists(path):
             try:
                 os.remove(path)
             except Exception as ex:
                 logging.error(f"No se pudo borrar ratings temp: {ex}")
-        self.files_on_disk[client_id]["ratings"] = False
-        self.file_paths[client_id]["ratings"] = ""
-        self.borrar_info("ratings", client_id)
-        self.resultados_parciales[client_id][3] = []
-
-    def limpiar_consulta_4(self, client_id):
-        path = self.file_paths[client_id]["credits"]
-        if os.path.exists(path):
-            try:
-                os.remove(path)
-            except Exception as ex:
-                logging.error(f"No se pudo borrar credits temp: {ex}")
-        self.files_on_disk[client_id]["credits"] = False
-        self.file_paths[client_id]["credits"] = ""
-        self.borrar_info("credits", client_id)
-        self.resultados_parciales[client_id][4] = []
+        self.files_on_disk[client_id][csv] = False
+        self.file_paths[client_id][csv] = ""
+        self.borrar_info(csv, client_id)
+        self.resultados_parciales[client_id][consulta_id] = []
+        gc.collect()
 
     def ejecutar_consulta(self, datos, consulta_id, client_id):
         match consulta_id:
@@ -225,33 +217,34 @@ class JoinerNode:
 
     def procesar_resultado(self, consulta_id, canal, destino, mensaje, enviar_func, client_id):
         if self.puede_enviar(consulta_id, client_id):
+            start = time.perf_counter()
             if client_id not in self.resultados_parciales:
                 logging.info(f"Para el cliente {client_id} NO esta en resultados parciales")
-
                 return False
             datos_cliente = self.resultados_parciales[client_id]
             if not datos_cliente or consulta_id not in datos_cliente:
                 logging.info(f"Para la consulta {consulta_id} NO esta en resultados parciales[{client_id}]")
                 return False
             datos = concat_data(datos_cliente[consulta_id])
-            #datos = normalize_movies_df(datos)
-            #logging.info(f"Ejecutando consulta {consulta_id}")
 
             resultado = self.ejecutar_consulta(datos, consulta_id, client_id)
             enviar_func(canal, destino, resultado, mensaje, "RESULT")
+            end = time.perf_counter()
+            logging.info(f"Tiempo en ejecutar consulta: {end - start:.4f} segundos")
 
+            start = time.perf_counter()
+            #Esto tarda revisar
             if consulta_id == 3 and self.files_on_disk[client_id]["ratings"]:
                 self.enviar_resultados_ratings_disco(datos, client_id, canal, destino, mensaje, enviar_func)
             elif consulta_id == 4 and self.files_on_disk[client_id]["credits"]:
                 self.enviar_resultados_credits_disco(datos, client_id, canal, destino, mensaje, enviar_func)
+            end = time.perf_counter()
+            logging.info(f"Tiempo en ejecutar disco: {end - start:.4f} segundos")
 
         if self.termino_movies[client_id][consulta_id]:
-            if consulta_id == 3 and self.datos[client_id]["ratings"][TERMINO]:
-                self.limpiar_consulta_3(client_id)
-            if consulta_id == 4 and self.datos[client_id]["credits"][TERMINO]:
-                self.limpiar_consulta_4(client_id)
+            if self.datos[client_id]["ratings"][TERMINO] or self.datos[client_id]["credits"][TERMINO]:
+                self.limpiar_consulta(client_id, consulta_id)
 
-            gc.collect()
 
     def enviar_eof(self, consulta_id, canal, destino, mensaje, enviar_func, client_id):
         if self.termino_movies[client_id][consulta_id] and (
