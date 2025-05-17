@@ -81,7 +81,6 @@ class JoinerNode:
     def almacenar_csv(self, consulta_id, datos, client_id):
         csv = "ratings" if consulta_id == 3 else "credits"
         df = create_dataframe(datos)
-
         if csv == "ratings":
             df = normalize_ratings_df(df)
         elif csv == "credits":
@@ -104,13 +103,13 @@ class JoinerNode:
                     self.files_on_disk[client_id][csv] = True
                 self.borrar_info(csv, client_id)
 
-    def leer_batches_de_disco(self, client_id, csv, batch_size):
+    def leer_batches_de_disco(self, client_id, csv):
+        batch_size = BATCH_RATINGS if csv == "ratings" else BATCH_CREDITS
         with self.locks[client_id][csv]:
             file_path = self.file_paths[client_id][csv]
             if not os.path.exists(file_path):
                 logging.info(f"Filepath doesn't exist {file_path}")
                 return
-
             for batch in pd.read_csv(file_path, chunksize=batch_size):
                 if csv == "ratings":
                     batch = normalize_ratings_df(batch)
@@ -118,32 +117,24 @@ class JoinerNode:
                     batch = normalize_credits_df(batch)
                 yield batch
 
-    def enviar_resultados_credits_disco(self, datos, client_id, canal, destino, mensaje, enviar_func):
-        for batch in self.leer_batches_de_disco(client_id, "credits", BATCH_CREDITS):
-            self.procesar_y_enviar_batch_credit(batch, datos, canal, destino, mensaje, enviar_func)
-            del batch
-            gc.collect()
+    def enviar_resultados_disco(self, datos, client_id, canal, destino, mensaje, enviar_func, consulta_id):
+        csv = "ratings" if consulta_id == 3 else "credits"
+        for batch in self.leer_batches_de_disco(client_id, csv):
+            if consulta_id == 3:
+                self.procesar_y_enviar_batch_ratings(batch, datos, canal, destino, mensaje, enviar_func)
+            else:
+                self.procesar_y_enviar_batch_credit(batch, datos, canal, destino, mensaje, enviar_func)
+            batch = None
         try:
-            os.remove(self.file_paths[client_id]["credits"])
-        except Exception as e:
-            logging.error(f"No se pudo borrar el archivo temporal credits: {e}")
-
-        self.files_on_disk[client_id]["credits"] = False
-
-    def enviar_resultados_ratings_disco(self, datos, client_id, canal, destino, mensaje, enviar_func):
-        for batch in self.leer_batches_de_disco(client_id, "ratings", BATCH_RATINGS):
-            self.procesar_y_enviar_batch_ratings(batch, datos, canal, destino, mensaje, enviar_func)
-            del batch
             gc.collect()
-        try:
-            os.remove(self.file_paths[client_id]["ratings"])
+            os.remove(self.file_paths[client_id][csv])
         except Exception as e:
-            logging.error(f"No se pudo borrar el archivo temporal ratings: {e}")
-        self.files_on_disk[client_id]["ratings"] = False
+            logging.error(f"No se pudo borrar el archivo temporal {csv}: {e}")
+        self.files_on_disk[client_id][csv] = False
+
 
     def procesar_y_enviar_batch_credit(self, batch, datos, canal, destino, mensaje, enviar_func):
         if batch is not None and not batch.empty:
-            batch = normalize_credits_df(batch)
             df_merge = datos[["id", "title"]].merge(batch, on="id", how="inner")
             df_merge = df_merge[df_merge['cast'].map(lambda x: len(x) > 0)]
             if not df_merge.empty:
@@ -153,7 +144,6 @@ class JoinerNode:
 
     def procesar_y_enviar_batch_ratings(self, batch, datos, canal, destino, mensaje, enviar_func):
         if batch is not None and not batch.empty:
-            batch = normalize_ratings_df(batch)
             df_merge = datos[["id", "title"]].merge(batch, on="id", how="inner")
             if not df_merge.empty:
                 enviar_func(canal, destino, df_merge, mensaje, "RESULT")
@@ -217,7 +207,6 @@ class JoinerNode:
 
     def procesar_resultado(self, consulta_id, canal, destino, mensaje, enviar_func, client_id):
         if self.puede_enviar(consulta_id, client_id):
-            start = time.perf_counter()
             if client_id not in self.resultados_parciales:
                 logging.info(f"Para el cliente {client_id} NO esta en resultados parciales")
                 return False
@@ -226,18 +215,15 @@ class JoinerNode:
                 logging.info(f"Para la consulta {consulta_id} NO esta en resultados parciales[{client_id}]")
                 return False
             datos = concat_data(datos_cliente[consulta_id])
-
             resultado = self.ejecutar_consulta(datos, consulta_id, client_id)
             enviar_func(canal, destino, resultado, mensaje, "RESULT")
-            end = time.perf_counter()
-            logging.info(f"Tiempo en ejecutar consulta: {end - start:.4f} segundos")
 
             start = time.perf_counter()
-            #Esto tarda revisar
+
             if consulta_id == 3 and self.files_on_disk[client_id]["ratings"]:
-                self.enviar_resultados_ratings_disco(datos, client_id, canal, destino, mensaje, enviar_func)
+                self.enviar_resultados_disco(datos, client_id, canal, destino, mensaje, enviar_func, consulta_id)
             elif consulta_id == 4 and self.files_on_disk[client_id]["credits"]:
-                self.enviar_resultados_credits_disco(datos, client_id, canal, destino, mensaje, enviar_func)
+                self.enviar_resultados_disco(datos, client_id, canal, destino, mensaje, enviar_func, consulta_id)
             end = time.perf_counter()
             logging.info(f"Tiempo en ejecutar disco: {end - start:.4f} segundos")
 
