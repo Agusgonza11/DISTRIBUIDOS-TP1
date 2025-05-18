@@ -10,15 +10,21 @@ const ResultACK = "RESULT_ACK"
 const EndOfFileACK = "EOF_ACK"
 
 const (
+	MoviesService  string = "MOVIES"
+	CreditsService string = "CREDITS"
+	RatingsService string = "RATINGS"
+)
+
+var eofACKs = map[string]string{
+	MoviesService:  "MOVIES_EOF_ACK",
+	CreditsService: "CREDITS_EOF_ACK",
+	RatingsService: "RATINGS_EOF_ACK",
+}
+
+const (
 	QueryArgentinaEsp                 string = "ARGENTINIAN-SPANISH-PRODUCTIONS"  // Consulta 1
 	QueryTopInvestors                 string = "TOP-INVESTING-COUNTRIES"          // Consulta 2
 	QueryTopArgentinianMoviesByRating string = "TOP-ARGENTINIAN-MOVIES-BY-RATING" // Consulta 3
 	QueryTopArgentinianActors         string = "TOP-ARGENTINIAN-ACTORS"           // Consulta 4
 	QuerySentimentAnalysis                   = "SENTIMENT-ANALYSIS"               // Consulta 5
-)
-
-const (
-	MoviesService  string = "MOVIES"
-	CreditsService string = "CREDITS"
-	RatingsService string = "RATINGS"
 )

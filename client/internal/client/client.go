@@ -42,197 +42,75 @@ func NewClient(config config.Config, logger *logging.Logger) *Client {
 		conns:       make(map[string]net.Conn),
 		outputFiles: make(map[string]*os.File),
 	}
+
 }
 
 func (c *Client) ProcessQuery(ctx context.Context, queries []string) {
+	defer c.closeOutputFiles()
+	defer c.closeConn()
+
 	go func() {
 		c.gracefulShutdown(ctx)
 	}()
+
+	if err := c.connectToGateway(ctx); err != nil {
+		c.logger.Errorf("failed trying to connect to input gateway: %v", err)
+		return
+	}
+
+	wg := sync.WaitGroup{}
+
+	var moviesQueries []string
+	var sendCredits, sendRatings bool
 	for _, query := range queries {
-		switch query {
-		case QueryArgentinaEsp:
-			c.processArgentinianSpanishProductions(ctx)
-		case QueryTopInvestors:
-			c.processTopInvestingCountries(ctx)
-		case QueryTopArgentinianMoviesByRating:
-			c.processTopArgentinianMoviesByRating(ctx)
-		case QueryTopArgentinianActors:
-			c.processTopArgentinianActors(ctx)
-		case QuerySentimentAnalysis:
-			c.processSentimentAnalysis(ctx)
-		default:
-			c.logger.Infof("unknown query type: %v", query)
+		if err := c.createOutputFile(query); err != nil {
+			c.logger.Errorf("failed to create output file: %v", err)
+			continue
+		}
+
+		moviesQueries = append(moviesQueries, query)
+
+		if query == QueryTopArgentinianMoviesByRating {
+			sendRatings = true
+		}
+
+		if query == QueryTopArgentinianActors {
+			sendCredits = true
 		}
 	}
-}
 
-func (c *Client) processArgentinianSpanishProductions(ctx context.Context) {
-	err := c.connectToGateway(ctx)
-	if err != nil {
-		c.logger.Errorf("failed trying to connect to input gateway: %v", err)
-		return
-	}
-
-	defer c.closeConn()
-
-	err = c.createOutputFile(QueryArgentinaEsp)
-	if err != nil {
-		return
-	}
-
-	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		c.sendMovies(QueryArgentinaEsp)
+		_ = c.sendMovies(moviesQueries)
 	}()
 
+	if sendCredits {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_ = c.sendCredits(QueryTopArgentinianActors)
+		}()
+	}
+
+	if sendRatings {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_ = c.sendRatings(QueryTopArgentinianMoviesByRating)
+		}()
+	}
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		c.handleResults(ctx, QueryArgentinaEsp)
+		c.handleResults(ctx, len(queries))
 	}()
 
 	wg.Wait()
 }
 
-func (c *Client) processTopInvestingCountries(ctx context.Context) {
-	err := c.connectToGateway(ctx)
-	if err != nil {
-		c.logger.Errorf("failed trying to connect to input gateway: %v", err)
-		return
-	}
-
-	defer c.closeConn()
-
-	err = c.createOutputFile(QueryTopInvestors)
-	if err != nil {
-		return
-	}
-
-	wg := sync.WaitGroup{}
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		c.handleResults(ctx, QueryTopInvestors)
-	}()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		c.sendMovies(QueryTopInvestors)
-	}()
-
-	wg.Wait()
-}
-
-func (c *Client) processTopArgentinianMoviesByRating(ctx context.Context) {
-	err := c.connectToGateway(ctx)
-	if err != nil {
-		c.logger.Errorf("failed trying to connect to input gateway: %v", err)
-		return
-	}
-
-	defer c.closeConn()
-
-	err = c.createOutputFile(QueryTopArgentinianMoviesByRating)
-	if err != nil {
-		return
-	}
-
-	wg := sync.WaitGroup{}
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		c.handleResults(ctx, QueryTopArgentinianMoviesByRating)
-	}()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		c.sendMovies(QueryTopArgentinianMoviesByRating)
-	}()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		c.sendRatings(QueryTopArgentinianMoviesByRating)
-	}()
-
-	wg.Wait()
-}
-
-func (c *Client) processTopArgentinianActors(ctx context.Context) {
-	err := c.connectToGateway(ctx)
-	if err != nil {
-		c.logger.Errorf("failed trying to connect to input gateway: %v", err)
-		return
-	}
-
-	defer c.closeConn()
-
-	err = c.createOutputFile(QueryTopArgentinianActors)
-	if err != nil {
-		return
-	}
-
-	wg := sync.WaitGroup{}
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		c.handleResults(ctx, QueryTopArgentinianActors)
-	}()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		c.sendMovies(QueryTopArgentinianActors)
-	}()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		c.sendCredits(QueryTopArgentinianActors)
-	}()
-
-	wg.Wait()
-}
-
-func (c *Client) processSentimentAnalysis(ctx context.Context) {
-	err := c.connectToGateway(ctx)
-	if err != nil {
-		c.logger.Errorf("failed trying to connect to input gateway: %v", err)
-		return
-	}
-
-	defer c.closeConn()
-
-	err = c.createOutputFile(QuerySentimentAnalysis)
-	if err != nil {
-		return
-	}
-
-	wg := sync.WaitGroup{}
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		c.handleResults(ctx, QuerySentimentAnalysis)
-	}()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		c.sendMovies(QuerySentimentAnalysis)
-	}()
-
-	wg.Wait()
-}
-
-func (c *Client) sendMovies(query string) error {
+func (c *Client) sendMovies(queries []string) error {
 	file, err := os.Open(c.config.MoviesFilePath)
 	if err != nil {
 		log.Fatal(err)
@@ -248,7 +126,7 @@ func (c *Client) sendMovies(query string) error {
 	var batchID int
 	var batchSize int
 
-	c.logger.Infof("Starting to send for query %s", query)
+	c.logger.Infof("Starting to send Movies for queries %s", strings.Join(queries, ","))
 
 	for {
 		line, err := reader.Read()
@@ -265,7 +143,7 @@ func (c *Client) sendMovies(query string) error {
 		movieSize, _ := json.Marshal(movie)
 
 		if len(batch) >= c.config.BatchSize || batchSize+len(movieSize) > c.config.BatchLimitAmount {
-			if err := c.sendMoviesBatch(batch, query, batchID); err != nil {
+			if err := c.sendMoviesBatch(batch, queries, batchID); err != nil {
 				c.logger.Errorf("failed trying to send movies batch: %v", err)
 				return err
 			}
@@ -279,12 +157,12 @@ func (c *Client) sendMovies(query string) error {
 		batchSize += len(movieSize)
 	}
 
-	if err := c.sendMoviesBatch(batch, query, batchID); err != nil {
+	if err := c.sendMoviesBatch(batch, queries, batchID); err != nil {
 		c.logger.Errorf("failed trying to send movies batch: %v", err)
 		return err
 	}
 
-	err = c.sendEOF(query, MoviesService)
+	err = c.sendEOF(strings.Join(queries, "|"), MoviesService)
 	if err != nil {
 		c.logger.Errorf("failed trying to send EOF message: %v", err)
 		return err
@@ -309,7 +187,7 @@ func (c *Client) sendCredits(query string) error {
 	var batchID int
 	var batchSize int
 
-	c.logger.Infof("Starting to send for query %s", query)
+	c.logger.Infof("Starting to send Credits for query %s", query)
 
 	for {
 		line, err := reader.Read()
@@ -370,7 +248,7 @@ func (c *Client) sendRatings(query string) error {
 	var batchID int
 	var batchSize int
 
-	c.logger.Infof("Starting to send for query %s", query)
+	c.logger.Infof("Starting to send Ratings for query %s", query)
 
 	for {
 		line, err := reader.Read()
@@ -429,7 +307,7 @@ func (c *Client) createOutputFile(query string) error {
 	return nil
 }
 
-func (c *Client) handleResults(ctx context.Context, query string) {
+func (c *Client) handleResults(ctx context.Context, totalQueries int) {
 	dialer := net.Dialer{}
 
 	conn, err := dialer.DialContext(ctx, "tcp", c.config.OutputGatewayAddress)
@@ -453,8 +331,13 @@ func (c *Client) handleResults(ctx context.Context, query string) {
 		return
 	}
 
+	c.logger.Info("Handling message results")
+
 	for {
-		c.logger.Infof("Handling message result for query %s", query)
+		if totalQueries == 0 {
+			break
+		}
+
 		response, err := io.ReadMessage(conn)
 		if err != nil {
 			c.logger.Errorf(fmt.Sprintf("failed trying to fetch results: %v", err))
@@ -471,8 +354,9 @@ func (c *Client) handleResults(ctx context.Context, query string) {
 		query := lines[0]
 
 		if strings.TrimSpace(lines[1]) == EndOfFileMessage {
+			totalQueries--
 			c.logger.Infof("Query %s received successfully!", query)
-			break
+			continue
 		}
 
 		err = io.WriteMessage(conn, []byte(ResultACK))
@@ -503,7 +387,7 @@ func (c *Client) sendEOF(query string, service string) error {
 
 	c.logger.Infof("Received EOF response: %v", response)
 
-	if EndOfFileACK != strings.TrimSpace(response) {
+	if eofACKs[service] != strings.TrimSpace(response) {
 		errMessage := fmt.Sprintf("expected message ACK '%s', got '%s'", EndOfFileACK, response)
 		c.logger.Errorf(errMessage)
 		return errors.New(errMessage)
@@ -512,12 +396,12 @@ func (c *Client) sendEOF(query string, service string) error {
 	return nil
 }
 
-func (c *Client) sendMoviesBatch(batch []*models.Movie, query string, batchID int) error {
+func (c *Client) sendMoviesBatch(batch []*models.Movie, queries []string, batchID int) error {
 	if len(batch) == 0 {
 		return nil
 	}
 
-	message := c.buildMoviesBatchMessage(batch, query, batchID)
+	message := c.buildMoviesBatchMessage(batch, queries, batchID)
 
 	err := io.WriteMessage(c.conns[MoviesService], []byte(message))
 	if err != nil {
@@ -671,7 +555,7 @@ func (c *Client) closeConn() {
 	}
 }
 
-func (c *Client) buildMoviesBatchMessage(movies []*models.Movie, query string, batchID int) string {
+func (c *Client) buildMoviesBatchMessage(movies []*models.Movie, queries []string, batchID int) string {
 	var sb strings.Builder
 
 	for _, movie := range movies {
@@ -687,7 +571,9 @@ func (c *Client) buildMoviesBatchMessage(movies []*models.Movie, query string, b
 		))
 	}
 
-	return fmt.Sprintf("%s,MOVIES,%s,%d\n%s", query, c.id, batchID, sb.String())
+	queryString := strings.Join(queries, "|")
+	return fmt.Sprintf("%s,MOVIES,%s,%d\n%s", queryString, c.id, batchID, sb.String())
+
 }
 
 func (c *Client) buildCreditsBatchMessage(credits []*models.Credit, query string, batchID int) string {
@@ -712,8 +598,17 @@ func (c *Client) buildRatingsBatchMessage(ratings []*models.Rating, query string
 
 func (c *Client) gracefulShutdown(ctx context.Context) {
 	<-ctx.Done()
+	c.closeOutputFiles()
 	for _, conn := range c.conns {
 		conn.Close()
+	}
+}
+
+func (c *Client) closeOutputFiles() {
+	for _, file := range c.outputFiles {
+		if file != nil {
+			file.Close()
+		}
 	}
 }
 
