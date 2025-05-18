@@ -7,18 +7,18 @@ from common.utils import cargar_broker, cargar_eof_a_enviar, create_body, gracef
 # ENRUTAMIENTO DE MENSAJE
 # ----------------------
 COLAS = {
-    "filter_consult_1": "gateway_output",
-    "filter_consult_2": "aggregator_consult_2",
-    "filter_consult_3": "broker",
-    "filter_consult_4": "broker",
-    "filter_consult_5": "broker",
-    "aggregator_consult_2": "gateway_output",
-    "aggregator_consult_3": "gateway_output",
-    "aggregator_consult_4": "gateway_output",
-    "aggregator_consult_5": "gateway_output",
-    "pnl_consult_5": "aggregator_consult_5",
-    "joiner_consult_3": "aggregator_consult_3",
-    "joiner_consult_4": "aggregator_consult_4",
+    "filter_request_1": "gateway_output",
+    "filter_request_2": "aggregator_request_2",
+    "filter_request_3": "broker",
+    "filter_request_4": "broker",
+    "filter_request_5": "broker",
+    "aggregator_request_2": "gateway_output",
+    "aggregator_request_3": "gateway_output",
+    "aggregator_request_4": "gateway_output",
+    "aggregator_request_5": "gateway_output",
+    "pnl_request_5": "aggregator_request_5",
+    "joiner_request_3": "aggregator_request_3",
+    "joiner_request_4": "aggregator_request_4",
 }
 
 QUERY = {
@@ -98,7 +98,7 @@ def enviar_mensaje(canal, routing_key, body, mensaje_original, type=None):
 
 def escuchar_colas(entrada, nodo, consultas, canal):        
     for consulta_id in consultas:
-        nombre_entrada = f"{entrada}_consult_{consulta_id}"
+        nombre_entrada = f"{entrada}_request_{consulta_id}"
         nombre_salida = COLAS[nombre_entrada]
 
         canal.queue_declare(queue=nombre_entrada, durable=True)
@@ -118,9 +118,9 @@ def escuchar_colas_broker(nodo, canal):
     colas_salida = []
     for joiner_id, consultas in joiners.items():
         for consulta_id in consultas:
-            colas_salida.append(f"joiner_consult_{consulta_id}_{joiner_id}")
+            colas_salida.append(f"joiner_request_{consulta_id}_{joiner_id}")
     for i in range(1, pnl[5] + 1):
-        colas_salida.append(f"pnl_consult_5_{i}")
+        colas_salida.append(f"pnl_request_5_{i}")
 
     for nombre_salida in colas_salida:
         canal.queue_declare(queue=nombre_salida, durable=True)
@@ -132,13 +132,13 @@ def escuchar_colas_broker(nodo, canal):
 def escuchar_colas_joiner(nodo, consultas, canal, joiner_id):   
     colas_entrada = []
     for consulta_id in consultas:
-        colas_entrada.append(f"joiner_consult_{consulta_id}")
+        colas_entrada.append(f"joiner_request_{consulta_id}")
     for consulta_id in consultas:
-        colas_entrada.append(f"joiner_consult_{consulta_id}_{joiner_id}")
+        colas_entrada.append(f"joiner_request_{consulta_id}_{joiner_id}")
 
     for nombre_entrada in colas_entrada:
         canal.queue_declare(queue=nombre_entrada, durable=True)
-        nombre_salida = "aggregator_consult_3" if "3" in nombre_entrada else "aggregator_consult_4"        
+        nombre_salida = "aggregator_request_3" if "3" in nombre_entrada else "aggregator_request_4"        
         canal.queue_declare(queue=nombre_salida, durable=True)
         generalizo_callback(nombre_entrada, nombre_salida, canal, nodo)
 
@@ -146,9 +146,9 @@ def escuchar_colas_joiner(nodo, consultas, canal, joiner_id):
 
 def escuchar_colas_pnl(nodo, consultas, canal, pnl_id):   
 
-    nombre_entrada = f"pnl_consult_5_{pnl_id}"
+    nombre_entrada = f"pnl_request_5_{pnl_id}"
     canal.queue_declare(queue=nombre_entrada, durable=True)
-    nombre_salida = "aggregator_consult_5"
+    nombre_salida = "aggregator_request_5"
     canal.queue_declare(queue=nombre_salida, durable=True)
     generalizo_callback(nombre_entrada, nombre_salida, canal, nodo)
     canal.start_consuming()

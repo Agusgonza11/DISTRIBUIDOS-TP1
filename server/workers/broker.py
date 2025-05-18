@@ -52,22 +52,22 @@ class Broker:
     def distribuir_informacion(self, client_id, consulta_id, mensaje, canal, enviar_func, tipo=None):
         if consulta_id == 5:
             for pnl_id in range(1, self.nodos_enviar[client_id][consulta_id] + 1):
-                destino = f'pnl_consult_5_{pnl_id}'
+                destino = f'pnl_request_5_{pnl_id}'
                 enviar_func(canal, destino, obtener_body(mensaje), mensaje, tipo)
         else:
             for joiner_id in self.nodos_enviar[client_id][consulta_id]:
-                destino = f'joiner_consult_{consulta_id}_{joiner_id}'
+                destino = f'joiner_request_{consulta_id}_{joiner_id}'
                 body = EOF if tipo != "MOVIES" else obtener_body(mensaje)
                 enviar_func(canal, destino, body, mensaje, tipo)
 
 
     def distribuir_informacion_round_robin(self, client_id, consulta_id, mensaje, canal, enviar_func, tipo=None):
         if consulta_id == 5:
-            destino = f'pnl_consult_5_{self.ultimo_nodo_consulta[client_id][CONSULTA_5]}'
+            destino = f'pnl_request_5_{self.ultimo_nodo_consulta[client_id][CONSULTA_5]}'
         elif consulta_id == 3:
-            destino = f'joiner_consult_3_{self.ultimo_nodo_consulta[client_id][CONSULTA_3]}'
+            destino = f'joiner_request_3_{self.ultimo_nodo_consulta[client_id][CONSULTA_3]}'
         elif consulta_id == 4:
-            destino = f'joiner_consult_4_{self.ultimo_nodo_consulta[client_id][CONSULTA_4]}'
+            destino = f'joiner_request_4_{self.ultimo_nodo_consulta[client_id][CONSULTA_4]}'
         self.siguiente_nodo(consulta_id, client_id)
         enviar_func(canal, destino, obtener_body(mensaje), mensaje, tipo)
 
