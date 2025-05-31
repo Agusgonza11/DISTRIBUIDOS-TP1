@@ -97,8 +97,8 @@ class FiltroNode:
 
 if __name__ == "__main__":
     proceso_nodo = Process(target=iniciar_nodo, args=(FILTER, FiltroNode(), os.getenv("CONSULTAS", "")))
-    monitor = HealthMonitor()
-    proceso_monitor = Process(target=monitor.run, args=(FILTER))
+    monitor = HealthMonitor(FILTER)
+    proceso_monitor = Process(target=monitor.run)
 
     proceso_nodo.start()
     proceso_monitor.start()

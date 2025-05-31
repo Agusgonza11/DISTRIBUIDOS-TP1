@@ -76,9 +76,26 @@ services:
     environment:
     - WORKER_ID=1
     - WORKER_TYPE=FILTER
-    - CONSULTAS=1,2,3,4,5
+    - CONSULTAS=1,3,5
+    - REINICIO=false
+    - NODO_SIGUIENTE=filter2
+    - NODO_ANTERIOR=broker
+    networks:
+    - testing_net
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+  filter2:
+    container_name: filter2
+    image: filter:latest
+    entrypoint: python3 workers/filter.py
+    environment:
+    - WORKER_ID=2
+    - WORKER_TYPE=FILTER
+    - CONSULTAS=2,4
     - REINICIO=false
     - NODO_SIGUIENTE=joiner1
+    - NODO_ANTERIOR=filter1
     networks:
     - testing_net
     depends_on:
@@ -95,6 +112,7 @@ services:
     - EOF_ESPERADOS=3:1,4:1
     - REINICIO=false
     - NODO_SIGUIENTE=aggregator1
+    - NODO_ANTERIOR=filter2
     networks:
     - testing_net
     depends_on:
@@ -111,6 +129,7 @@ services:
     - EOF_ESPERADOS=2:1,3:1,4:1,5:1
     - REINICIO=false
     - NODO_SIGUIENTE=pnl1
+    - NODO_ANTERIOR=joiner1
     networks:
     - testing_net
     depends_on:
@@ -127,6 +146,7 @@ services:
     - EOF_ESPERADOS=5:1
     - REINICIO=false
     - NODO_SIGUIENTE=broker
+    - NODO_ANTERIOR=aggregator1
     networks:
     - testing_net
     depends_on:
@@ -142,6 +162,7 @@ services:
     - JOINERS=1:[3, 4]
     - REINICIO=false
     - NODO_SIGUIENTE=filter1
+    - NODO_ANTERIOR=pnl1
     networks:
     - testing_net
     depends_on:

@@ -153,14 +153,14 @@ def agregar_broker(compose, anillo, cant_filter=1, cant_joiner=1, cant_aggregato
                         f"EOF_ENVIAR={eof_str_agg}",
                         f"JOINERS={str_joiners}",
                         f"REINICIO=false",
-                        f"NODO_SIGUIENTE={anillo['broker']}"
+                        f"NODO_SIGUIENTE={anillo['broker']['siguiente']}",
+                        f"NODO_ANTERIOR={anillo['broker']['anterior']}"
                         ],
                     "networks": ["testing_net"],
                     "depends_on": {
                             "rabbitmq": {"condition": "service_healthy"}
                     }
                 }
-
 
 def agregar_workers(compose, anillo, cant_filter=1, cant_joiner=1, cant_aggregator=1, cant_pnl=1):
     # Distribuir consultas por tipo de nodo
@@ -201,7 +201,8 @@ def agregar_workers(compose, anillo, cant_filter=1, cant_joiner=1, cant_aggregat
                 env.append(f"EOF_ESPERADOS={eof_str}")
 
             env.append("REINICIO=false")
-            env.append(f"NODO_SIGUIENTE={anillo[nombre]}")
+            env.append(f"NODO_SIGUIENTE={anillo[nombre]['siguiente']}")
+            env.append(f"NODO_ANTERIOR={anillo[nombre]['anterior']}")
 
             # Agregar al compose
             compose["services"][nombre] = {
@@ -312,14 +313,18 @@ def crear_anillo(cant_filter, cant_joiner, cant_aggregator, cant_pnl):
     
     nodos = filtros + joiners + aggregators + pnls + [broker]
     
-    # Construir el anillo con siguiente nodo
     n = len(nodos)
     anillo = {}
     for i, nodo in enumerate(nodos):
-        siguiente = nodos[(i + 1) % n]  # El último apunta al primero
-        anillo[nodo] = siguiente
+        siguiente = nodos[(i + 1) % n]   # El siguiente nodo (circular)
+        anterior = nodos[(i - 1) % n]    # El nodo anterior (circular)
+        anillo[nodo] = {
+            "siguiente": siguiente,
+            "anterior": anterior
+        }
     
     return anillo
+
 
 
 def construir_env_input_gateway(consultas_por_nodo):
