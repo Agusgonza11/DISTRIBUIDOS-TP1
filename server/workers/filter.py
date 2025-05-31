@@ -98,12 +98,10 @@ class FiltroNode:
 if __name__ == "__main__":
     proceso_nodo = Process(target=iniciar_nodo, args=(FILTER, FiltroNode(), os.getenv("CONSULTAS", "")))
     monitor = HealthMonitor()
-    proceso_monitor = Process(target=monitor.run)
+    proceso_monitor = Process(target=monitor.run, args=(FILTER))
 
-    # Iniciar ambos procesos
     proceso_nodo.start()
     proceso_monitor.start()
 
-    # Esperar a que terminen (opcional)
     proceso_nodo.join()
     proceso_monitor.join()

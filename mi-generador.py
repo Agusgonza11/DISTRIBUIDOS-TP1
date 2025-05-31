@@ -134,7 +134,7 @@ def calcular_eofs(tipo, distribucion):
 
     return eof_dict
 
-def agregar_broker(compose, cant_filter=1, cant_joiner=1, cant_aggregator=1, cant_pnl=1):
+def agregar_broker(compose, anillo, cant_filter=1, cant_joiner=1, cant_aggregator=1, cant_pnl=1, ):
     consultas_por_nodo = distribuir_consultas_por_nodo(cant_filter, cant_joiner, cant_aggregator, cant_pnl)
     eof_aggregator = calcular_eofs("aggregator", consultas_por_nodo)
     eof_str_agg = ",".join(f"{k}:{v}" for k, v in eof_aggregator.items())
@@ -144,7 +144,6 @@ def agregar_broker(compose, cant_filter=1, cant_joiner=1, cant_aggregator=1, can
     eof_str_joiner = ",".join(f"{k}:{v}" for k, v in eof_joiner.items())
     joiners = get_joiners_consultas_from_compose(compose)
     str_joiners = ";".join(f"{k}:{v}" for k, v in joiners.items())
-
     compose["services"]["broker"] = {
                     "container_name": "broker",
                     "image": "broker:latest",
@@ -153,6 +152,8 @@ def agregar_broker(compose, cant_filter=1, cant_joiner=1, cant_aggregator=1, can
                         f"EOF_ESPERADOS={eof_str_joiner}",
                         f"EOF_ENVIAR={eof_str_agg}",
                         f"JOINERS={str_joiners}",
+                        f"REINICIO=false",
+                        f"NODO_SIGUIENTE={anillo['broker']}"
                         ],
                     "networks": ["testing_net"],
                     "depends_on": {
@@ -161,7 +162,7 @@ def agregar_broker(compose, cant_filter=1, cant_joiner=1, cant_aggregator=1, can
                 }
 
 
-def agregar_workers(compose, cant_filter=1, cant_joiner=1, cant_aggregator=1, cant_pnl=1):
+def agregar_workers(compose, anillo, cant_filter=1, cant_joiner=1, cant_aggregator=1, cant_pnl=1):
     # Distribuir consultas por tipo de nodo
     consultas_por_nodo = distribuir_consultas_por_nodo(cant_filter, cant_joiner, cant_aggregator, cant_pnl)
 
@@ -199,6 +200,8 @@ def agregar_workers(compose, cant_filter=1, cant_joiner=1, cant_aggregator=1, ca
                 eof_str = ",".join(f"{k}:{v}" for k, v in eof_aggregator.items())
                 env.append(f"EOF_ESPERADOS={eof_str}")
 
+            env.append("REINICIO=false")
+            env.append(f"NODO_SIGUIENTE={anillo[nombre]}")
 
             # Agregar al compose
             compose["services"][nombre] = {
@@ -293,11 +296,31 @@ def generar_yaml(clients, cant_filter, cant_joiner, cant_aggregator, cant_pnl):
             }
         }
     }
-
+    anillo = crear_anillo(cant_filter, cant_joiner, cant_aggregator, cant_pnl)
     agregar_clientes(compose, clients)
-    agregar_workers(compose, cant_filter, cant_joiner, cant_aggregator, cant_pnl)
-    agregar_broker(compose, cant_filter, cant_joiner, cant_aggregator, cant_pnl)
+    agregar_workers(compose, anillo, cant_filter, cant_joiner, cant_aggregator, cant_pnl)
+    agregar_broker(compose, anillo, cant_filter, cant_joiner, cant_aggregator, cant_pnl)
     return compose
+
+def crear_anillo(cant_filter, cant_joiner, cant_aggregator, cant_pnl):
+    filtros = [f"filter{i+1}" for i in range(cant_filter)]
+    joiners = [f"joiner{i+1}" for i in range(cant_joiner)]
+    aggregators = [f"aggregator{i+1}" for i in range(cant_aggregator)]
+    pnls = [f"pnl{i+1}" for i in range(cant_pnl)]
+    
+    broker = "broker"
+    
+    nodos = filtros + joiners + aggregators + pnls + [broker]
+    
+    # Construir el anillo con siguiente nodo
+    n = len(nodos)
+    anillo = {}
+    for i, nodo in enumerate(nodos):
+        siguiente = nodos[(i + 1) % n]  # El último apunta al primero
+        anillo[nodo] = siguiente
+    
+    return anillo
+
 
 def construir_env_input_gateway(consultas_por_nodo):
     archivo_por_consulta = {

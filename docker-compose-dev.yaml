@@ -77,6 +77,8 @@ services:
     - WORKER_ID=1
     - WORKER_TYPE=FILTER
     - CONSULTAS=1,2,3,4,5
+    - REINICIO=false
+    - NODO_SIGUIENTE=joiner1
     networks:
     - testing_net
     depends_on:
@@ -91,6 +93,8 @@ services:
     - WORKER_TYPE=JOINER
     - CONSULTAS=3,4
     - EOF_ESPERADOS=3:1,4:1
+    - REINICIO=false
+    - NODO_SIGUIENTE=aggregator1
     networks:
     - testing_net
     depends_on:
@@ -104,7 +108,9 @@ services:
     - WORKER_ID=1
     - WORKER_TYPE=AGGREGATOR
     - CONSULTAS=2,3,4,5
-    - EOF_ESPERADOS=2:1,3:1,4:1,5:3
+    - EOF_ESPERADOS=2:1,3:1,4:1,5:1
+    - REINICIO=false
+    - NODO_SIGUIENTE=pnl1
     networks:
     - testing_net
     depends_on:
@@ -119,34 +125,8 @@ services:
     - WORKER_TYPE=PNL
     - CONSULTAS=5
     - EOF_ESPERADOS=5:1
-    networks:
-    - testing_net
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-  pnl2:
-    container_name: pnl2
-    image: pnl:latest
-    entrypoint: python3 workers/pnl.py
-    environment:
-    - WORKER_ID=2
-    - WORKER_TYPE=PNL
-    - CONSULTAS=5
-    - EOF_ESPERADOS=5:1
-    networks:
-    - testing_net
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-  pnl3:
-    container_name: pnl3
-    image: pnl:latest
-    entrypoint: python3 workers/pnl.py
-    environment:
-    - WORKER_ID=3
-    - WORKER_TYPE=PNL
-    - CONSULTAS=5
-    - EOF_ESPERADOS=5:1
+    - REINICIO=false
+    - NODO_SIGUIENTE=broker
     networks:
     - testing_net
     depends_on:
@@ -158,8 +138,10 @@ services:
     entrypoint: python3 workers/broker.py
     environment:
     - EOF_ESPERADOS=3:1,4:1,5:1
-    - EOF_ENVIAR=2:1,3:1,4:1,5:3
+    - EOF_ENVIAR=2:1,3:1,4:1,5:1
     - JOINERS=1:[3, 4]
+    - REINICIO=false
+    - NODO_SIGUIENTE=filter1
     networks:
     - testing_net
     depends_on:

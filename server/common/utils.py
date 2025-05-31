@@ -198,6 +198,13 @@ def cargar_eofs():
                 eofs[int(k)] = int(v)
     return eofs
 
+def cargar_reinicio():
+    return os.getenv("REINICIO", "false")
+
+def cargar_nodo_siguiente():
+    return os.getenv("NODO_SIGUIENTE", "")
+
+
 # -------------------
 # NORMALIZATION
 # -------------------
