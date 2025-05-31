@@ -134,7 +134,7 @@ def calcular_eofs(tipo, distribucion):
 
     return eof_dict
 
-def agregar_broker(compose, anillo, cant_filter=1, cant_joiner=1, cant_aggregator=1, cant_pnl=1, ):
+def agregar_broker(compose, anillo, puertos, cant_filter=1, cant_joiner=1, cant_aggregator=1, cant_pnl=1, ):
     consultas_por_nodo = distribuir_consultas_por_nodo(cant_filter, cant_joiner, cant_aggregator, cant_pnl)
     eof_aggregator = calcular_eofs("aggregator", consultas_por_nodo)
     eof_str_agg = ",".join(f"{k}:{v}" for k, v in eof_aggregator.items())
@@ -154,7 +154,8 @@ def agregar_broker(compose, anillo, cant_filter=1, cant_joiner=1, cant_aggregato
                         f"JOINERS={str_joiners}",
                         f"REINICIO=false",
                         f"NODO_SIGUIENTE={anillo['broker']['siguiente']}",
-                        f"NODO_ANTERIOR={anillo['broker']['anterior']}"
+                        f"NODO_ANTERIOR={anillo['broker']['anterior']}",
+                        f"PUERTOS={puertos['broker']}",
                         ],
                     "networks": ["testing_net"],
                     "depends_on": {
@@ -162,7 +163,7 @@ def agregar_broker(compose, anillo, cant_filter=1, cant_joiner=1, cant_aggregato
                     }
                 }
 
-def agregar_workers(compose, anillo, cant_filter=1, cant_joiner=1, cant_aggregator=1, cant_pnl=1):
+def agregar_workers(compose, anillo, puertos, cant_filter=1, cant_joiner=1, cant_aggregator=1, cant_pnl=1):
     # Distribuir consultas por tipo de nodo
     consultas_por_nodo = distribuir_consultas_por_nodo(cant_filter, cant_joiner, cant_aggregator, cant_pnl)
 
@@ -203,6 +204,7 @@ def agregar_workers(compose, anillo, cant_filter=1, cant_joiner=1, cant_aggregat
             env.append("REINICIO=false")
             env.append(f"NODO_SIGUIENTE={anillo[nombre]['siguiente']}")
             env.append(f"NODO_ANTERIOR={anillo[nombre]['anterior']}")
+            env.append(f"PUERTO={puertos[nombre]}")
 
             # Agregar al compose
             compose["services"][nombre] = {
@@ -297,13 +299,14 @@ def generar_yaml(clients, cant_filter, cant_joiner, cant_aggregator, cant_pnl):
             }
         }
     }
-    anillo = crear_anillo(cant_filter, cant_joiner, cant_aggregator, cant_pnl)
+    puertos = generar_diccionario_puertos(2, 1, 1, 1)
+    anillo = crear_anillo(puertos, cant_filter, cant_joiner, cant_aggregator, cant_pnl)
     agregar_clientes(compose, clients)
-    agregar_workers(compose, anillo, cant_filter, cant_joiner, cant_aggregator, cant_pnl)
-    agregar_broker(compose, anillo, cant_filter, cant_joiner, cant_aggregator, cant_pnl)
+    agregar_workers(compose, anillo, puertos, cant_filter, cant_joiner, cant_aggregator, cant_pnl)
+    agregar_broker(compose, anillo, puertos, cant_filter, cant_joiner, cant_aggregator, cant_pnl)
     return compose
 
-def crear_anillo(cant_filter, cant_joiner, cant_aggregator, cant_pnl):
+def crear_anillo(puertos, cant_filter, cant_joiner, cant_aggregator, cant_pnl):
     filtros = [f"filter{i+1}" for i in range(cant_filter)]
     joiners = [f"joiner{i+1}" for i in range(cant_joiner)]
     aggregators = [f"aggregator{i+1}" for i in range(cant_aggregator)]
@@ -319,12 +322,27 @@ def crear_anillo(cant_filter, cant_joiner, cant_aggregator, cant_pnl):
         siguiente = nodos[(i + 1) % n]   # El siguiente nodo (circular)
         anterior = nodos[(i - 1) % n]    # El nodo anterior (circular)
         anillo[nodo] = {
-            "siguiente": siguiente,
+            "siguiente": puertos[siguiente],
             "anterior": anterior
         }
     
     return anillo
 
+def generar_diccionario_puertos(cant_filter, cant_joiner, cant_aggregator, cant_pnl):
+    puerto_base = 7000  # puerto inicial seguro
+
+    dicc_puertos = {}
+
+    def asignar_puertos(prefijo, cantidad, puerto_inicio):
+        return {f"{prefijo}{i+1}": puerto_inicio + i for i in range(cantidad)}
+
+    dicc_puertos.update(asignar_puertos("filter", cant_filter, puerto_base))
+    dicc_puertos.update(asignar_puertos("joiner", cant_joiner, puerto_base + cant_filter))
+    dicc_puertos.update(asignar_puertos("aggregator", cant_aggregator, puerto_base + cant_filter + cant_joiner))
+    dicc_puertos.update(asignar_puertos("pnl", cant_pnl, puerto_base + cant_filter + cant_joiner + cant_aggregator))
+    total_previos = cant_filter + cant_joiner + cant_aggregator + cant_pnl
+    dicc_puertos["broker"] = puerto_base + total_previos
+    return dicc_puertos
 
 
 def construir_env_input_gateway(consultas_por_nodo):
