@@ -1,9 +1,10 @@
 import logging
 import os
-import sys
+from multiprocessing import Process
 from common.utils import prepare_data_consult_1_3_4, prepare_data_consult_2, EOF, prepare_data_consult_5
 from common.communication import iniciar_nodo, obtener_body, obtener_query, obtener_tipo_mensaje
 from common.excepciones import ConsultaInexistente
+from common.health import HealthMonitor
 
 FILTER = "filter"
 
@@ -95,5 +96,14 @@ class FiltroNode:
 # -----------------------
 
 if __name__ == "__main__":
-    filtro = FiltroNode()
-    iniciar_nodo(FILTER, filtro, os.getenv("CONSULTAS", ""))
+    proceso_nodo = Process(target=iniciar_nodo, args=(FILTER, FiltroNode(), os.getenv("CONSULTAS", "")))
+    monitor = HealthMonitor()
+    proceso_monitor = Process(target=monitor.run)
+
+    # Iniciar ambos procesos
+    proceso_nodo.start()
+    proceso_monitor.start()
+
+    # Esperar a que terminen (opcional)
+    proceso_nodo.join()
+    proceso_monitor.join()
