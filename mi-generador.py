@@ -312,6 +312,7 @@ def generar_yaml(clients, cant_filter, cant_joiner, cant_aggregator, cant_pnl):
     agregar_clientes(compose, clients)
     agregar_workers(compose, anillo, puertos, cant_filter, cant_joiner, cant_aggregator, cant_pnl)
     agregar_broker(compose, anillo, puertos, cant_filter, cant_joiner, cant_aggregator, cant_pnl)
+    compose.setdefault("volumes", {})["reinicio_flags"] = None
     return compose
 
 def crear_anillo(cant_filter, cant_joiner, cant_aggregator, cant_pnl):

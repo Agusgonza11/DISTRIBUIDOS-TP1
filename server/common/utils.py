@@ -7,6 +7,7 @@ from io import StringIO
 import pandas as pd # type: ignore
 import os
 import configparser
+from pathlib import Path
 
 
 def get_batches(worker):
@@ -55,6 +56,15 @@ def graceful_quit(conexion, canal, nodo):
 
     signal.signal(signal.SIGINT, shutdown_handler)
     signal.signal(signal.SIGTERM, shutdown_handler)
+
+
+def fue_reiniciado(tipo_nodo):
+    nombre_nodo = obtiene_nombre_contenedor(tipo_nodo)
+    flag_path = Path(f"/app/reinicio_flags/{nombre_nodo}.flag")
+    if flag_path.exists():
+        flag_path.unlink()  # elimina el flag luego de detectarlo
+        return True
+    return False
 
 
 # -------------------
@@ -209,6 +219,15 @@ def cargar_puerto():
 
 def cargar_puerto_siguiente():
     return os.getenv("PUERTO_SIGUIENTE", "")
+
+def obtiene_nombre_contenedor(tipo):
+    worker_id = int(os.environ.get("WORKER_ID", 0))
+    if tipo != "broker":
+        worker_id = int(os.environ.get("WORKER_ID", 0))
+        nombre_nodo = f"{tipo}{worker_id}"
+    else:
+        nombre_nodo = "broker"
+
 # -------------------
 # NORMALIZATION
 # -------------------
