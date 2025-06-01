@@ -97,7 +97,7 @@ class FiltroNode:
 
 if __name__ == "__main__":
     if fue_reiniciado(FILTER):
-        print("el nodo fue reiniciado", flush=True)
+        print("El nodo fue reiniciado", flush=True)
     proceso_nodo = Process(target=iniciar_nodo, args=(FILTER, FiltroNode(), os.getenv("CONSULTAS", "")))
     monitor = HealthMonitor(FILTER)
     proceso_monitor = Process(target=monitor.run)

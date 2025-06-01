@@ -1,11 +1,14 @@
 import logging
+from multiprocessing import Process
 import os
 import gc
+import pickle
 import sys
-from common.utils import EOF, cargar_eofs, concat_data, create_dataframe, prepare_data_aggregator_consult_3
+from common.utils import EOF, cargar_eofs, concat_data, create_dataframe, fue_reiniciado, obtiene_nombre_contenedor, prepare_data_aggregator_consult_3
 from common.communication import iniciar_nodo, obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje
 import tracemalloc
 from common.excepciones import ConsultaInexistente
+from common.health import HealthMonitor
 
 
 AGGREGATOR = "aggregator"
@@ -14,14 +17,30 @@ AGGREGATOR = "aggregator"
 # Nodo Aggregator
 # -----------------------
 class AggregatorNode:
-    def __init__(self):
+    def __init__(self, reiniciado=None):
         tracemalloc.start()
         self.resultados_parciales = {}
         self.eof_esperados = {}
+        self.healt_file = f"/app/reinicio_flags/{obtiene_nombre_contenedor(AGGREGATOR)}.data"
+        if reiniciado:
+            self.cargar_estado()
 
     def eliminar(self):
         self.resultados_parciales = {}
         self.eof_esperados = {}
+
+    def guardar_estado(self):
+        with open(self.healt_file, "wb") as f:
+            pickle.dump({
+                "resultados_parciales": self.resultados_parciales,
+                "eof_esperados": self.eof_esperados
+            }, f)
+
+    def cargar_estado(self):
+        with open(self.healt_file, "rb") as f:
+            estado = pickle.load(f)
+            self.resultados_parciales = estado.get("resultados_parciales", {})
+            self.eof_esperados = estado.get("eof_esperados", {})
 
     def guardar_datos(self, consulta_id, datos, client_id):
         if client_id not in self.resultados_parciales:
@@ -34,7 +53,9 @@ class AggregatorNode:
         if consulta_id not in self.eof_esperados[client_id]:
             self.eof_esperados[client_id][consulta_id] = cargar_eofs()[consulta_id]
 
-        self.resultados_parciales[client_id][consulta_id].append(create_dataframe(datos))
+        self.guardar_estado()
+
+
 
     def ejecutar_consulta(self, consulta_id, client_id):
         if client_id not in self.resultados_parciales:
@@ -133,5 +154,16 @@ class AggregatorNode:
 # -----------------------
 
 if __name__ == "__main__":
-    aggregator = AggregatorNode()
-    iniciar_nodo(AGGREGATOR, aggregator, os.getenv("CONSULTAS", ""))
+    reiniciado = False
+    if fue_reiniciado(AGGREGATOR):
+        print("El nodo fue reiniciado", flush=True)
+        reiniciado = True
+    proceso_nodo = Process(target=iniciar_nodo, args=(AGGREGATOR, AggregatorNode(reiniciado), os.getenv("CONSULTAS", "")))
+    monitor = HealthMonitor(AGGREGATOR)
+    proceso_monitor = Process(target=monitor.run)
+
+    proceso_nodo.start()
+    proceso_monitor.start()
+
+    proceso_nodo.join()
+    proceso_monitor.join()

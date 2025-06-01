@@ -227,6 +227,7 @@ def obtiene_nombre_contenedor(tipo):
         nombre_nodo = f"{tipo}{worker_id}"
     else:
         nombre_nodo = "broker"
+    return nombre_nodo
 
 # -------------------
 # NORMALIZATION
