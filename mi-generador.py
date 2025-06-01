@@ -156,6 +156,7 @@ def agregar_broker(compose, anillo, puertos, cant_filter=1, cant_joiner=1, cant_
                         f"NODO_SIGUIENTE={anillo['broker']['siguiente']}",
                         f"NODO_ANTERIOR={anillo['broker']['anterior']}",
                         f"PUERTOS={puertos['broker']}",
+                        f"PUERTO_SIGUIENTE={puertos[anillo['broker']['siguiente']]}",
                         ],
                     "networks": ["testing_net"],
                     "depends_on": {
@@ -205,6 +206,7 @@ def agregar_workers(compose, anillo, puertos, cant_filter=1, cant_joiner=1, cant
             env.append(f"NODO_SIGUIENTE={anillo[nombre]['siguiente']}")
             env.append(f"NODO_ANTERIOR={anillo[nombre]['anterior']}")
             env.append(f"PUERTO={puertos[nombre]}")
+            env.append(f"PUERTO_SIGUIENTE={puertos[anillo[nombre]['siguiente']]}")
 
             # Agregar al compose
             compose["services"][nombre] = {
@@ -300,13 +302,13 @@ def generar_yaml(clients, cant_filter, cant_joiner, cant_aggregator, cant_pnl):
         }
     }
     puertos = generar_diccionario_puertos(2, 1, 1, 1)
-    anillo = crear_anillo(puertos, cant_filter, cant_joiner, cant_aggregator, cant_pnl)
+    anillo = crear_anillo(cant_filter, cant_joiner, cant_aggregator, cant_pnl)
     agregar_clientes(compose, clients)
     agregar_workers(compose, anillo, puertos, cant_filter, cant_joiner, cant_aggregator, cant_pnl)
     agregar_broker(compose, anillo, puertos, cant_filter, cant_joiner, cant_aggregator, cant_pnl)
     return compose
 
-def crear_anillo(puertos, cant_filter, cant_joiner, cant_aggregator, cant_pnl):
+def crear_anillo(cant_filter, cant_joiner, cant_aggregator, cant_pnl):
     filtros = [f"filter{i+1}" for i in range(cant_filter)]
     joiners = [f"joiner{i+1}" for i in range(cant_joiner)]
     aggregators = [f"aggregator{i+1}" for i in range(cant_aggregator)]
@@ -322,7 +324,7 @@ def crear_anillo(puertos, cant_filter, cant_joiner, cant_aggregator, cant_pnl):
         siguiente = nodos[(i + 1) % n]   # El siguiente nodo (circular)
         anterior = nodos[(i - 1) % n]    # El nodo anterior (circular)
         anillo[nodo] = {
-            "siguiente": puertos[siguiente],
+            "siguiente": siguiente,
             "anterior": anterior
         }
     

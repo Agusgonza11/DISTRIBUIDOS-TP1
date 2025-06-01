@@ -204,7 +204,14 @@ def cargar_reinicio():
 def cargar_nodo_siguiente():
     return os.getenv("NODO_SIGUIENTE", "")
 
+def cargar_nodo_anterior():
+    return os.getenv("NODO_ANTERIOR", "")
 
+def cargar_puerto():
+    return os.getenv("PUERTO", "")
+
+def cargar_puerto_siguiente():
+    return os.getenv("PUERTO_SIGUIENTE", "")
 # -------------------
 # NORMALIZATION
 # -------------------
