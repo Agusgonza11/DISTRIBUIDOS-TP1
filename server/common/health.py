@@ -2,7 +2,7 @@ from multiprocessing import Process
 import os
 from pathlib import Path
 import subprocess
-import docker
+import docker # type: ignore
 import socket
 import time
 import logging
@@ -15,8 +15,8 @@ class HealthMonitor:
         self.puerto_nodo_siguiente = int(cargar_puerto_siguiente())
         self.nodo_anterior = cargar_nodo_anterior()
         self.nodo_siguiente = cargar_nodo_siguiente()
-        self.heartbeat_interval = 2
-        self.check_interval = 5
+        self.heartbeat_interval = 5
+        self.check_interval = 7
         self.nodo_actual = obtiene_nombre_contenedor(tipo)
 
 
@@ -49,7 +49,10 @@ class HealthMonitor:
         last = time.time()
         while True:
             try:
+                #print(f"siguiente es {self.nodo_siguiente}", flush=True)
                 send.sendto(b"HB", (self.nodo_siguiente, self.puerto_nodo_siguiente))
+            except socket.gaierror as e:
+                print(f"[MONITOR] Nodo siguiente no resolvible: {e}", flush=True)
             except Exception as e:
                 print(f"[MONITOR] Error al enviar heartbeat: {e}")
 
@@ -62,6 +65,6 @@ class HealthMonitor:
 
             if time.time() - last > self.check_interval:
                 print("no se recibio mas heartbeat", flush=True)
-                #self.reinicio()
+                self.reinicio()
 
             time.sleep(self.heartbeat_interval)
