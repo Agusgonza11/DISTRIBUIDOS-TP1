@@ -145,24 +145,27 @@ def agregar_broker(compose, anillo, puertos, cant_filter=1, cant_joiner=1, cant_
     joiners = get_joiners_consultas_from_compose(compose)
     str_joiners = ";".join(f"{k}:{v}" for k, v in joiners.items())
     compose["services"]["broker"] = {
-                    "container_name": "broker",
-                    "image": "broker:latest",
-                    "entrypoint": f"python3 workers/broker.py",
-                    "environment": [
-                        f"EOF_ESPERADOS={eof_str_joiner}",
-                        f"EOF_ENVIAR={eof_str_agg}",
-                        f"JOINERS={str_joiners}",
-                        f"REINICIO=false",
-                        f"NODO_SIGUIENTE={anillo['broker']['siguiente']}",
-                        f"NODO_ANTERIOR={anillo['broker']['anterior']}",
-                        f"PUERTOS={puertos['broker']}",
-                        f"PUERTO_SIGUIENTE={puertos[anillo['broker']['siguiente']]}",
-                        ],
-                    "networks": ["testing_net"],
-                    "depends_on": {
-                            "rabbitmq": {"condition": "service_healthy"}
-                    }
-                }
+        "container_name": "broker",
+        "image": "broker:latest",
+        "entrypoint": "python3 workers/broker.py",
+        "environment": [
+            f"EOF_ESPERADOS={eof_str_joiner}",
+            f"EOF_ENVIAR={eof_str_agg}",
+            f"JOINERS={str_joiners}",
+            f"NODO_SIGUIENTE={anillo['broker']['siguiente']}",
+            f"NODO_ANTERIOR={anillo['broker']['anterior']}",
+            f"PUERTOS={puertos['broker']}",
+            f"PUERTO_SIGUIENTE={puertos[anillo['broker']['siguiente']]}",
+        ],
+        "networks": ["testing_net"],
+        "depends_on": {
+            "rabbitmq": {"condition": "service_healthy"}
+        },
+        "volumes": [
+            "/var/run/docker.sock:/var/run/docker.sock",
+            "reinicio_flags:/app/reinicio_flags"
+        ]
+    }
 
 def agregar_workers(compose, anillo, puertos, cant_filter=1, cant_joiner=1, cant_aggregator=1, cant_pnl=1):
     # Distribuir consultas por tipo de nodo
@@ -202,7 +205,6 @@ def agregar_workers(compose, anillo, puertos, cant_filter=1, cant_joiner=1, cant
                 eof_str = ",".join(f"{k}:{v}" for k, v in eof_aggregator.items())
                 env.append(f"EOF_ESPERADOS={eof_str}")
 
-            env.append("REINICIO=false")
             env.append(f"NODO_SIGUIENTE={anillo[nombre]['siguiente']}")
             env.append(f"NODO_ANTERIOR={anillo[nombre]['anterior']}")
             env.append(f"PUERTO={puertos[nombre]}")
@@ -217,7 +219,11 @@ def agregar_workers(compose, anillo, puertos, cant_filter=1, cant_joiner=1, cant
                 "networks": ["testing_net"],
                 "depends_on": {
                         "rabbitmq": {"condition": "service_healthy"}
-                }
+                },
+                "volumes": [
+                    "/var/run/docker.sock:/var/run/docker.sock",
+                    "reinicio_flags:/app/reinicio_flags"
+                ]
             }
 
 def agregar_clientes(compose, cantidad_clientes):

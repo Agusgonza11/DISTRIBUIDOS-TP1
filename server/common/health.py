@@ -1,6 +1,7 @@
 from multiprocessing import Process
 import os
-import select
+import subprocess
+import docker
 import socket
 import time
 import logging
@@ -23,8 +24,17 @@ class HealthMonitor:
 
 
     def reinicio(self):
-        print("se cayo el nodo", flush=True)
-        pass
+        client = docker.from_env()
+        nombre = self.nodo_anterior  # ej: "filter2"
+
+        try:
+            container = client.containers.get(nombre)
+            # Usar restart que detiene y arranca el mismo contenedor (sin recrear)
+            container.restart()
+            print(f"Contenedor {nombre} reiniciado", flush=True)
+        except Exception as e:
+            print(f"Error reiniciando contenedor {nombre}: {e}", flush=True)
+
 
     def run(self):
         recv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -38,15 +48,12 @@ class HealthMonitor:
         while True:
             try:
                 send.sendto(b"HB", (self.nodo_siguiente, self.puerto_nodo_siguiente))
-                print("envia heartbeat", flush=True)
             except Exception as e:
-                logging.info("entra aca") 
                 print(f"[MONITOR] Error al enviar heartbeat: {e}")
 
             try:
                 data, _ = recv.recvfrom(1024)
                 if data == b"HB":
-                    print("recibi heartbeat", flush=True)
                     last = time.time()
             except BlockingIOError:
                 pass
