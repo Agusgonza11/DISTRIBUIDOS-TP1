@@ -62,6 +62,6 @@ class HealthMonitor:
 
             if time.time() - last > self.check_interval:
                 print("no se recibio mas heartbeat", flush=True)
-                self.reinicio()
+                #self.reinicio()
 
             time.sleep(self.heartbeat_interval)

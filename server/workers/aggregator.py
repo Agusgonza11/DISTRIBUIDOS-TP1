@@ -4,6 +4,8 @@ import os
 import gc
 import pickle
 import sys
+
+import pandas as pd
 from common.utils import EOF, cargar_eofs, concat_data, create_dataframe, fue_reiniciado, obtiene_nombre_contenedor, prepare_data_aggregator_consult_3
 from common.communication import iniciar_nodo, obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje
 import tracemalloc
@@ -20,6 +22,7 @@ class AggregatorNode:
     def __init__(self, reiniciado=None):
         tracemalloc.start()
         self.resultados_parciales = {}
+        self.resultados_health = {}
         self.eof_esperados = {}
         self.healt_file = f"/app/reinicio_flags/{obtiene_nombre_contenedor(AGGREGATOR)}.data"
         if reiniciado:
@@ -29,29 +32,52 @@ class AggregatorNode:
         self.resultados_parciales = {}
         self.eof_esperados = {}
 
-    def guardar_estado(self):
-        with open(self.healt_file, "wb") as f:
-            pickle.dump({
-                "resultados_parciales": self.resultados_parciales,
-                "eof_esperados": self.eof_esperados
-            }, f)
 
     def cargar_estado(self):
-        with open(self.healt_file, "rb") as f:
-            estado = pickle.load(f)
-            self.resultados_parciales = estado.get("resultados_parciales", {})
-            self.eof_esperados = estado.get("eof_esperados", {})
+        try:
+            with open(self.healt_file, "rb") as f:
+                estado = pickle.load(f)
+                self.resultados_health = estado.get("resultados_parciales", {})
+                self.eof_esperados = estado.get("eof_esperados", {})
+                self.resultados_parciales = {}
+
+                # Recrear los DataFrames desde los datos crudos
+                for client_id, consultas in self.resultados_health.items():
+                    self.resultados_parciales[client_id] = {}
+                    for consulta_id, lista_datos in consultas.items():
+                        # Aplicar create_dataframe a cada entrada individual
+                        dfs = [create_dataframe(datos) for datos in lista_datos]
+                        self.resultados_parciales[client_id][consulta_id] = dfs
+        except Exception as e:
+            print(f"Error al cargar el estado: {e}", flush=True)
+
+
+    def guardar_estado(self):
+        try:
+            with open(self.healt_file, "wb") as f:
+                pickle.dump({
+                    "resultados_parciales": self.resultados_health,
+                    "eof_esperados": self.eof_esperados
+                }, f)
+        except Exception as e:
+            print(f"Error al guardar el estado: {e}", flush=True)
+
 
     def guardar_datos(self, consulta_id, datos, client_id):
         if client_id not in self.resultados_parciales:
             self.resultados_parciales[client_id] = {}
+            self.resultados_health[client_id] = {}
             self.eof_esperados[client_id] = {}
             
         if consulta_id not in self.resultados_parciales[client_id]:
             self.resultados_parciales[client_id][consulta_id] = []
+            self.resultados_health[client_id][consulta_id] = []
             
         if consulta_id not in self.eof_esperados[client_id]:
             self.eof_esperados[client_id][consulta_id] = cargar_eofs()[consulta_id]
+
+        self.resultados_parciales[client_id][consulta_id].append(create_dataframe(datos))
+        self.resultados_health[client_id][consulta_id].append(datos)
 
         self.guardar_estado()
 

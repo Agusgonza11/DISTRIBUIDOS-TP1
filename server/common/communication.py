@@ -55,7 +55,7 @@ def obtener_body(mensaje):
 # ---------------------
 def iniciar_nodo(tipo_nodo, nodo, consultas=None, worker_id=None):
     initialize_log("INFO")
-    logging.info(f"Se inicializó el {tipo_nodo} filter")
+    logging.info(f"Se inicializó el {tipo_nodo}")
     consultas = list(map(int, consultas.split(","))) if consultas else []
     conexion, canal = inicializar_comunicacion()
     graceful_quit(conexion, canal, nodo)
