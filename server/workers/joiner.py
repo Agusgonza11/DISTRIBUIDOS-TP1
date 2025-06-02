@@ -1,11 +1,12 @@
 from multiprocessing import Process
+import pickle
 import sys
 import logging
 import os
 import tempfile
 import gc
 import threading
-from common.utils import EOF, concat_data, create_dataframe, fue_reiniciado, get_batches, prepare_data_consult_4
+from common.utils import EOF, concat_data, create_dataframe, fue_reiniciado, get_batches, obtiene_nombre_contenedor, prepare_data_consult_4
 from common.utils import normalize_movies_df, normalize_credits_df, normalize_ratings_df
 from common.communication import iniciar_nodo, obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
 import pandas as pd # type: ignore
@@ -17,6 +18,7 @@ JOINER = "joiner"
 DATOS = 0
 LINEAS = 1
 TERMINO = 2
+TMP_DIR = "/tmp/joiner_tmp"
 
 BATCH_CREDITS, BATCH_RATINGS = get_batches(JOINER)
 
@@ -24,19 +26,79 @@ BATCH_CREDITS, BATCH_RATINGS = get_batches(JOINER)
 # Nodo Joiner
 # -----------------------
 class JoinerNode:
-    def __init__(self, reinicio=None):
+
+    def __init__(self, reiniciado=None):
         self.resultados_parciales = {}
         self.termino_movies = {}
         self.datos = {}
-
         self.locks = {}
         self.files_on_disk = {}
         self.file_paths = {}
+        self.health_file = f"/app/reinicio_flags/{obtiene_nombre_contenedor(JOINER)}.data"
+        if reiniciado:
+            self.cargar_estado()
 
     def eliminar(self):
-        self.resultados_parciales = {}
-        self.termino_movies = {}
-        self.datos = {}
+        # Borrar archivos temporales del disco
+        for client_id, paths in self.file_paths.items():
+            for tipo, path in paths.items():
+                try:
+                    if os.path.exists(path):
+                        os.remove(path)
+                        print(f"Archivo borrado: {path}")
+                except Exception as e:
+                    print(f"Error borrando {path}: {e}")
+
+        # Limpiar estructuras internas
+        self.resultados_parciales.clear()
+        self.termino_movies.clear()
+        self.datos.clear()
+        self.locks.clear()
+        self.files_on_disk.clear()
+        self.file_paths.clear()
+
+    def cargar_estado(self):
+        try:
+            with open(self.health_file, "rb") as f:
+                estado = pickle.load(f)
+
+            self.datos = estado.get("datos", {})
+            self.termino_movies = estado.get("termino_movies", {})
+            self.resultados_parciales = estado.get("resultados_parciales", {})
+            self.files_on_disk = estado.get("files_on_disk", {})
+
+            # Recrear locks
+            self.locks = {
+                cid: {
+                    "ratings": threading.Lock(),
+                    "credits": threading.Lock()
+                } for cid in self.datos
+            }
+
+            # Restaurar file_paths apuntando a archivos dentro del volumen
+            self.file_paths = {
+                cid: {
+                    "ratings": os.path.join(TMP_DIR, f"{cid}_ratings.csv"),
+                    "credits": os.path.join(TMP_DIR, f"{cid}_credits.csv"),
+                } for cid in self.datos
+            }
+
+        except Exception as e:
+            print(f"Error al cargar el estado: {e}", flush=True)
+
+    def guardar_estado(self):
+        try:
+            estado = {
+                "datos": self.datos,
+                "termino_movies": self.termino_movies,
+                "resultados_parciales": self.resultados_parciales,
+                "files_on_disk": self.files_on_disk,
+            }
+            with open(self.health_file, "wb") as f:
+                pickle.dump(estado, f)
+        except Exception as e:
+            print(f"Error al guardar el estado: {e}", flush=True)
+
 
     def crear_datos(self, client_id):
         self.datos[client_id] = {"ratings": [[], 0, False], "credits": [[], 0, False]}
@@ -58,9 +120,12 @@ class JoinerNode:
             "ratings": False,
             "credits": False,
         }
+
+        os.makedirs(TMP_DIR, exist_ok=True)
+
         self.file_paths[client_id] = {
-            "ratings": tempfile.NamedTemporaryFile(delete=False).name,
-            "credits": tempfile.NamedTemporaryFile(delete=False).name,
+            "ratings": tempfile.NamedTemporaryFile(delete=False, dir=TMP_DIR).name,
+            "credits": tempfile.NamedTemporaryFile(delete=False, dir=TMP_DIR).name,
         }
 
     def puede_enviar(self, consulta_id, client_id):
@@ -239,7 +304,6 @@ class JoinerNode:
         consulta_id = obtener_query(mensaje)
         tipo_mensaje = obtener_tipo_mensaje(mensaje)
         client_id = obtener_client_id(mensaje)
-        mensaje['ack']()
         try:
             if tipo_mensaje == "EOF":
                 logging.info(f"Se recibio todo Movies, consulta {consulta_id} recibió EOF")
@@ -262,6 +326,8 @@ class JoinerNode:
                 if self.datos[client_id]["credits"][LINEAS] != 0 or self.files_on_disk[client_id]["credits"]:
                     self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
                 self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func, client_id)
+            self.guardar_estado()
+            mensaje['ack']()
         except ConsultaInexistente as e:
             logging.warning(f"Consulta inexistente: {e}")
         except Exception as e:

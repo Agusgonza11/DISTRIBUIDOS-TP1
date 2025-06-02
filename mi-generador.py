@@ -210,6 +210,15 @@ def agregar_workers(compose, anillo, puertos, cant_filter=1, cant_joiner=1, cant
             env.append(f"PUERTO={puertos[nombre]}")
             env.append(f"PUERTO_SIGUIENTE={puertos[anillo[nombre]['siguiente']]}")
 
+            volumes = [
+                "/var/run/docker.sock:/var/run/docker.sock",
+                "reinicio_flags:/app/reinicio_flags"
+            ]
+
+            # Volumen persistente adicional para joiner
+            if tipo == "joiner":
+                volumes.append("./joiner_tmp:/tmp/joiner_tmp")
+
             # Agregar al compose
             compose["services"][nombre] = {
                 "container_name": nombre,
@@ -218,12 +227,9 @@ def agregar_workers(compose, anillo, puertos, cant_filter=1, cant_joiner=1, cant
                 "environment": env,
                 "networks": ["testing_net"],
                 "depends_on": {
-                        "rabbitmq": {"condition": "service_healthy"}
+                    "rabbitmq": {"condition": "service_healthy"}
                 },
-                "volumes": [
-                    "/var/run/docker.sock:/var/run/docker.sock",
-                    "reinicio_flags:/app/reinicio_flags"
-                ]
+                "volumes": volumes
             }
 
 def agregar_clientes(compose, cantidad_clientes):

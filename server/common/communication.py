@@ -1,5 +1,6 @@
 from multiprocessing import Process
 import os
+import signal
 import sys
 import pika # type: ignore
 import logging
@@ -64,7 +65,17 @@ def run(tipo_nodo, nodo):
     proceso_nodo = Process(target=iniciar_nodo, args=(tipo_nodo, nodo, reiniciado))
     monitor = HealthMonitor(tipo_nodo)
     proceso_monitor = Process(target=monitor.run)
+    def shutdown_parent_handler(signum, frame):
+        print("Recibida señal en padre, terminando hijos...")
+        for p in (proceso_nodo, proceso_monitor):
+            if p.is_alive():
+                p.terminate()
+        sys.exit(0)
 
+    signal.signal(signal.SIGINT, shutdown_parent_handler)
+    signal.signal(signal.SIGTERM, shutdown_parent_handler)
+
+    
     proceso_nodo.start()
     proceso_monitor.start()
     proceso_nodo.join()
