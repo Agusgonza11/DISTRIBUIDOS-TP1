@@ -7,10 +7,9 @@ import gc
 import threading
 from common.utils import EOF, concat_data, create_dataframe, fue_reiniciado, get_batches, prepare_data_consult_4
 from common.utils import normalize_movies_df, normalize_credits_df, normalize_ratings_df
-from common.communication import iniciar_nodo, obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje
+from common.communication import iniciar_nodo, obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
 import pandas as pd # type: ignore
 from common.excepciones import ConsultaInexistente
-from common.health import HealthMonitor 
 
 
 JOINER = "joiner"
@@ -273,16 +272,5 @@ class JoinerNode:
 # -----------------------
 
 if __name__ == "__main__":
-    reiniciado = False
-    if fue_reiniciado(JOINER):
-        print("El nodo fue reiniciado", flush=True)
-        reiniciado = True
-    proceso_nodo = Process(target=iniciar_nodo, args=(JOINER, JoinerNode(reiniciado), os.getenv("CONSULTAS", ""), int(os.environ.get("WORKER_ID", 0))))
-    monitor = HealthMonitor(JOINER)
-    proceso_monitor = Process(target=monitor.run)
+    run(JOINER, JoinerNode)
 
-    proceso_nodo.start()
-    proceso_monitor.start()
-
-    proceso_nodo.join()
-    proceso_monitor.join()

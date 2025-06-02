@@ -7,10 +7,9 @@ import sys
 
 import pandas as pd
 from common.utils import EOF, cargar_eofs, concat_data, create_dataframe, fue_reiniciado, obtiene_nombre_contenedor, prepare_data_aggregator_consult_3
-from common.communication import iniciar_nodo, obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje
+from common.communication import iniciar_nodo, obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
 import tracemalloc
 from common.excepciones import ConsultaInexistente
-from common.health import HealthMonitor
 
 
 AGGREGATOR = "aggregator"
@@ -180,16 +179,6 @@ class AggregatorNode:
 # -----------------------
 
 if __name__ == "__main__":
-    reiniciado = False
-    if fue_reiniciado(AGGREGATOR):
-        print("El nodo fue reiniciado", flush=True)
-        reiniciado = True
-    proceso_nodo = Process(target=iniciar_nodo, args=(AGGREGATOR, AggregatorNode(reiniciado), os.getenv("CONSULTAS", "")))
-    monitor = HealthMonitor(AGGREGATOR)
-    proceso_monitor = Process(target=monitor.run)
+    run(AGGREGATOR, AggregatorNode)
 
-    proceso_nodo.start()
-    proceso_monitor.start()
-
-    proceso_nodo.join()
-    proceso_monitor.join()
+    

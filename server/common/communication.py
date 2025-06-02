@@ -1,7 +1,10 @@
+from multiprocessing import Process
+import os
 import sys
 import pika # type: ignore
 import logging
-from common.utils import cargar_broker, cargar_eof_a_enviar, create_body, graceful_quit, initialize_log, puede_enviar
+from common.utils import cargar_broker, cargar_eof_a_enviar, create_body, fue_reiniciado, graceful_quit, initialize_log, puede_enviar
+from common.health import HealthMonitor
 
 # ----------------------
 # ENRUTAMIENTO DE MENSAJE
@@ -53,8 +56,27 @@ def obtener_body(mensaje):
 # ---------------------
 # GENERALES
 # ---------------------
-def iniciar_nodo(tipo_nodo, nodo, consultas=None, worker_id=None):
+def run(tipo_nodo, nodo):
+    reiniciado = False
+    if fue_reiniciado(tipo_nodo):
+        print("El nodo fue reiniciado", flush=True)
+        reiniciado = True
+    proceso_nodo = Process(target=iniciar_nodo, args=(tipo_nodo, nodo, reiniciado))
+    monitor = HealthMonitor(tipo_nodo)
+    proceso_monitor = Process(target=monitor.run)
+
+    proceso_nodo.start()
+    proceso_monitor.start()
+    proceso_nodo.join()
+    proceso_monitor.join()
+
+
+
+def iniciar_nodo(tipo_nodo, nodo, reiniciado=False):
     initialize_log("INFO")
+    nodo = nodo(reiniciado)
+    consultas = os.getenv("CONSULTAS", "")
+    worker_id = int(os.environ.get("WORKER_ID", 0))
     logging.info(f"Se inicializó el {tipo_nodo}")
     consultas = list(map(int, consultas.split(","))) if consultas else []
     conexion, canal = inicializar_comunicacion()

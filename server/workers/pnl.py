@@ -3,11 +3,10 @@ from multiprocessing import Process
 import os
 import sys
 from common.utils import EOF, concat_data, create_dataframe, fue_reiniciado, get_batches
-from common.communication import iniciar_nodo, obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje
+from common.communication import iniciar_nodo, obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
 from transformers import pipeline # type: ignore
 import torch # type: ignore
 from common.excepciones import ConsultaInexistente
-from common.health import HealthMonitor 
 
 
 PNL = "pnl"
@@ -104,16 +103,5 @@ class PnlNode:
 # -----------------------
 
 if __name__ == "__main__":
-    reiniciado = False
-    if fue_reiniciado(PNL):
-        print("El nodo fue reiniciado", flush=True)
-        reiniciado = True
-    proceso_nodo = Process(target=iniciar_nodo, args=(PNL, PnlNode(reiniciado), os.getenv("CONSULTAS", ""), int(os.environ.get("WORKER_ID", 0))))
-    monitor = HealthMonitor(PNL)
-    proceso_monitor = Process(target=monitor.run)
+    run(PNL, PnlNode)
 
-    proceso_nodo.start()
-    proceso_monitor.start()
-
-    proceso_nodo.join()
-    proceso_monitor.join()

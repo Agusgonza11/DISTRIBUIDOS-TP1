@@ -2,9 +2,8 @@ import logging
 import os
 from multiprocessing import Process
 from common.utils import prepare_data_consult_1_3_4, prepare_data_consult_2, EOF, prepare_data_consult_5, fue_reiniciado
-from common.communication import iniciar_nodo, obtener_body, obtener_query, obtener_tipo_mensaje
+from common.communication import iniciar_nodo, obtener_body, obtener_query, obtener_tipo_mensaje, run
 from common.excepciones import ConsultaInexistente
-from common.health import HealthMonitor
 
 FILTER = "filter"
 
@@ -12,6 +11,9 @@ FILTER = "filter"
 # Nodo Filtro
 # -----------------------
 class FiltroNode:
+    def __init__(self, _=None):
+        pass
+
     def eliminar(self):
         pass
 
@@ -96,14 +98,4 @@ class FiltroNode:
 # -----------------------
 
 if __name__ == "__main__":
-    if fue_reiniciado(FILTER):
-        print("El nodo fue reiniciado", flush=True)
-    proceso_nodo = Process(target=iniciar_nodo, args=(FILTER, FiltroNode(), os.getenv("CONSULTAS", "")))
-    monitor = HealthMonitor(FILTER)
-    proceso_monitor = Process(target=monitor.run)
-
-    proceso_nodo.start()
-    proceso_monitor.start()
-
-    proceso_nodo.join()
-    proceso_monitor.join()
+    run(FILTER, FiltroNode)

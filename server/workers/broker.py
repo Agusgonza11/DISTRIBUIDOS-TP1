@@ -1,10 +1,10 @@
 from multiprocessing import Process
+import os
 import sys
 import logging
 from common.utils import EOF, cargar_datos_broker, cargar_eofs, fue_reiniciado, obtiene_nombre_contenedor
-from common.communication import iniciar_nodo, obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje
+from common.communication import iniciar_nodo, obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
 from common.excepciones import ConsultaInexistente
-from common.health import HealthMonitor
 import pickle
 
 
@@ -146,16 +146,4 @@ class Broker:
 # -----------------------
 
 if __name__ == "__main__":
-    reiniciado = False
-    if fue_reiniciado(BROKER):
-        print("El nodo fue reiniciado", flush=True)
-        reiniciado = True
-    proceso_nodo = Process(target=iniciar_nodo, args=(BROKER, Broker(reiniciado)))
-    monitor = HealthMonitor(BROKER)
-    proceso_monitor = Process(target=monitor.run)
-
-    proceso_nodo.start()
-    proceso_monitor.start()
-
-    proceso_nodo.join()
-    proceso_monitor.join()
+    run(BROKER, Broker)
