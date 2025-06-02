@@ -40,6 +40,7 @@ class JoinerNode:
 
     def eliminar(self):
         # Borrar archivos temporales del disco
+        """
         for client_id, paths in self.file_paths.items():
             for tipo, path in paths.items():
                 try:
@@ -48,7 +49,7 @@ class JoinerNode:
                         print(f"Archivo borrado: {path}")
                 except Exception as e:
                     print(f"Error borrando {path}: {e}")
-
+"""
         # Limpiar estructuras internas
         self.resultados_parciales.clear()
         self.termino_movies.clear()
@@ -66,20 +67,13 @@ class JoinerNode:
             self.termino_movies = estado.get("termino_movies", {})
             self.resultados_parciales = estado.get("resultados_parciales", {})
             self.files_on_disk = estado.get("files_on_disk", {})
+            self.file_paths = estado.get("file_paths", {})
 
             # Recrear locks
             self.locks = {
                 cid: {
                     "ratings": threading.Lock(),
                     "credits": threading.Lock()
-                } for cid in self.datos
-            }
-
-            # Restaurar file_paths apuntando a archivos dentro del volumen
-            self.file_paths = {
-                cid: {
-                    "ratings": os.path.join(TMP_DIR, f"{cid}_ratings.csv"),
-                    "credits": os.path.join(TMP_DIR, f"{cid}_credits.csv"),
                 } for cid in self.datos
             }
 
@@ -93,6 +87,7 @@ class JoinerNode:
                 "termino_movies": self.termino_movies,
                 "resultados_parciales": self.resultados_parciales,
                 "files_on_disk": self.files_on_disk,
+                "file_paths": self.file_paths,
             }
             with open(self.health_file, "wb") as f:
                 pickle.dump(estado, f)

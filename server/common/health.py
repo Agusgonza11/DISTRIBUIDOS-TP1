@@ -72,7 +72,7 @@ class HealthMonitor:
             try:
                 self.send.sendto(b"HB", (self.nodo_siguiente, self.puerto_nodo_siguiente))
             except socket.gaierror as e:
-                print(f"[MONITOR] Nodo siguiente no disponible: {e}", flush=True)
+                print(f"[MONITOR] Nodo siguiente no disponible", flush=True)
             except Exception as e:
                 print(f"[MONITOR] Error al enviar heartbeat: {e}")
 

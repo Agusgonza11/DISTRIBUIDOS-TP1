@@ -79,8 +79,6 @@ class AggregatorNode:
         self.resultados_parciales[client_id][consulta_id].append(create_dataframe(datos))
         self.resultados_health[client_id][consulta_id].append(datos)
 
-        self.guardar_estado()
-
 
 
     def ejecutar_consulta(self, consulta_id, client_id):
@@ -167,6 +165,7 @@ class AggregatorNode:
                     gc.collect()
             else:
                 self.guardar_datos(consulta_id, obtener_body(mensaje), client_id)
+            self.guardar_estado()
             mensaje['ack']()
         except ConsultaInexistente as e:
             logging.warning(f"Consulta inexistente: {e}")
