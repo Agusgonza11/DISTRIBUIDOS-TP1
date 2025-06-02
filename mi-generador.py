@@ -154,7 +154,7 @@ def agregar_broker(compose, anillo, puertos, cant_filter=1, cant_joiner=1, cant_
             f"JOINERS={str_joiners}",
             f"NODO_SIGUIENTE={anillo['broker']['siguiente']}",
             f"NODO_ANTERIOR={anillo['broker']['anterior']}",
-            f"PUERTOS={puertos['broker']}",
+            f"PUERTO={puertos['broker']}",
             f"PUERTO_SIGUIENTE={puertos[anillo['broker']['siguiente']]}",
         ],
         "networks": ["testing_net"],

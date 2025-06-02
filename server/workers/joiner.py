@@ -1,14 +1,16 @@
+from multiprocessing import Process
 import sys
 import logging
 import os
 import tempfile
 import gc
 import threading
-from common.utils import EOF, concat_data, create_dataframe, get_batches, prepare_data_consult_4
+from common.utils import EOF, concat_data, create_dataframe, fue_reiniciado, get_batches, prepare_data_consult_4
 from common.utils import normalize_movies_df, normalize_credits_df, normalize_ratings_df
 from common.communication import iniciar_nodo, obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje
 import pandas as pd # type: ignore
-from common.excepciones import ConsultaInexistente 
+from common.excepciones import ConsultaInexistente
+from common.health import HealthMonitor 
 
 
 JOINER = "joiner"
@@ -23,7 +25,7 @@ BATCH_CREDITS, BATCH_RATINGS = get_batches(JOINER)
 # Nodo Joiner
 # -----------------------
 class JoinerNode:
-    def __init__(self):
+    def __init__(self, reinicio=None):
         self.resultados_parciales = {}
         self.termino_movies = {}
         self.datos = {}
@@ -271,7 +273,16 @@ class JoinerNode:
 # -----------------------
 
 if __name__ == "__main__":
-    consultas = os.getenv("CONSULTAS", "")
-    worker_id = int(os.environ.get("WORKER_ID", 0))
-    joiner = JoinerNode()
-    iniciar_nodo(JOINER, joiner, consultas, worker_id)
+    reiniciado = False
+    if fue_reiniciado(JOINER):
+        print("El nodo fue reiniciado", flush=True)
+        reiniciado = True
+    proceso_nodo = Process(target=iniciar_nodo, args=(JOINER, JoinerNode(reiniciado), os.getenv("CONSULTAS", ""), int(os.environ.get("WORKER_ID", 0))))
+    monitor = HealthMonitor(JOINER)
+    proceso_monitor = Process(target=monitor.run)
+
+    proceso_nodo.start()
+    proceso_monitor.start()
+
+    proceso_nodo.join()
+    proceso_monitor.join()

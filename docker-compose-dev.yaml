@@ -77,10 +77,10 @@ services:
     - WORKER_ID=1
     - WORKER_TYPE=FILTER
     - CONSULTAS=1,2,3,4,5
-    - NODO_SIGUIENTE=aggregator1
-    - NODO_ANTERIOR=aggregator1
+    - NODO_SIGUIENTE=joiner1
+    - NODO_ANTERIOR=broker
     - PUERTO=7000
-    - PUERTO_SIGUIENTE=7003
+    - PUERTO_SIGUIENTE=7002
     networks:
     - testing_net
     depends_on:
@@ -119,10 +119,10 @@ services:
     - WORKER_TYPE=AGGREGATOR
     - CONSULTAS=2,3,4,5
     - EOF_ESPERADOS=2:1,3:1,4:1,5:1
-    - NODO_SIGUIENTE=filter1
-    - NODO_ANTERIOR=filter1
+    - NODO_SIGUIENTE=pnl1
+    - NODO_ANTERIOR=joiner1
     - PUERTO=7003
-    - PUERTO_SIGUIENTE=7000
+    - PUERTO_SIGUIENTE=7004
     networks:
     - testing_net
     depends_on:
@@ -162,7 +162,7 @@ services:
     - JOINERS=1:[3, 4]
     - NODO_SIGUIENTE=filter1
     - NODO_ANTERIOR=pnl1
-    - PUERTOS=7005
+    - PUERTO=7005
     - PUERTO_SIGUIENTE=7000
     networks:
     - testing_net

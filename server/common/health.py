@@ -15,8 +15,8 @@ class HealthMonitor:
         self.puerto_nodo_siguiente = int(cargar_puerto_siguiente())
         self.nodo_anterior = cargar_nodo_anterior()
         self.nodo_siguiente = cargar_nodo_siguiente()
-        self.heartbeat_interval = 5
-        self.check_interval = 7
+        self.heartbeat_interval = 4
+        self.check_interval = 20
         self.nodo_actual = obtiene_nombre_contenedor(tipo)
 
 
@@ -44,7 +44,6 @@ class HealthMonitor:
         recv.setblocking(0)
 
         send = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        logging.info("3") 
 
         last = time.time()
         while True:
@@ -64,7 +63,7 @@ class HealthMonitor:
                 pass
 
             if time.time() - last > self.check_interval:
-                print("no se recibio mas heartbeat", flush=True)
+                print("No se recibio mas heartbeat", flush=True)
                 self.reinicio()
 
             time.sleep(self.heartbeat_interval)

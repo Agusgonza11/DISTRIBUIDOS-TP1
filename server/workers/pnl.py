@@ -1,11 +1,13 @@
 import logging
+from multiprocessing import Process
 import os
 import sys
-from common.utils import EOF, concat_data, create_dataframe, get_batches
+from common.utils import EOF, concat_data, create_dataframe, fue_reiniciado, get_batches
 from common.communication import iniciar_nodo, obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje
 from transformers import pipeline # type: ignore
 import torch # type: ignore
-from common.excepciones import ConsultaInexistente 
+from common.excepciones import ConsultaInexistente
+from common.health import HealthMonitor 
 
 
 PNL = "pnl"
@@ -19,7 +21,7 @@ torch.set_num_threads(1)
 # Nodo PNL
 # -----------------------
 class PnlNode:
-    def __init__(self):
+    def __init__(self, reinicio=None):
         self.sentiment_analyzer = pipeline(
             'sentiment-analysis',
             model='distilbert-base-uncased-finetuned-sst-2-english',
@@ -102,6 +104,16 @@ class PnlNode:
 # -----------------------
 
 if __name__ == "__main__":
-    pnl = PnlNode()
-    worker_id = int(os.environ.get("WORKER_ID", 0))
-    iniciar_nodo(PNL, pnl, os.getenv("CONSULTAS", ""), worker_id)
+    reiniciado = False
+    if fue_reiniciado(PNL):
+        print("El nodo fue reiniciado", flush=True)
+        reiniciado = True
+    proceso_nodo = Process(target=iniciar_nodo, args=(PNL, PnlNode(reiniciado), os.getenv("CONSULTAS", ""), int(os.environ.get("WORKER_ID", 0))))
+    monitor = HealthMonitor(PNL)
+    proceso_monitor = Process(target=monitor.run)
+
+    proceso_nodo.start()
+    proceso_monitor.start()
+
+    proceso_nodo.join()
+    proceso_monitor.join()

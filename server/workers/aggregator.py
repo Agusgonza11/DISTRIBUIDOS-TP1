@@ -24,7 +24,7 @@ class AggregatorNode:
         self.resultados_parciales = {}
         self.resultados_health = {}
         self.eof_esperados = {}
-        self.healt_file = f"/app/reinicio_flags/{obtiene_nombre_contenedor(AGGREGATOR)}.data"
+        self.health_file = f"/app/reinicio_flags/{obtiene_nombre_contenedor(AGGREGATOR)}.data"
         if reiniciado:
             self.cargar_estado()
 
@@ -35,7 +35,7 @@ class AggregatorNode:
 
     def cargar_estado(self):
         try:
-            with open(self.healt_file, "rb") as f:
+            with open(self.health_file, "rb") as f:
                 estado = pickle.load(f)
                 self.resultados_health = estado.get("resultados_parciales", {})
                 self.eof_esperados = estado.get("eof_esperados", {})
@@ -54,7 +54,7 @@ class AggregatorNode:
 
     def guardar_estado(self):
         try:
-            with open(self.healt_file, "wb") as f:
+            with open(self.health_file, "wb") as f:
                 pickle.dump({
                     "resultados_parciales": self.resultados_health,
                     "eof_esperados": self.eof_esperados

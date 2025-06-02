@@ -1,8 +1,12 @@
+from multiprocessing import Process
 import sys
 import logging
-from common.utils import EOF, cargar_datos_broker, cargar_eofs
+from common.utils import EOF, cargar_datos_broker, cargar_eofs, fue_reiniciado, obtiene_nombre_contenedor
 from common.communication import iniciar_nodo, obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje
 from common.excepciones import ConsultaInexistente
+from common.health import HealthMonitor
+import pickle
+
 
 BROKER = "broker"
 
@@ -14,11 +18,38 @@ CONSULTA_5 = 2
 # Broker
 # -----------------------
 class Broker:
-    def __init__(self):
+    def __init__(self, reiniciado=None):
         self.nodos_enviar = {}
         self.eof_esperar = {}
         self.ultimo_nodo_consulta = {}
         self.clients = []
+        self.health_file = f"/app/reinicio_flags/broker.data"
+        if reiniciado:
+            self.cargar_estado()
+
+    def guardar_estado(self):
+        try:
+            with open(self.health_file, "wb") as f:
+                pickle.dump({
+                    "nodos_enviar": self.nodos_enviar,
+                    "eof_esperar": self.eof_esperar,
+                    "ultimo_nodo_consulta": self.ultimo_nodo_consulta,
+                    "clients": self.clients
+                }, f)
+        except Exception as e:
+            print(f"Error al guardar el estado del broker: {e}", flush=True)
+
+    def cargar_estado(self):
+        try:
+            with open(self.health_file, "rb") as f:
+                estado = pickle.load(f)
+                self.nodos_enviar = estado.get("nodos_enviar", {})
+                self.eof_esperar = estado.get("eof_esperar", {})
+                self.ultimo_nodo_consulta = estado.get("ultimo_nodo_consulta", {})
+                self.clients = estado.get("clients", [])
+        except Exception as e:
+            print(f"Error al cargar el estado del broker: {e}", flush=True)
+
 
     def create_client(self, client):
         self.nodos_enviar[client] = cargar_datos_broker()
@@ -76,7 +107,6 @@ class Broker:
         consulta_id = obtener_query(mensaje)
         tipo_mensaje = obtener_tipo_mensaje(mensaje)
         client_id = obtener_client_id(mensaje)
-        mensaje['ack']()
         if client_id not in self.clients:
             self.create_client(client_id)
         try:
@@ -107,6 +137,8 @@ class Broker:
             logging.warning(f"Consulta inexistente: {e}")    
         except Exception as e:
             logging.error(f"Error procesando mensaje en consulta {consulta_id}: {e}")
+        self.guardar_estado()
+        mensaje['ack']()
 
 
 # -----------------------
@@ -114,6 +146,16 @@ class Broker:
 # -----------------------
 
 if __name__ == "__main__":
-    broker = Broker()
-    iniciar_nodo(BROKER, broker)
+    reiniciado = False
+    if fue_reiniciado(BROKER):
+        print("El nodo fue reiniciado", flush=True)
+        reiniciado = True
+    proceso_nodo = Process(target=iniciar_nodo, args=(BROKER, Broker(reiniciado)))
+    monitor = HealthMonitor(BROKER)
+    proceso_monitor = Process(target=monitor.run)
 
+    proceso_nodo.start()
+    proceso_monitor.start()
+
+    proceso_nodo.join()
+    proceso_monitor.join()
