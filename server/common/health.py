@@ -15,9 +15,11 @@ class HealthMonitor:
         self.puerto_nodo_siguiente = int(cargar_puerto_siguiente())
         self.nodo_anterior = cargar_nodo_anterior()
         self.nodo_siguiente = cargar_nodo_siguiente()
-        self.heartbeat_interval = 4
-        self.check_interval = 20
         self.nodo_actual = obtiene_nombre_contenedor(tipo)
+        self.heartbeat_interval = 4
+        self.check_interval = 10
+        self.max_failed_heartbeats = 3
+        self.failed_heartbeats = 0        
 
 
     def reinicio(self):
@@ -51,7 +53,7 @@ class HealthMonitor:
                 #print(f"siguiente es {self.nodo_siguiente}", flush=True)
                 send.sendto(b"HB", (self.nodo_siguiente, self.puerto_nodo_siguiente))
             except socket.gaierror as e:
-                print(f"[MONITOR] Nodo siguiente no resolvible: {e}", flush=True)
+                print(f"[MONITOR] Nodo siguiente no disponible: {e}", flush=True)
             except Exception as e:
                 print(f"[MONITOR] Error al enviar heartbeat: {e}")
 
@@ -63,7 +65,13 @@ class HealthMonitor:
                 pass
 
             if time.time() - last > self.check_interval:
-                print("No se recibio mas heartbeat", flush=True)
-                self.reinicio()
+                print("[MONITOR] No se recibio heartbeat", flush=True)
+                self.failed_heartbeats += 1
+                last = time.time()
+                if self.failed_heartbeats >= self.max_failed_heartbeats:
+                    print("[MONITOR] No se recibieron heartbeats suficientes.", flush=True)
+                    self.failed_heartbeats = 0
+                    self.reinicio()
+
 
             time.sleep(self.heartbeat_interval)

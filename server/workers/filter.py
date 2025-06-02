@@ -78,7 +78,6 @@ class FiltroNode:
     def procesar_mensajes(self, canal, destino, mensaje, enviar_func):
         consulta_id = obtener_query(mensaje)
         tipo_mensaje = obtener_tipo_mensaje(mensaje)
-        mensaje['ack']()
         try:
             if tipo_mensaje == EOF:
                 logging.info(f"Consulta {consulta_id} recibió EOF")
@@ -86,6 +85,7 @@ class FiltroNode:
             else:
                 resultado = self.ejecutar_consulta(consulta_id, obtener_body(mensaje))
                 enviar_func(canal, destino, resultado, mensaje, tipo_mensaje)
+            mensaje['ack']()
         except ConsultaInexistente as e:
             logging.warning(f"Consulta inexistente: {e}")
         except Exception as e:

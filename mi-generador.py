@@ -307,7 +307,7 @@ def generar_yaml(clients, cant_filter, cant_joiner, cant_aggregator, cant_pnl):
             }
         }
     }
-    puertos = generar_diccionario_puertos(2, 1, 1, 1)
+    puertos = generar_diccionario_puertos(cant_filter, cant_joiner, cant_aggregator, cant_pnl)
     anillo = crear_anillo(cant_filter, cant_joiner, cant_aggregator, cant_pnl)
     agregar_clientes(compose, clients)
     agregar_workers(compose, anillo, puertos, cant_filter, cant_joiner, cant_aggregator, cant_pnl)

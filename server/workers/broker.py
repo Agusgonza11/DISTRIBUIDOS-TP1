@@ -133,12 +133,13 @@ class Broker:
 
                 else:
                     logging.error(f"Tipo de mensaje inesperado en consulta {consulta_id}: {tipo_mensaje}")
+            self.guardar_estado()
+            mensaje['ack']()
         except ConsultaInexistente as e:
             logging.warning(f"Consulta inexistente: {e}")    
         except Exception as e:
             logging.error(f"Error procesando mensaje en consulta {consulta_id}: {e}")
-        self.guardar_estado()
-        mensaje['ack']()
+
 
 
 # -----------------------

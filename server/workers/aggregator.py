@@ -30,6 +30,7 @@ class AggregatorNode:
     def eliminar(self):
         self.resultados_parciales = {}
         self.eof_esperados = {}
+        self.resultados_health = {}
 
 
     def cargar_estado(self):
@@ -166,11 +167,11 @@ class AggregatorNode:
                     gc.collect()
             else:
                 self.guardar_datos(consulta_id, obtener_body(mensaje), client_id)
+            mensaje['ack']()
         except ConsultaInexistente as e:
             logging.warning(f"Consulta inexistente: {e}")
         except Exception as e:
             logging.error(f"Error procesando mensaje en consulta {consulta_id}: {e}")
-        mensaje['ack']()
 
 
 
