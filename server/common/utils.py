@@ -40,7 +40,9 @@ def graceful_quit(conexion, canal, nodo):
     def shutdown_handler(_, __):
         logging.info("Apagando nodo")
         try:
-            nodo.eliminar() 
+            es_global = os.path.exists("/tmp/shutdown_global.flag")
+            print(f"como quedo {es_global}", flush=True)
+            nodo.eliminar(es_global) 
             logging.info("Datos eliminados del nodo.")
         except Exception as e:
             logging.error(f"Error al eliminar datos del nodo: {e}")
@@ -66,6 +68,15 @@ def fue_reiniciado(tipo_nodo):
         return True
     return False
 
+
+def borrar_contenido_carpeta(ruta="/app/reinicio_flags"):
+    for nombre in os.listdir(ruta):
+        ruta_completa = os.path.join(ruta, nombre)
+        if os.path.isdir(ruta_completa):
+            borrar_contenido_carpeta(ruta_completa)
+            os.rmdir(ruta_completa)
+        else:
+            os.remove(ruta_completa)
 
 # -------------------
 # PANDAS

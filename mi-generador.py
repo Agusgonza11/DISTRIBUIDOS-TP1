@@ -163,7 +163,8 @@ def agregar_broker(compose, anillo, puertos, cant_filter=1, cant_joiner=1, cant_
         },
         "volumes": [
             "/var/run/docker.sock:/var/run/docker.sock",
-            "reinicio_flags:/app/reinicio_flags"
+            "reinicio_flags:/app/reinicio_flags",
+            "shared-data:/shared"
         ]
     }
 
@@ -212,7 +213,8 @@ def agregar_workers(compose, anillo, puertos, cant_filter=1, cant_joiner=1, cant
 
             volumes = [
                 "/var/run/docker.sock:/var/run/docker.sock",
-                "reinicio_flags:/app/reinicio_flags"
+                "reinicio_flags:/app/reinicio_flags",
+                "shared-data:/shared"
             ]
 
             # Volumen persistente adicional para joiner
@@ -319,6 +321,7 @@ def generar_yaml(clients, cant_filter, cant_joiner, cant_aggregator, cant_pnl):
     agregar_workers(compose, anillo, puertos, cant_filter, cant_joiner, cant_aggregator, cant_pnl)
     agregar_broker(compose, anillo, puertos, cant_filter, cant_joiner, cant_aggregator, cant_pnl)
     compose.setdefault("volumes", {})["reinicio_flags"] = None
+    compose.setdefault("volumes", {})["shared-data"] = None
     return compose
 
 def crear_anillo(cant_filter, cant_joiner, cant_aggregator, cant_pnl):

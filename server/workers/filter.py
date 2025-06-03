@@ -14,7 +14,7 @@ class FiltroNode:
     def __init__(self, _=None):
         pass
 
-    def eliminar(self):
+    def eliminar(self, _):
         pass
 
     def ejecutar_consulta(self, consulta_id, datos):

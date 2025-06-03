@@ -6,7 +6,7 @@ import pickle
 import sys
 
 import pandas as pd
-from common.utils import EOF, cargar_eofs, concat_data, create_dataframe, fue_reiniciado, obtiene_nombre_contenedor, prepare_data_aggregator_consult_3
+from common.utils import EOF, borrar_contenido_carpeta, cargar_eofs, concat_data, create_dataframe, fue_reiniciado, obtiene_nombre_contenedor, prepare_data_aggregator_consult_3
 from common.communication import iniciar_nodo, obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
 import tracemalloc
 from common.excepciones import ConsultaInexistente
@@ -27,11 +27,17 @@ class AggregatorNode:
         if reiniciado:
             self.cargar_estado()
 
-    def eliminar(self):
+    def eliminar(self, es_global):
         self.resultados_parciales = {}
         self.eof_esperados = {}
         self.resultados_health = {}
-
+        if es_global:
+            try:
+                borrar_contenido_carpeta()
+                logging.info(f"Volumen limpiado por shutdown global")
+                print(f"Volumen limpiado por shutdown global", flush=True)
+            except Exception as e:
+                logging.error(f"Error limpiando volumen en shutdown global: {e}")
 
     def cargar_estado(self):
         try:

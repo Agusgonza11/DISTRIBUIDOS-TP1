@@ -2,7 +2,7 @@ from multiprocessing import Process
 import os
 import sys
 import logging
-from common.utils import EOF, cargar_datos_broker, cargar_eofs, fue_reiniciado, obtiene_nombre_contenedor
+from common.utils import EOF, borrar_contenido_carpeta, cargar_datos_broker, cargar_eofs, fue_reiniciado, obtiene_nombre_contenedor
 from common.communication import iniciar_nodo, obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
 from common.excepciones import ConsultaInexistente
 import pickle
@@ -57,11 +57,17 @@ class Broker:
         self.ultimo_nodo_consulta[client] = [self.nodos_enviar[client][3][0], self.nodos_enviar[client][4][0], 1]
         self.clients.append(client)
 
-    def eliminar(self):
+    def eliminar(self, es_global):
         self.nodos_enviar = {}
         self.eof_esperar = {}
         self.ultimo_nodo_consulta = {}
         self.clients = []
+        if es_global:
+            try:
+                borrar_contenido_carpeta()
+                logging.info(f"Volumen limpiado por shutdown global")
+            except Exception as e:
+                logging.error(f"Error limpiando volumen en shutdown global: {e}")
 
     def siguiente_nodo(self, consulta_id, client_id):
         if consulta_id == 5:

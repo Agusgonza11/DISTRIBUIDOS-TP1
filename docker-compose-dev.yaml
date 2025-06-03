@@ -89,6 +89,7 @@ services:
     volumes:
     - /var/run/docker.sock:/var/run/docker.sock
     - reinicio_flags:/app/reinicio_flags
+    - shared-data:/shared
   joiner1:
     container_name: joiner1
     image: joiner:latest
@@ -110,6 +111,7 @@ services:
     volumes:
     - /var/run/docker.sock:/var/run/docker.sock
     - reinicio_flags:/app/reinicio_flags
+    - shared-data:/shared
     - ./joiner_tmp:/tmp/joiner_tmp
   aggregator1:
     container_name: aggregator1
@@ -132,6 +134,7 @@ services:
     volumes:
     - /var/run/docker.sock:/var/run/docker.sock
     - reinicio_flags:/app/reinicio_flags
+    - shared-data:/shared
   pnl1:
     container_name: pnl1
     image: pnl:latest
@@ -153,6 +156,7 @@ services:
     volumes:
     - /var/run/docker.sock:/var/run/docker.sock
     - reinicio_flags:/app/reinicio_flags
+    - shared-data:/shared
   broker:
     container_name: broker
     image: broker:latest
@@ -173,6 +177,7 @@ services:
     volumes:
     - /var/run/docker.sock:/var/run/docker.sock
     - reinicio_flags:/app/reinicio_flags
+    - shared-data:/shared
 networks:
   testing_net:
     ipam:
@@ -181,3 +186,5 @@ networks:
       - subnet: 172.25.125.0/24
 volumes:
   reinicio_flags: null
+  shared-data: null
+

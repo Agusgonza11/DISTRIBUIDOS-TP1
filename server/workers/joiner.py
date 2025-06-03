@@ -6,7 +6,7 @@ import os
 import tempfile
 import gc
 import threading
-from common.utils import EOF, concat_data, create_dataframe, fue_reiniciado, get_batches, obtiene_nombre_contenedor, prepare_data_consult_4
+from common.utils import EOF, borrar_contenido_carpeta, concat_data, create_dataframe, fue_reiniciado, get_batches, obtiene_nombre_contenedor, prepare_data_consult_4
 from common.utils import normalize_movies_df, normalize_credits_df, normalize_ratings_df
 from common.communication import iniciar_nodo, obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
 import pandas as pd # type: ignore
@@ -38,19 +38,22 @@ class JoinerNode:
         if reiniciado:
             self.cargar_estado()
 
-    def eliminar(self):
-        # Borrar archivos temporales del disco
-        """
-        for client_id, paths in self.file_paths.items():
-            for tipo, path in paths.items():
-                try:
-                    if os.path.exists(path):
-                        os.remove(path)
-                        print(f"Archivo borrado: {path}")
-                except Exception as e:
-                    print(f"Error borrando {path}: {e}")
-"""
-        # Limpiar estructuras internas
+    def eliminar(self, es_global):
+        if es_global:
+            try:
+                borrar_contenido_carpeta()
+                for client_id, paths in self.file_paths.items():
+                    for tipo, path in paths.items():
+                        try:
+                            if os.path.exists(path):
+                                os.remove(path)
+                                print(f"Archivo borrado: {path}")
+                        except Exception as e:
+                            print(f"Error borrando {path}: {e}")
+                logging.info(f"Volumen limpiado por shutdown global")
+            except Exception as e:
+                logging.error(f"Error limpiando volumen en shutdown global: {e}")
+        
         self.resultados_parciales.clear()
         self.termino_movies.clear()
         self.datos.clear()
@@ -62,7 +65,6 @@ class JoinerNode:
         try:
             with open(self.health_file, "rb") as f:
                 estado = pickle.load(f)
-
             self.datos = estado.get("datos", {})
             self.termino_movies = estado.get("termino_movies", {})
             self.resultados_parciales = estado.get("resultados_parciales", {})

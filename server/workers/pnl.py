@@ -3,7 +3,7 @@ from multiprocessing import Process
 import os
 import pickle
 import sys
-from common.utils import EOF, concat_data, create_dataframe, fue_reiniciado, get_batches, obtiene_nombre_contenedor
+from common.utils import EOF, borrar_contenido_carpeta, concat_data, create_dataframe, fue_reiniciado, get_batches, obtiene_nombre_contenedor
 from common.communication import iniciar_nodo, obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
 from transformers import pipeline # type: ignore
 import torch # type: ignore
@@ -62,12 +62,18 @@ class PnlNode:
             print(f"Error al guardar el estado: {e}", flush=True)
 
 
-    def eliminar(self):
+    def eliminar(self, es_global):
         self.resultados_parciales = {}
         self.lineas_actuales = {}
         self.resultados_health = {}
         if hasattr(self, 'sentiment_analyzer'):
             del self.sentiment_analyzer
+        if es_global:
+            try:
+                borrar_contenido_carpeta()
+                logging.info(f"Volumen limpiado por shutdown global")
+            except Exception as e:
+                logging.error(f"Error limpiando volumen en shutdown global: {e}")
 
     def guardar_datos(self, datos, client_id):
         if not client_id in self.resultados_parciales:

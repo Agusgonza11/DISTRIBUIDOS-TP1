@@ -38,6 +38,10 @@ docker-compose-up: docker-image
 .PHONY: docker-compose-up
 
 docker-compose-down:
+	@for svc in $$(docker compose -f docker-compose-dev.yaml ps --services); do \
+		container_id=$$(docker compose -f docker-compose-dev.yaml ps -q $$svc); \
+		docker exec $$container_id touch /tmp/shutdown_global.flag || true; \
+	done
 	docker compose -f docker-compose-dev.yaml stop -t 1
 	docker compose -f docker-compose-dev.yaml down
 .PHONY: docker-compose-down
