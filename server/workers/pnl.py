@@ -30,6 +30,7 @@ class PnlNode:
         self.resultados_parciales = {}
         self.lineas_actuales = {}
         self.resultados_health = {}
+        self.modifico = False
         self.health_file = f"/app/reinicio_flags/{obtiene_nombre_contenedor(PNL)}.data"
         if reiniciado:
             self.cargar_estado()
@@ -52,6 +53,8 @@ class PnlNode:
 
 
     def guardar_estado(self):
+        if not self.modifico:
+            return
         try:
             with open(self.health_file, "wb") as f:
                 pickle.dump({
@@ -66,6 +69,7 @@ class PnlNode:
         self.resultados_parciales = {}
         self.lineas_actuales = {}
         self.resultados_health = {}
+        self.cambios = {}
         if hasattr(self, 'sentiment_analyzer'):
             del self.sentiment_analyzer
         if es_global:
@@ -127,11 +131,13 @@ class PnlNode:
                     resultado = self.ejecutar_consulta(consulta_id, client_id)
                     enviar_func(canal, destino, resultado, mensaje, "RESULT")
                 enviar_func(canal, destino, EOF, mensaje, EOF)
+                self.modifico = False
             else:
-                self.guardar_datos(obtener_body(mensaje), client_id)
+                self.guardar_datos(obtener_body(mensaje), client_id) #guardar una variable para q solo guarde
                 if self.lineas_actuales[client_id] >= BATCH_PNL:
                     resultado = self.ejecutar_consulta(consulta_id, client_id)
                     enviar_func(canal, destino, resultado, mensaje, "RESULT")
+                self.modifico = True
             self.guardar_estado()
             mensaje['ack']()
         except ConsultaInexistente as e:

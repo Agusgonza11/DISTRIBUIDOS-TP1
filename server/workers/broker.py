@@ -23,32 +23,52 @@ class Broker:
         self.eof_esperar = {}
         self.ultimo_nodo_consulta = {}
         self.clients = []
+        self.cambios = {}
+        self.modifico = False
         self.health_file = f"/app/reinicio_flags/broker.data"
         if reiniciado:
             self.cargar_estado()
 
+    def marcar_modificado(self, clave, valor):
+        try:
+            self.cambios[clave] = pickle.dumps(valor)
+            self.modifico = True
+        except Exception as e:
+            print(f"Error al serializar '{clave}': {e}", flush=True)
+
+
     def guardar_estado(self):
+        if not self.modifico:
+            return
         try:
             with open(self.health_file, "wb") as f:
-                pickle.dump({
-                    "nodos_enviar": self.nodos_enviar,
-                    "eof_esperar": self.eof_esperar,
-                    "ultimo_nodo_consulta": self.ultimo_nodo_consulta,
-                    "clients": self.clients
-                }, f)
+                pickle.dump(self.cambios, f)
+
+            self.modifico = False
         except Exception as e:
             print(f"Error al guardar el estado del broker: {e}", flush=True)
+
 
     def cargar_estado(self):
         try:
             with open(self.health_file, "rb") as f:
-                estado = pickle.load(f)
-                self.nodos_enviar = estado.get("nodos_enviar", {})
-                self.eof_esperar = estado.get("eof_esperar", {})
-                self.ultimo_nodo_consulta = estado.get("ultimo_nodo_consulta", {})
-                self.clients = estado.get("clients", [])
+                cambios = pickle.load(f)
+
+            if "nodos_enviar" in cambios:
+                self.nodos_enviar = pickle.loads(cambios["nodos_enviar"])
+            if "eof_esperar" in cambios:
+                self.eof_esperar = pickle.loads(cambios["eof_esperar"])
+            if "ultimo_nodo_consulta" in cambios:
+                self.ultimo_nodo_consulta = pickle.loads(cambios["ultimo_nodo_consulta"])
+            if "clients" in cambios:
+                self.clients = pickle.loads(cambios["clients"])
+            self.marcar_modificado("ultimo_nodo_consulta", self.ultimo_nodo_consulta)      
+            self.marcar_modificado("nodos_enviar", self.nodos_enviar)      
+            self.marcar_modificado("eof_esperar", self.eof_esperar)      
+            self.marcar_modificado("clients", self.clients)      
+
         except Exception as e:
-            print(f"Error al cargar el estado del broker: {e}", flush=True)
+            print(f"Error al cargar el estado: {e}", flush=True)
 
 
     def create_client(self, client):
@@ -56,11 +76,14 @@ class Broker:
         self.eof_esperar[client] = cargar_eofs()
         self.ultimo_nodo_consulta[client] = [self.nodos_enviar[client][3][0], self.nodos_enviar[client][4][0], 1]
         self.clients.append(client)
+        self.marcar_modificado("clients", self.clients)
+        self.marcar_modificado("nodos_enviar", self.nodos_enviar)
 
     def eliminar(self, es_global):
         self.nodos_enviar = {}
         self.eof_esperar = {}
         self.ultimo_nodo_consulta = {}
+        self.cambios = {}
         self.clients = []
         if es_global:
             try:
@@ -83,7 +106,8 @@ class Broker:
             lista_nodos = self.nodos_enviar[client_id][4]
             idx_actual = lista_nodos.index(self.ultimo_nodo_consulta[client_id][CONSULTA_4])
             idx_siguiente = (idx_actual + 1) % len(lista_nodos)
-            self.ultimo_nodo_consulta[client_id][CONSULTA_4] = lista_nodos[idx_siguiente]        
+            self.ultimo_nodo_consulta[client_id][CONSULTA_4] = lista_nodos[idx_siguiente]  
+        self.marcar_modificado("ultimo_nodo_consulta", self.ultimo_nodo_consulta)      
 
 
     def distribuir_informacion(self, client_id, consulta_id, mensaje, canal, enviar_func, tipo=None):
@@ -113,12 +137,14 @@ class Broker:
         consulta_id = obtener_query(mensaje)
         tipo_mensaje = obtener_tipo_mensaje(mensaje)
         client_id = obtener_client_id(mensaje)
+        self.modifico = False
         if client_id not in self.clients:
             self.create_client(client_id)
         try:
             if consulta_id == 5:
                 if tipo_mensaje == EOF:
                     self.eof_esperar[client_id][consulta_id] -= 1
+                    self.marcar_modificado("eof_esperar", self.eof_esperar)
                     if self.eof_esperar[client_id][consulta_id] == 0:
                         self.distribuir_informacion(client_id, consulta_id, mensaje, canal, enviar_func, EOF)
                 else:
@@ -134,6 +160,7 @@ class Broker:
 
                 elif tipo_mensaje == EOF:
                     self.eof_esperar[client_id][consulta_id] -= 1
+                    self.marcar_modificado("eof_esperar", self.eof_esperar)
                     if self.eof_esperar[client_id][consulta_id] == 0:
                         self.distribuir_informacion(client_id, consulta_id, mensaje, canal, enviar_func, EOF)
 

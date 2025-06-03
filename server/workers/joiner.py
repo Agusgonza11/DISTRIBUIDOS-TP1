@@ -1,5 +1,6 @@
 from multiprocessing import Process
 import pickle
+import struct
 import sys
 import logging
 import os
@@ -34,6 +35,8 @@ class JoinerNode:
         self.locks = {}
         self.files_on_disk = {}
         self.file_paths = {}
+        self.cambios = {}
+        self.modifico = False
         self.health_file = f"/app/reinicio_flags/{obtiene_nombre_contenedor(JOINER)}.data"
         if reiniciado:
             self.cargar_estado()
@@ -60,41 +63,79 @@ class JoinerNode:
         self.locks.clear()
         self.files_on_disk.clear()
         self.file_paths.clear()
+        self.cambios.clear()
+
+    def marcar_modificado(self, clave, valor):
+        try:
+            self.cambios[clave] = valor
+            self.modifico = True
+        except Exception as e:
+            print(f"Error al serializar '{clave}': {e}", flush=True)
+
 
     def cargar_estado(self):
         try:
             with open(self.health_file, "rb") as f:
-                estado = pickle.load(f)
-            self.datos = estado.get("datos", {})
-            self.termino_movies = estado.get("termino_movies", {})
-            self.resultados_parciales = estado.get("resultados_parciales", {})
-            self.files_on_disk = estado.get("files_on_disk", {})
-            self.file_paths = estado.get("file_paths", {})
+                cambios = {}
+                # Leer la cantidad de claves (4 bytes big endian)
+                n = int.from_bytes(f.read(4), byteorder='big')
+                for _ in range(n):
+                    # Leer tamaño y clave
+                    len_clave = int.from_bytes(f.read(4), byteorder='big')
+                    clave_bytes = f.read(len_clave)
+                    clave = clave_bytes.decode('utf-8')
 
-            # Recrear locks
+                    # Leer tamaño y valor serializado
+                    len_valor = int.from_bytes(f.read(4), byteorder='big')
+                    valor_serializado = f.read(len_valor)
+
+                    cambios[clave] = valor_serializado
+
+            # Deserializar los valores específicos
+            if "datos" in cambios:
+                self.datos = pickle.loads(cambios["datos"])
+            if "termino_movies" in cambios:
+                self.termino_movies = pickle.loads(cambios["termino_movies"])
+            if "resultados_parciales" in cambios:
+                self.resultados_parciales = pickle.loads(cambios["resultados_parciales"])
+            if "files_on_disk" in cambios:
+                self.files_on_disk = pickle.loads(cambios["files_on_disk"])
+            if "file_paths" in cambios:
+                self.file_paths = pickle.loads(cambios["file_paths"])
+
             self.locks = {
                 cid: {
                     "ratings": threading.Lock(),
                     "credits": threading.Lock()
                 } for cid in self.datos
             }
-
+            self.marcar_modificado("datos", self.datos)
+            self.marcar_modificado("termino_movies", self.termino_movies)
+            self.marcar_modificado("resultados_parciales", self.resultados_parciales)
+            self.marcar_modificado("files_on_disk", self.files_on_disk)
+            self.marcar_modificado("file_paths", self.file_paths)
         except Exception as e:
             print(f"Error al cargar el estado: {e}", flush=True)
 
+
     def guardar_estado(self):
+        if not self.modifico:
+            return
         try:
-            estado = {
-                "datos": self.datos,
-                "termino_movies": self.termino_movies,
-                "resultados_parciales": self.resultados_parciales,
-                "files_on_disk": self.files_on_disk,
-                "file_paths": self.file_paths,
-            }
-            with open(self.health_file, "wb") as f:
-                pickle.dump(estado, f)
+            with open(self.health_file, "ab") as f:
+                for clave, valor in self.cambios.items():
+                    # Convertimos clave y valor a bytes
+                    clave_b = clave.encode("utf-8")
+                    valor_b = str(valor).encode("utf-8")  # solo strings, int, float, etc.
+
+                    # Escribimos longitud + contenido (4 bytes cada longitud)
+                    f.write(len(clave_b).to_bytes(4, "big"))
+                    f.write(clave_b)
+                    f.write(len(valor_b).to_bytes(4, "big"))
+                    f.write(valor_b)
+            self.modifico = False
         except Exception as e:
-            print(f"Error al guardar el estado: {e}", flush=True)
+            print(f"Error al guardar estado: {e}", flush=True)
 
 
     def crear_datos(self, client_id):
@@ -213,6 +254,7 @@ class JoinerNode:
     def borrar_info(self, csv, client_id):
         self.datos[client_id][csv][DATOS] = []
         self.datos[client_id][csv][LINEAS] = 0
+        self.marcar_modificado("datos", self.datos)
 
     def limpiar_consulta(self, client_id, consulta_id):
         csv = "ratings" if consulta_id == 3 else "credits"
@@ -262,10 +304,18 @@ class JoinerNode:
         contenido = obtener_body(mensaje)
         if client_id not in self.datos:
             self.crear_datos(client_id)
+            self.marcar_modificado("datos", self.datos)
+            self.marcar_modificado("termino_movies", self.termino_movies)
+            self.marcar_modificado("resultados_parciales", self.resultados_parciales)
+            self.marcar_modificado("files_on_disk", self.files_on_disk)
+            self.marcar_modificado("file_paths", self.file_paths)
         if tipo_mensaje == "MOVIES":
             self.guardar_datos(consulta_id, contenido, client_id)
+            self.marcar_modificado("resultados_parciales", self.resultados_parciales)
         else:
             self.almacenar_csv(consulta_id, contenido, client_id)
+            self.marcar_modificado("datos", self.datos)
+            self.marcar_modificado("files_on_disk", self.files_on_disk)
 
     def procesar_resultado(self, consulta_id, canal, destino, mensaje, enviar_func, client_id):
         if self.puede_enviar(consulta_id, client_id):
@@ -288,6 +338,10 @@ class JoinerNode:
         if self.termino_movies[client_id][consulta_id]:
             if self.datos[client_id]["ratings"][TERMINO] or self.datos[client_id]["credits"][TERMINO]:
                 self.limpiar_consulta(client_id, consulta_id)
+                self.marcar_modificado("resultados_parciales", self.resultados_parciales)
+        self.marcar_modificado("file_paths", self.file_paths)
+        self.marcar_modificado("files_on_disk", self.files_on_disk)
+
 
 
     def enviar_eof(self, consulta_id, canal, destino, mensaje, enviar_func, client_id):
@@ -301,10 +355,12 @@ class JoinerNode:
         consulta_id = obtener_query(mensaje)
         tipo_mensaje = obtener_tipo_mensaje(mensaje)
         client_id = obtener_client_id(mensaje)
+        self.modifico = False
         try:
             if tipo_mensaje == "EOF":
                 logging.info(f"Se recibio todo Movies, consulta {consulta_id} recibió EOF")
                 self.termino_movies[client_id][consulta_id] = True
+                self.marcar_modificado("termino_movies", self.termino_movies)
                 self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
                 self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func, client_id)
             elif tipo_mensaje in ["MOVIES", "RATINGS", "CREDITS"]:
@@ -314,12 +370,14 @@ class JoinerNode:
             elif tipo_mensaje == "EOF_RATINGS":
                 logging.info("Recibí todos los ratings")
                 self.datos[client_id]["ratings"][TERMINO] = True
+                self.marcar_modificado("datos", self.datos)
                 if self.datos[client_id]["ratings"][LINEAS] != 0 or self.files_on_disk[client_id]["ratings"]:
                     self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
                 self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func, client_id)
             elif tipo_mensaje == "EOF_CREDITS":
                 logging.info("Recibí todos los credits")
                 self.datos[client_id]["credits"][TERMINO] = True
+                self.marcar_modificado("datos", self.datos)
                 if self.datos[client_id]["credits"][LINEAS] != 0 or self.files_on_disk[client_id]["credits"]:
                     self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
                 self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func, client_id)

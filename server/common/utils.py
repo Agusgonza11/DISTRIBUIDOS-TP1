@@ -41,7 +41,7 @@ def graceful_quit(conexion, canal, nodo):
         logging.info("Apagando nodo")
         try:
             es_global = os.path.exists("/tmp/shutdown_global.flag")
-            print(f"como quedo {es_global}", flush=True)
+            print(f"El shutdown es global {es_global}", flush=True)
             nodo.eliminar(es_global) 
             logging.info("Datos eliminados del nodo.")
         except Exception as e:
