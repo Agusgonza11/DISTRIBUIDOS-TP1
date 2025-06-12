@@ -1,14 +1,10 @@
 import logging
 from multiprocessing import Process
-import os
-import gc
 import pickle
 import sys
 
-import pandas as pd
 from common.utils import EOF, borrar_contenido_carpeta, cargar_eofs, concat_data, create_dataframe, fue_reiniciado, obtiene_nombre_contenedor, prepare_data_aggregator_consult_3
 from common.communication import iniciar_nodo, obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
-import tracemalloc
 from common.excepciones import ConsultaInexistente
 
 
@@ -19,7 +15,6 @@ AGGREGATOR = "aggregator"
 # -----------------------
 class AggregatorNode:
     def __init__(self, reiniciado=None):
-        tracemalloc.start()
         self.resultados_parciales = {}
         self.resultados_health = {}
         self.eof_esperados = {}
@@ -97,13 +92,6 @@ class AggregatorNode:
         
         datos = concat_data(datos_cliente[consulta_id])
         
-        logging.info(tracemalloc.get_traced_memory())
-        tracemalloc.stop()
-        logging.info("Memoria usada: \n")
-        size_bytes = sys.getsizeof(datos)
-        size_mb = size_bytes / (1024 ** 2)
-        logging.info(f"Uso de memoria: {size_mb:.2f} MB")
-        
         match consulta_id:
             case 2:
                 return self.consulta_2(datos)
@@ -167,8 +155,6 @@ class AggregatorNode:
                         del self.resultados_parciales[client_id]
                     if not self.eof_esperados[client_id]:
                         del self.eof_esperados[client_id]
-
-                    gc.collect()
             else:
                 self.guardar_datos(consulta_id, obtener_body(mensaje), client_id)
             self.guardar_estado()
@@ -177,7 +163,6 @@ class AggregatorNode:
             logging.warning(f"Consulta inexistente: {e}")
         except Exception as e:
             logging.error(f"Error procesando mensaje en consulta {consulta_id}: {e}")
-
 
 
 # -----------------------

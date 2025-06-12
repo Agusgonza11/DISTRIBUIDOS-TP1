@@ -1,11 +1,8 @@
 from multiprocessing import Process
 import pickle
-import struct
-import sys
 import logging
 import os
 import tempfile
-import gc
 import threading
 from common.utils import EOF, borrar_contenido_carpeta, concat_data, create_dataframe, fue_reiniciado, get_batches, obtiene_nombre_contenedor, prepare_data_consult_4
 from common.utils import normalize_movies_df, normalize_credits_df, normalize_ratings_df
@@ -133,6 +130,7 @@ class JoinerNode:
                     f.write(clave_b)
                     f.write(len(valor_b).to_bytes(4, "big"))
                     f.write(valor_b)
+                    
             self.modifico = False
         except Exception as e:
             print(f"Error al guardar estado: {e}", flush=True)
@@ -229,7 +227,6 @@ class JoinerNode:
                 self.procesar_y_enviar_batch_credit(batch, datos, canal, destino, mensaje, enviar_func)
             batch = None
         try:
-            gc.collect()
             os.remove(self.file_paths[client_id][csv])
         except Exception as e:
             logging.error(f"No se pudo borrar el archivo temporal {csv}: {e}")
@@ -268,7 +265,6 @@ class JoinerNode:
         self.file_paths[client_id][csv] = ""
         self.borrar_info(csv, client_id)
         self.resultados_parciales[client_id][consulta_id] = []
-        gc.collect()
 
     def ejecutar_consulta(self, datos, consulta_id, client_id):
         match consulta_id:

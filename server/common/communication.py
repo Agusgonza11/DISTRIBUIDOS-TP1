@@ -70,7 +70,6 @@ def run(tipo_nodo, nodo):
         for p in (proceso_nodo, proceso_monitor):
             if p.is_alive():
                 p.terminate()
-        sys.exit(0)
 
     signal.signal(signal.SIGINT, shutdown_parent_handler)
     signal.signal(signal.SIGTERM, shutdown_parent_handler)
