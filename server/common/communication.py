@@ -41,7 +41,7 @@ def obtener_query(mensaje):
 
 def config_header(mensaje_original, tipo=None):
     headers = {"Query": mensaje_original['headers'].get("Query"), "ClientID": mensaje_original['headers'].get("ClientID")}
-    if type != None:
+    if tipo != None:
         headers["type"] = tipo
     return pika.BasicProperties(headers=headers)
 
@@ -186,6 +186,12 @@ def escuchar_colas_pnl(nodo, consultas, canal, pnl_id):
     generalizo_callback(nombre_entrada, nombre_salida, canal, nodo)
     canal.start_consuming()
 
+def setup_queue(canal, nombre_queue, ttl):
+    canal.queue_declare(
+        queue=nombre_queue,
+        durable=True,
+        arguments={"x-message-ttl": ttl}
+    )
 
 def generalizo_callback(nombre_entrada, nombre_salida, canal, nodo):
     def make_callback(nombre_salida):
@@ -206,3 +212,40 @@ def generalizo_callback(nombre_entrada, nombre_salida, canal, nodo):
 
     logging.info(f"Escuchando en {nombre_entrada}")
     logging.info(f"Para enviar en {nombre_salida}")    
+
+
+
+def restaurar_de_backup(queue_name, procesar_func, ttl, max_msgs=None):
+    """
+    Consume todos los mensajes de una cola backup y los envía a procesar_func.
+    - queue_name: Nombre de la cola backup (str)
+    - ttl: entero, TTL opcional de la cola (default 15min)
+    - max_msgs: cortar después de N mensajes (útil debug/tests)
+    """
+    parametros = pika.ConnectionParameters(host="rabbitmq")
+    conexion = pika.BlockingConnection(parametros)
+    canal = conexion.channel()
+    setup_queue(canal, queue_name, ttl)
+
+    count = 0
+    while True:
+        method_frame, properties, body = canal.basic_get(queue=queue_name, auto_ack=False)
+        if method_frame is None:
+            break  
+
+        mensaje = {
+            'body': body,
+            'headers': properties.headers if properties and properties.headers else {},
+            'ack': lambda: canal.basic_ack(delivery_tag=method_frame.delivery_tag)
+        }
+        try:
+            nombre_salida = "aggregator_request_3" if queue_name[-1] == "3" else "aggregator_request_4"        
+            procesar_func(canal, nombre_salida, mensaje, enviar_mensaje)
+        except Exception as e:
+            logging.error(f"Error levantando mensaje de backup: {e}")
+            canal.basic_ack(delivery_tag=method_frame.delivery_tag)
+        count += 1
+        if max_msgs and count >= max_msgs:
+            break
+
+    conexion.close()

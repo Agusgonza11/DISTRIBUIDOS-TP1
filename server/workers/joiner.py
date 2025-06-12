@@ -9,10 +9,9 @@ import gc
 import threading
 from common.utils import EOF, borrar_contenido_carpeta, concat_data, create_dataframe, fue_reiniciado, get_batches, obtiene_nombre_contenedor, prepare_data_consult_4
 from common.utils import normalize_movies_df, normalize_credits_df, normalize_ratings_df
-from common.communication import iniciar_nodo, obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
+from common.communication import iniciar_nodo, obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, restaurar_de_backup, run, setup_queue
 import pandas as pd # type: ignore
 from common.excepciones import ConsultaInexistente
-
 
 JOINER = "joiner"
 
@@ -20,6 +19,8 @@ DATOS = 0
 LINEAS = 1
 TERMINO = 2
 TMP_DIR = "/tmp/joiner_tmp"
+
+TTL = 900000
 
 BATCH_CREDITS, BATCH_RATINGS = get_batches(JOINER)
 
@@ -38,8 +39,34 @@ class JoinerNode:
         self.cambios = {}
         self.modifico = False
         self.health_file = f"/app/reinicio_flags/{obtiene_nombre_contenedor(JOINER)}.data"
+    
+        self.backup_initialized = {
+            3: False,
+            4: False
+        }
+        self.backup_queues = {
+            3: f"backup_joiner_{obtiene_nombre_contenedor(JOINER)}_3",
+            4: f"backup_joiner_{obtiene_nombre_contenedor(JOINER)}_4"
+        }
+        self.backup_queue_counts = {
+            3: 0,
+            4: 0
+        }
+
         if reiniciado:
             self.cargar_estado()
+            self.restaurar_backup()
+
+    def restaurar_backup(self):
+        if self.backup_queue_counts[3] > 0:
+            restaurar_de_backup(self.backup_queues[3], self.procesar_mensajes, TTL, self.backup_queue_counts[3])
+
+        if self.backup_queue_counts[4] > 0:
+            restaurar_de_backup(self.backup_queues[4], self.procesar_mensajes, TTL, self.backup_queue_counts[4])
+        
+        self.backup_queue_counts[3] = 0
+        self.backup_queue_counts[4] = 0
+        self.marcar_modificado("backup_queue_counts", self.backup_queue_counts)
 
     def eliminar(self, es_global):
         if es_global:
@@ -102,6 +129,8 @@ class JoinerNode:
                 self.files_on_disk = pickle.loads(cambios["files_on_disk"])
             if "file_paths" in cambios:
                 self.file_paths = pickle.loads(cambios["file_paths"])
+            if "backup_queue_counts" in cambios:
+                self.backup_queue_counts = pickle.loads(cambios["backup_queue_counts"])
 
             self.locks = {
                 cid: {
@@ -114,6 +143,8 @@ class JoinerNode:
             self.marcar_modificado("resultados_parciales", self.resultados_parciales)
             self.marcar_modificado("files_on_disk", self.files_on_disk)
             self.marcar_modificado("file_paths", self.file_paths)
+            self.marcar_modificado("backup_queue_counts", self.backup_queue_counts)
+
         except Exception as e:
             print(f"Error al cargar el estado: {e}", flush=True)
 
@@ -126,7 +157,7 @@ class JoinerNode:
                 for clave, valor in self.cambios.items():
                     # Convertimos clave y valor a bytes
                     clave_b = clave.encode("utf-8")
-                    valor_b = str(valor).encode("utf-8")  # solo strings, int, float, etc.
+                    valor_b = pickle.dumps(valor)
 
                     # Escribimos longitud + contenido (4 bytes cada longitud)
                     f.write(len(clave_b).to_bytes(4, "big"))
@@ -355,6 +386,18 @@ class JoinerNode:
         consulta_id = obtener_query(mensaje)
         tipo_mensaje = obtener_tipo_mensaje(mensaje)
         client_id = obtener_client_id(mensaje)
+        body = obtener_body((mensaje))
+
+        backup_queue_name = self.backup_queues.get(consulta_id)
+        if not self.backup_initialized.get(consulta_id):
+            setup_queue(canal, backup_queue_name, TTL) 
+            self.backup_initialized[consulta_id] = True
+
+        enviar_func(canal, backup_queue_name, body, mensaje, tipo_mensaje)
+        self.backup_queue_counts[consulta_id] += 1
+
+        self.marcar_modificado("backup_queue_counts", self.backup_queue_counts)
+
         self.modifico = False
         try:
             if tipo_mensaje == "EOF":
