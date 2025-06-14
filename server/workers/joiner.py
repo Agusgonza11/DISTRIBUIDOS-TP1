@@ -1,11 +1,7 @@
 from multiprocessing import Process
-import pickle
-import struct
-import sys
 import logging
 import os
 import tempfile
-import gc
 import threading
 from common.utils import EOF, borrar_contenido_carpeta, concat_data, create_dataframe, fue_reiniciado, get_batches, obtiene_nombre_contenedor, prepare_data_consult_4
 from common.utils import normalize_movies_df, normalize_credits_df, normalize_ratings_df
@@ -32,6 +28,11 @@ MOD_RESULT = "resultados_parciales"
 MOD_DISK = "files_on_disk"
 MOD_PATHS = "file_paths"
 
+import ast  # más seguro que eval
+
+def parse_linea_repr(linea_str):
+    return ast.literal_eval(linea_str.strip())
+
 # -----------------------
 # Nodo Joiner
 # -----------------------
@@ -47,10 +48,12 @@ class JoinerNode:
         self.files_on_disk = {}
         self.file_paths = {}
         self.cambios = {}
-        self.archivo_result = open(MOVIES_FILE, "ab")
-        self.archivo_datos = open(DATA_FILE, "ab")
         if reiniciado:
             self.cargar_estado()
+            print(f"a ver  {self.datos}", flush=True)
+            print(f"a ver  {self.resultados_parciales}", flush=True)
+        self.archivo_result = open(MOVIES_FILE, "ab")
+        self.archivo_datos = open(DATA_FILE, "ab")
         self.actualizaciones = {
             MOD_DATOS: self.datos_par_health,
             MOD_TERM: self.termino_movies,
@@ -90,44 +93,84 @@ class JoinerNode:
 
 
     def cargar_estado(self):
+        # Inicializar estructuras si no existen
+        self.resultados_parciales = {}
+        self.datos = {}
+
+        # Leer y reconstruir DATOS
         try:
-            with open(self.health_file, "rb") as f:
-                cambios = {}
-                # Leer la cantidad de claves (4 bytes big endian)
-                n = int.from_bytes(f.read(4), byteorder='big')
-                for _ in range(n):
-                    # Leer tamaño y clave
-                    len_clave = int.from_bytes(f.read(4), byteorder='big')
-                    clave_bytes = f.read(len_clave)
-                    clave = clave_bytes.decode('utf-8')
+            with open(DATA_FILE, "rb") as f_datos:
+                for linea in f_datos:
+                    print("Entra en el archivo data")
+                    lineas_parsed = parse_linea_repr(linea.decode("utf-8"))
+                    for parsed in lineas_parsed:
+                        if len(parsed) != 4:
+                            continue
+                        client_id, csv, datos, cantidad = parsed
 
-                    # Leer tamaño y valor serializado
-                    len_valor = int.from_bytes(f.read(4), byteorder='big')
-                    valor_serializado = f.read(len_valor)
+                        if client_id not in self.datos:
+                            self.datos[client_id] = {}
+                        if csv not in self.datos[client_id]:
+                            self.datos[client_id][csv] = [[], 0, False]
 
-                    cambios[clave] = valor_serializado
+                        self.datos[client_id][csv][0].append(datos)
+                        self.datos[client_id][csv][1] = cantidad  # se pisa siempre
+            self.cambios[MOD_DATOS] = False
 
-            # Deserializar los valores específicos
-            if "datos" in cambios:
-                self.datos = pickle.loads(cambios["datos"])
-            if "termino_movies" in cambios:
-                self.termino_movies = pickle.loads(cambios["termino_movies"])
-            if "resultados_parciales" in cambios:
-                self.resultados_parciales = pickle.loads(cambios["resultados_parciales"])
-            if "files_on_disk" in cambios:
-                self.files_on_disk = pickle.loads(cambios["files_on_disk"])
-            if "file_paths" in cambios:
-                self.file_paths = pickle.loads(cambios["file_paths"])
-
-            self.locks = {
-                cid: {
-                    "ratings": threading.Lock(),
-                    "credits": threading.Lock()
-                } for cid in self.datos
-            }
-            self.modificar([MOD_DATOS, MOD_TERM, MOD_RESULT, MOD_PATHS, MOD_DISK])
         except Exception as e:
-            print(f"Error al cargar el estado: {e}", flush=True)
+            print(f"Error cargando datos_par_health: {e}", flush=True)
+
+        # Leer y reconstruir RESULTADOS PARCIALES
+        try:
+            with open(MOVIES_FILE, "rb") as f_result:
+                for linea in f_result:
+                    print("Entra en el archivo movies")
+                    lineas_parsed = parse_linea_repr(linea.decode("utf-8"))
+                    for parsed in lineas_parsed:
+                        if len(parsed) != 3:
+                            continue
+                        client_id, consulta_id, datos = parsed
+
+                        if client_id not in self.resultados_parciales:
+                            self.resultados_parciales[client_id] = {}
+                        if consulta_id not in self.resultados_parciales[client_id]:
+                            self.resultados_parciales[client_id][consulta_id] = []
+
+                        self.resultados_parciales[client_id][consulta_id].append(datos)
+            self.cambios[MOD_RESULT] = False
+
+        except Exception as e:
+            print(f"Error cargando result_par_health: {e}", flush=True)
+
+        # Leer el HEALTH_FILE para claves como termino_movies, files_on_disk, etc.
+        try:
+            with open(HEALTH_FILE, "rb") as f:
+                contenido = f.read()
+                offset = 0
+                while offset < len(contenido):
+                    len_clave = int.from_bytes(contenido[offset:offset+4], "big")
+                    offset += 4
+                    clave = contenido[offset:offset+len_clave].decode("utf-8")
+                    offset += len_clave
+
+                    len_valor = int.from_bytes(contenido[offset:offset+4], "big")
+                    offset += 4
+                    valor_raw = contenido[offset:offset+len_valor].decode("utf-8")
+                    offset += len_valor
+
+                    valor = ast.literal_eval(valor_raw)  # más seguro que eval
+
+                    if clave == MOD_TERM:
+                        self.termino_movies = valor
+                    elif clave == MOD_DISK:
+                        self.files_on_disk = valor
+                    elif clave == MOD_PATHS:
+                        self.file_paths = valor
+
+        except FileNotFoundError:
+            print("No se encontró HEALTH_FILE", flush=True)
+        except Exception as e:
+            print(f"Error al cargar estado de HEALTH_FILE: {e}", flush=True)
 
 
     def guardar_estado(self):
@@ -164,16 +207,15 @@ class JoinerNode:
         valor = self.actualizaciones[csv]
         archivo.write((repr(valor) + '\n').encode('utf-8'))
         if csv == MOD_RESULT:
-            self.result_par_health = []
+            self.result_par_health.clear()
         if csv == MOD_DATOS:
-            self.datos_par_health = []
+            self.datos_par_health.clear()
         self.cambios[csv] = False
 
 
     def crear_datos(self, client_id):
         self.datos[client_id] = {"ratings": [[], 0, False], "credits": [[], 0, False]}
          # "CSV": (datos, cantidad de datos, recibio el EOF correspondiente)
-        self.datos_par_health = []
         self.termino_movies[client_id] = {
             3: False,
             4: False,
@@ -182,7 +224,6 @@ class JoinerNode:
             3: [],
             4: [],
         }
-        self.result_par_health = []
 
         self.locks[client_id] = {
             "ratings": threading.Lock(),
@@ -226,7 +267,7 @@ class JoinerNode:
 
         self.datos[client_id][csv][LINEAS] += len(df)
         self.datos[client_id][csv][DATOS].append(df)
-        self.result_par_health = [client_id, csv, datos, self.datos[client_id][csv][LINEAS]]
+        self.datos_par_health = [client_id, csv, datos, self.datos[client_id][csv][LINEAS]]
 
         if not self.termino_movies[client_id][consulta_id]:
             bsize = BATCH_RATINGS if csv == "ratings" else BATCH_CREDITS
@@ -303,8 +344,6 @@ class JoinerNode:
         self.file_paths[client_id][csv] = ""
         self.borrar_info(csv, client_id)
         self.resultados_parciales[client_id][consulta_id] = []
-        self.result_par_health = []
-        self.datos_par_health = []
 
     def ejecutar_consulta(self, datos, consulta_id, client_id):
         match consulta_id:
