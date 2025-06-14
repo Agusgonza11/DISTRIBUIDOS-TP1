@@ -59,17 +59,7 @@ def graceful_quit(conexion, canal, nodo):
     signal.signal(signal.SIGINT, shutdown_handler)
     signal.signal(signal.SIGTERM, shutdown_handler)
 
-
-def fue_reiniciado(tipo_nodo):
-    nombre_nodo = obtiene_nombre_contenedor(tipo_nodo)
-    flag_path = Path(f"/app/reinicio_flags/{nombre_nodo}.flag")
-    if flag_path.exists():
-        flag_path.unlink()  # elimina el flag luego de detectarlo
-        return True
-    return False
-
-
-def borrar_contenido_carpeta(ruta="/app/reinicio_flags"):
+def borrar_contenido_carpeta(ruta):
     for nombre in os.listdir(ruta):
         ruta_completa = os.path.join(ruta, nombre)
         if os.path.isdir(ruta_completa):

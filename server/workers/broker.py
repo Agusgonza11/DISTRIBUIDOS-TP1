@@ -2,13 +2,14 @@ from multiprocessing import Process
 import os
 import sys
 import logging
-from common.utils import EOF, borrar_contenido_carpeta, cargar_datos_broker, cargar_eofs, fue_reiniciado, obtiene_nombre_contenedor
+from common.utils import EOF, borrar_contenido_carpeta, cargar_datos_broker, cargar_eofs, obtiene_nombre_contenedor
 from common.communication import iniciar_nodo, obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
 from common.excepciones import ConsultaInexistente
 import pickle
 
 
 BROKER = "broker"
+TMP_DIR = f"/tmp/{obtiene_nombre_contenedor(BROKER)}_tmp"
 
 CONSULTA_3 = 0
 CONSULTA_4 = 1
@@ -18,16 +19,15 @@ CONSULTA_5 = 2
 # Broker
 # -----------------------
 class Broker:
-    def __init__(self, reiniciado=None):
+    def __init__(self):
         self.nodos_enviar = {}
         self.eof_esperar = {}
         self.ultimo_nodo_consulta = {}
         self.clients = []
         self.cambios = {}
         self.modifico = False
-        self.health_file = f"/app/reinicio_flags/broker.data"
-        if reiniciado:
-            self.cargar_estado()
+        self.health_file = f"{TMP_DIR}/health_file.data"
+        self.cargar_estado()
 
     def marcar_modificado(self, clave, valor):
         try:
@@ -48,7 +48,6 @@ class Broker:
         except Exception as e:
             print(f"Error al guardar el estado del broker: {e}", flush=True)
 
-
     def cargar_estado(self):
         try:
             with open(self.health_file, "rb") as f:
@@ -67,6 +66,8 @@ class Broker:
             self.marcar_modificado("eof_esperar", self.eof_esperar)      
             self.marcar_modificado("clients", self.clients)      
 
+        except FileNotFoundError:
+            logging.info("No hay estado para cargar")
         except Exception as e:
             print(f"Error al cargar el estado: {e}", flush=True)
 
@@ -87,7 +88,7 @@ class Broker:
         self.clients = []
         if es_global:
             try:
-                borrar_contenido_carpeta()
+                borrar_contenido_carpeta(self.health_file)
                 logging.info(f"Volumen limpiado por shutdown global")
             except Exception as e:
                 logging.error(f"Error limpiando volumen en shutdown global: {e}")

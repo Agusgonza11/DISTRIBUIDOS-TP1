@@ -1,26 +1,24 @@
 import logging
-from multiprocessing import Process
 import pickle
-import sys
 
-from common.utils import EOF, borrar_contenido_carpeta, cargar_eofs, concat_data, create_dataframe, fue_reiniciado, obtiene_nombre_contenedor, prepare_data_aggregator_consult_3
-from common.communication import iniciar_nodo, obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
+from common.utils import EOF, borrar_contenido_carpeta, cargar_eofs, concat_data, create_dataframe, obtiene_nombre_contenedor, prepare_data_aggregator_consult_3
+from common.communication import obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
 from common.excepciones import ConsultaInexistente
 
 
 AGGREGATOR = "aggregator"
+TMP_DIR = f"/tmp/{obtiene_nombre_contenedor(AGGREGATOR)}_tmp"
 
 # -----------------------
 # Nodo Aggregator
 # -----------------------
 class AggregatorNode:
-    def __init__(self, reiniciado=None):
+    def __init__(self):
         self.resultados_parciales = {}
         self.resultados_health = {}
         self.eof_esperados = {}
-        self.health_file = f"/app/reinicio_flags/{obtiene_nombre_contenedor(AGGREGATOR)}.data"
-        if reiniciado:
-            self.cargar_estado()
+        self.health_file = f"{TMP_DIR}/health_file.data"
+        self.cargar_estado()
 
     def eliminar(self, es_global):
         self.resultados_parciales = {}
@@ -28,7 +26,7 @@ class AggregatorNode:
         self.resultados_health = {}
         if es_global:
             try:
-                borrar_contenido_carpeta()
+                borrar_contenido_carpeta(self.health_file)
                 logging.info(f"Volumen limpiado por shutdown global")
                 print(f"Volumen limpiado por shutdown global", flush=True)
             except Exception as e:
@@ -49,6 +47,8 @@ class AggregatorNode:
                         # Aplicar create_dataframe a cada entrada individual
                         dfs = [create_dataframe(datos) for datos in lista_datos]
                         self.resultados_parciales[client_id][consulta_id] = dfs
+        except FileNotFoundError:
+            logging.info("No hay estado para cargar")
         except Exception as e:
             print(f"Error al cargar el estado: {e}", flush=True)
 

@@ -88,8 +88,6 @@ services:
         condition: service_healthy
     volumes:
     - /var/run/docker.sock:/var/run/docker.sock
-    - reinicio_flags:/app/reinicio_flags
-    - shared-data:/shared
   joiner1:
     container_name: joiner1
     image: joiner:latest
@@ -110,9 +108,7 @@ services:
         condition: service_healthy
     volumes:
     - /var/run/docker.sock:/var/run/docker.sock
-    - reinicio_flags:/app/reinicio_flags
-    - shared-data:/shared
-    - ./joiner_tmp:/tmp/joiner_tmp
+    - joiner1_tmp:/tmp/joiner1_tmp
   aggregator1:
     container_name: aggregator1
     image: aggregator:latest
@@ -133,8 +129,7 @@ services:
         condition: service_healthy
     volumes:
     - /var/run/docker.sock:/var/run/docker.sock
-    - reinicio_flags:/app/reinicio_flags
-    - shared-data:/shared
+    - aggregator1_tmp:/tmp/aggregator1_tmp
   pnl1:
     container_name: pnl1
     image: pnl:latest
@@ -155,8 +150,7 @@ services:
         condition: service_healthy
     volumes:
     - /var/run/docker.sock:/var/run/docker.sock
-    - reinicio_flags:/app/reinicio_flags
-    - shared-data:/shared
+    - pnl1_tmp:/tmp/pnl1_tmp
   broker:
     container_name: broker
     image: broker:latest
@@ -176,8 +170,7 @@ services:
         condition: service_healthy
     volumes:
     - /var/run/docker.sock:/var/run/docker.sock
-    - reinicio_flags:/app/reinicio_flags
-    - shared-data:/shared
+    - broker_tmp:/tmp/broker_tmp
 networks:
   testing_net:
     ipam:
@@ -185,6 +178,7 @@ networks:
       config:
       - subnet: 172.25.125.0/24
 volumes:
-  reinicio_flags: null
-  shared-data: null
-
+  joiner1_tmp: null
+  aggregator1_tmp: null
+  pnl1_tmp: null
+  broker_tmp: null

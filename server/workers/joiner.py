@@ -1,12 +1,11 @@
-from multiprocessing import Process
 import pickle
 import logging
 import os
 import tempfile
 import threading
-from common.utils import EOF, borrar_contenido_carpeta, concat_data, create_dataframe, fue_reiniciado, get_batches, obtiene_nombre_contenedor, prepare_data_consult_4
+from common.utils import EOF, borrar_contenido_carpeta, concat_data, create_dataframe, get_batches, obtiene_nombre_contenedor, prepare_data_consult_4
 from common.utils import normalize_movies_df, normalize_credits_df, normalize_ratings_df
-from common.communication import iniciar_nodo, obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
+from common.communication import obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
 import pandas as pd # type: ignore
 from common.excepciones import ConsultaInexistente
 
@@ -16,7 +15,7 @@ JOINER = "joiner"
 DATOS = 0
 LINEAS = 1
 TERMINO = 2
-TMP_DIR = "/tmp/joiner_tmp"
+TMP_DIR = f"/tmp/{obtiene_nombre_contenedor(JOINER)}_tmp"
 
 BATCH_CREDITS, BATCH_RATINGS = get_batches(JOINER)
 
@@ -25,7 +24,7 @@ BATCH_CREDITS, BATCH_RATINGS = get_batches(JOINER)
 # -----------------------
 class JoinerNode:
 
-    def __init__(self, reiniciado=None):
+    def __init__(self):
         self.resultados_parciales = {}
         self.termino_movies = {}
         self.datos = {}
@@ -34,14 +33,13 @@ class JoinerNode:
         self.file_paths = {}
         self.cambios = {}
         self.modifico = False
-        self.health_file = f"/app/reinicio_flags/{obtiene_nombre_contenedor(JOINER)}.data"
-        if reiniciado:
-            self.cargar_estado()
+        self.health_file = f"{TMP_DIR}/health_file.data"
+        self.cargar_estado()
 
     def eliminar(self, es_global):
         if es_global:
             try:
-                borrar_contenido_carpeta()
+                borrar_contenido_carpeta(self.health_file)
                 for client_id, paths in self.file_paths.items():
                     for tipo, path in paths.items():
                         try:
@@ -73,64 +71,50 @@ class JoinerNode:
     def cargar_estado(self):
         try:
             with open(self.health_file, "rb") as f:
-                cambios = {}
-                # Leer la cantidad de claves (4 bytes big endian)
-                n = int.from_bytes(f.read(4), byteorder='big')
-                for _ in range(n):
-                    # Leer tamaño y clave
-                    len_clave = int.from_bytes(f.read(4), byteorder='big')
-                    clave_bytes = f.read(len_clave)
-                    clave = clave_bytes.decode('utf-8')
+                size_bytes = f.read(4)
+                if len(size_bytes) < 4:
+                    logging.warning("Archivo de estado corrupto o vacío (<4 bytes)")
+                    return
 
-                    # Leer tamaño y valor serializado
-                    len_valor = int.from_bytes(f.read(4), byteorder='big')
-                    valor_serializado = f.read(len_valor)
-
-                    cambios[clave] = valor_serializado
-
-            # Deserializar los valores específicos
-            if "datos" in cambios:
-                self.datos = pickle.loads(cambios["datos"])
-            if "termino_movies" in cambios:
-                self.termino_movies = pickle.loads(cambios["termino_movies"])
-            if "resultados_parciales" in cambios:
-                self.resultados_parciales = pickle.loads(cambios["resultados_parciales"])
-            if "files_on_disk" in cambios:
-                self.files_on_disk = pickle.loads(cambios["files_on_disk"])
-            if "file_paths" in cambios:
-                self.file_paths = pickle.loads(cambios["file_paths"])
-
+                size = int.from_bytes(size_bytes, byteorder='big')
+                state_bytes = f.read(size)
+                if len(state_bytes) < size:
+                    logging.warning("Archivo de estado incompleto/corrupto (no hay enough bytes para pickle)")
+                    return
+                snap = pickle.loads(state_bytes)
+            self.datos = snap.get("datos", {})
+            self.termino_movies = snap.get("termino_movies", {})
+            self.resultados_parciales = snap.get("resultados_parciales", {})
+            self.files_on_disk = snap.get("files_on_disk", {})
+            self.file_paths = snap.get("file_paths", {})
             self.locks = {
                 cid: {
                     "ratings": threading.Lock(),
                     "credits": threading.Lock()
                 } for cid in self.datos
             }
-            self.marcar_modificado("datos", self.datos)
-            self.marcar_modificado("termino_movies", self.termino_movies)
-            self.marcar_modificado("resultados_parciales", self.resultados_parciales)
-            self.marcar_modificado("files_on_disk", self.files_on_disk)
-            self.marcar_modificado("file_paths", self.file_paths)
+            
+            logging.info("Estado cargado")
         except Exception as e:
             print(f"Error al cargar el estado: {e}", flush=True)
+
 
 
     def guardar_estado(self):
         if not self.modifico:
             return
         try:
-            with open(self.health_file, "ab") as f:
-                for clave, valor in self.cambios.items():
-                    # Convertimos clave y valor a bytes
-                    clave_b = clave.encode("utf-8")
-                    valor_b = str(valor).encode("utf-8")  # solo strings, int, float, etc.
-
-                    # Escribimos longitud + contenido (4 bytes cada longitud)
-                    f.write(len(clave_b).to_bytes(4, "big"))
-                    f.write(clave_b)
-                    f.write(len(valor_b).to_bytes(4, "big"))
-                    f.write(valor_b)
-                    
+            snap = {
+                "datos": self.datos,
+                "termino_movies": self.termino_movies,
+                "resultados_parciales": self.resultados_parciales,
+                "files_on_disk": self.files_on_disk,
+                "file_paths": self.file_paths
+            }
+            with open(self.health_file, "wb") as f:
+                pickled = pickle.dumps(snap)
+                f.write(len(pickled).to_bytes(4, "big"))
+                f.write(pickled)
             self.modifico = False
         except Exception as e:
             print(f"Error al guardar estado: {e}", flush=True)
@@ -226,6 +210,8 @@ class JoinerNode:
             else:
                 self.procesar_y_enviar_batch_credit(batch, datos, canal, destino, mensaje, enviar_func)
             batch = None
+            # logging.info("Enviando datos de disco...\n")
+
         try:
             os.remove(self.file_paths[client_id][csv])
         except Exception as e:
@@ -337,8 +323,6 @@ class JoinerNode:
                 self.marcar_modificado("resultados_parciales", self.resultados_parciales)
         self.marcar_modificado("file_paths", self.file_paths)
         self.marcar_modificado("files_on_disk", self.files_on_disk)
-
-
 
     def enviar_eof(self, consulta_id, canal, destino, mensaje, enviar_func, client_id):
         if self.termino_movies[client_id][consulta_id] and (

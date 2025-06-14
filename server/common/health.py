@@ -27,11 +27,6 @@ class HealthMonitor:
         nombre = self.nodo_anterior
 
         try:
-            flag_dir = Path("/app/reinicio_flags")
-            flag_dir.mkdir(parents=True, exist_ok=True)
-            flag_file = flag_dir / f"{nombre}.flag"
-            flag_file.write_text("true")
-
             container = client.containers.get(nombre)
             container.restart()
 

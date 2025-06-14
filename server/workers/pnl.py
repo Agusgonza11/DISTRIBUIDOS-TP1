@@ -3,7 +3,7 @@ from multiprocessing import Process
 import os
 import pickle
 import sys
-from common.utils import EOF, borrar_contenido_carpeta, concat_data, create_dataframe, fue_reiniciado, get_batches, obtiene_nombre_contenedor
+from common.utils import EOF, borrar_contenido_carpeta, concat_data, create_dataframe, get_batches, obtiene_nombre_contenedor
 from common.communication import iniciar_nodo, obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
 from transformers import pipeline # type: ignore
 import torch # type: ignore
@@ -11,6 +11,8 @@ from common.excepciones import ConsultaInexistente
 
 
 PNL = "pnl"
+TMP_DIR = f"/tmp/{obtiene_nombre_contenedor(PNL)}_tmp"
+
 BATCH_PNL = get_batches(PNL)
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
@@ -21,7 +23,7 @@ torch.set_num_threads(1)
 # Nodo PNL
 # -----------------------
 class PnlNode:
-    def __init__(self, reiniciado=None):
+    def __init__(self):
         self.sentiment_analyzer = pipeline(
             'sentiment-analysis',
             model='distilbert-base-uncased-finetuned-sst-2-english',
@@ -31,9 +33,8 @@ class PnlNode:
         self.lineas_actuales = {}
         self.resultados_health = {}
         self.modifico = False
-        self.health_file = f"/app/reinicio_flags/{obtiene_nombre_contenedor(PNL)}.data"
-        if reiniciado:
-            self.cargar_estado()
+        self.health_file = f"{TMP_DIR}/health_file.data"
+        self.cargar_estado()
 
     def cargar_estado(self):
         try:
@@ -48,6 +49,8 @@ class PnlNode:
                     self.resultados_parciales[client_id] = [
                         create_dataframe(datos) for datos in lista_datos
                     ]
+        except FileNotFoundError:
+            logging.info("No hay estado para cargar")
         except Exception as e:
             print(f"Error al cargar el estado: {e}", flush=True)
 
@@ -74,7 +77,7 @@ class PnlNode:
             del self.sentiment_analyzer
         if es_global:
             try:
-                borrar_contenido_carpeta()
+                borrar_contenido_carpeta(self.health_file)
                 logging.info(f"Volumen limpiado por shutdown global")
             except Exception as e:
                 logging.error(f"Error limpiando volumen en shutdown global: {e}")

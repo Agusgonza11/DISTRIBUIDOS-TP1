@@ -1,7 +1,6 @@
 import sys
 import yaml
 
-
 def get_joiners_consultas_from_compose(compose):
     joiners = {}
     for service_name, service in compose.get('services', {}).items():
@@ -163,8 +162,7 @@ def agregar_broker(compose, anillo, puertos, cant_filter=1, cant_joiner=1, cant_
         },
         "volumes": [
             "/var/run/docker.sock:/var/run/docker.sock",
-            "reinicio_flags:/app/reinicio_flags",
-            "shared-data:/shared"
+            "broker_tmp:/tmp/broker_tmp"
         ]
     }
 
@@ -213,13 +211,11 @@ def agregar_workers(compose, anillo, puertos, cant_filter=1, cant_joiner=1, cant
 
             volumes = [
                 "/var/run/docker.sock:/var/run/docker.sock",
-                "reinicio_flags:/app/reinicio_flags",
-                "shared-data:/shared"
             ]
 
             # Volumen persistente adicional para joiner
-            if tipo == "joiner":
-                volumes.append("./joiner_tmp:/tmp/joiner_tmp")
+            if tipo != "filter":
+                volumes.append(f"{nombre}_tmp:/tmp/{nombre}_tmp")
 
             # Agregar al compose
             compose["services"][nombre] = {
@@ -320,8 +316,18 @@ def generar_yaml(clients, cant_filter, cant_joiner, cant_aggregator, cant_pnl):
     agregar_clientes(compose, clients)
     agregar_workers(compose, anillo, puertos, cant_filter, cant_joiner, cant_aggregator, cant_pnl)
     agregar_broker(compose, anillo, puertos, cant_filter, cant_joiner, cant_aggregator, cant_pnl)
-    compose.setdefault("volumes", {})["reinicio_flags"] = None
-    compose.setdefault("volumes", {})["shared-data"] = None
+
+    if "volumes" not in compose:
+        compose["volumes"] = {}
+
+    tipos = [("joiner", cant_joiner), ("aggregator", cant_aggregator), ("pnl", cant_pnl), ("broker", 1)]
+    for tipo, cantidad in tipos:
+        if tipo == "broker":
+            compose["volumes"]["broker_tmp"] = None
+        else:
+            for i in range(1, int(cantidad)+1):
+                compose["volumes"][f"{tipo}{i}_tmp"] = None
+
     return compose
 
 def crear_anillo(cant_filter, cant_joiner, cant_aggregator, cant_pnl):

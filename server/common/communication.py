@@ -4,7 +4,7 @@ import signal
 import sys
 import pika # type: ignore
 import logging
-from common.utils import cargar_broker, cargar_eof_a_enviar, create_body, fue_reiniciado, graceful_quit, initialize_log, puede_enviar
+from common.utils import cargar_broker, cargar_eof_a_enviar, create_body, graceful_quit, initialize_log, puede_enviar
 from common.health import HealthMonitor
 
 # ----------------------
@@ -58,11 +58,7 @@ def obtener_body(mensaje):
 # GENERALES
 # ---------------------
 def run(tipo_nodo, nodo):
-    reiniciado = False
-    if fue_reiniciado(tipo_nodo):
-        print("El nodo fue reiniciado", flush=True)
-        reiniciado = True
-    proceso_nodo = Process(target=iniciar_nodo, args=(tipo_nodo, nodo, reiniciado))
+    proceso_nodo = Process(target=iniciar_nodo, args=(tipo_nodo, nodo))
     monitor = HealthMonitor(tipo_nodo)
     proceso_monitor = Process(target=monitor.run)
     def shutdown_parent_handler(_, __):
@@ -70,10 +66,10 @@ def run(tipo_nodo, nodo):
         for p in (proceso_nodo, proceso_monitor):
             if p.is_alive():
                 p.terminate()
+        # sys.exit(0)
 
     signal.signal(signal.SIGINT, shutdown_parent_handler)
     signal.signal(signal.SIGTERM, shutdown_parent_handler)
-
 
     proceso_nodo.start()
     proceso_monitor.start()
@@ -82,9 +78,9 @@ def run(tipo_nodo, nodo):
 
 
 
-def iniciar_nodo(tipo_nodo, nodo, reiniciado=False):
+def iniciar_nodo(tipo_nodo, nodo):
     initialize_log("INFO")
-    nodo = nodo(reiniciado)
+    nodo = nodo()
     consultas = os.getenv("CONSULTAS", "")
     worker_id = int(os.environ.get("WORKER_ID", 0))
     logging.info(f"Se inicializó el {tipo_nodo}")
