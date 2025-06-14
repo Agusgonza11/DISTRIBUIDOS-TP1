@@ -35,17 +35,21 @@ class FiltroNode:
                 logging.warning(f"Consulta desconocida: {consulta_id}")
                 raise ConsultaInexistente(f"Consulta {consulta_id} no encontrada")
 
-    def consulta_1(self, datos):
+
+    def consulta_1(self, datos_csv):
         logging.info("Procesando datos para consulta 1") 
-        datos = prepare_data_consult_1_3_4(datos)
-        movies_argentina_españa_00s_df = datos[
-            (datos['production_countries'].str.contains('Argentina', case=False, na=False)) & 
-            (datos['production_countries'].str.contains('Spain', case=False, na=False)) & 
-            (datos['release_date'].dt.year >= 2000) & 
-            (datos['release_date'].dt.year < 2010)
-        ]
-        output_q1 = movies_argentina_españa_00s_df[["title", "genres"]]
-        return output_q1
+        datos = prepare_data_consult_1_3_4(datos_csv)
+        resultado = []
+        for row in datos:
+            fecha = row.get("release_date")
+            paises = row.get("production_countries_str", "")
+            if fecha and 2000 <= fecha.year < 2010:
+                if "argentina" in paises and "spain" in paises:
+                    resultado.append({
+                        "title": row.get("title", ""),
+                        "genres": row.get("genres", [])
+                    })
+        return resultado
 
 
     def consulta_2(self, datos):

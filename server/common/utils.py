@@ -1,4 +1,6 @@
 import ast
+from datetime import datetime
+import io
 import logging
 import signal
 import sys
@@ -8,6 +10,8 @@ import pandas as pd # type: ignore
 import os
 import configparser
 from pathlib import Path
+import csv
+
 
 
 def get_batches(worker):
@@ -68,11 +72,37 @@ def borrar_contenido_carpeta(ruta):
         else:
             os.remove(ruta_completa)
 
+
+def lista_dicts_a_csv(lista):
+    if not lista:
+        return ""
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=lista[0].keys())
+    writer.writeheader()
+    writer.writerows(lista)
+    return output.getvalue()
+
+
 # -------------------
 # PANDAS
 # -------------------
-def create_dataframe(csv):
-    return pd.read_csv(StringIO(csv))
+def create_dataframe_manual(csv):
+    lines = csv.strip().split('\n')
+    headers = lines[0].split(',')
+    rows = []
+    for line in lines[1:]:
+        values = line.split(',')
+        # Si la fila tiene menos valores que columnas, completar con ""
+        values += [""] * (len(headers) - len(values))
+        row = dict(zip(headers, values))
+        rows.append(row)
+    return rows
+
+
+
+
+def create_dataframe(data_str):
+    return list(csv.DictReader(StringIO(data_str)))
 
 def create_body(body):
     if isinstance(body, pd.DataFrame):
@@ -105,13 +135,24 @@ def dictionary_to_list(dictionary_str):
 # -------------------
 
 def prepare_data_consult_1_3_4(data):
-    data = create_dataframe(data)
-    data['release_date'] = pd.to_datetime(data['release_date'], format='%Y-%m-%d', errors='coerce')
-    data['genres'] = data['genres'].apply(dictionary_to_list)
-    data['production_countries'] = data['production_countries'].apply(dictionary_to_list)
-    data['genres'] = data['genres'].astype(str)
-    data['production_countries'] = data['production_countries'].astype(str)
-    return data
+    rows = create_dataframe(data)
+    for row in rows:
+        # Parsear fecha
+        try:
+            row["release_date"] = datetime.strptime(row.get("release_date", ""), "%Y-%m-%d")
+        except (ValueError, TypeError):
+            row["release_date"] = None
+        
+        # Parsear géneros y países
+        row["genres"] = dictionary_to_list(row.get("genres", "[]"))
+        row["production_countries"] = dictionary_to_list(row.get("production_countries", "[]"))
+
+        # Guardar como string para búsqueda rápida
+        row["genres_str"] = ", ".join(row["genres"]).lower()
+        row["production_countries_str"] = ", ".join(row["production_countries"]).lower()
+
+    return rows
+
 
 def prepare_data_consult_2(data):
     data = create_dataframe(data)
