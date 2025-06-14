@@ -23,6 +23,15 @@ TMP_DIR = "/tmp/joiner_tmp"
 
 BATCH_CREDITS, BATCH_RATINGS = get_batches(JOINER)
 
+HEALTH_FILE = f"/app/reinicio_flags/{obtiene_nombre_contenedor(JOINER)}.data"
+MOVIES_FILE = f"/app/reinicio_flags/{obtiene_nombre_contenedor(JOINER)}-movies.data"
+DATA_FILE = f"/app/reinicio_flags/{obtiene_nombre_contenedor(JOINER)}-data.data"
+MOD_DATOS = "datos"
+MOD_TERM = "termino_movies"
+MOD_RESULT = "resultados_parciales"
+MOD_DISK = "files_on_disk"
+MOD_PATHS = "file_paths"
+
 # -----------------------
 # Nodo Joiner
 # -----------------------
@@ -30,16 +39,25 @@ class JoinerNode:
 
     def __init__(self, reiniciado=None):
         self.resultados_parciales = {}
+        self.result_par_health = []
         self.termino_movies = {}
         self.datos = {}
+        self.datos_par_health = []
         self.locks = {}
         self.files_on_disk = {}
         self.file_paths = {}
         self.cambios = {}
-        self.modifico = False
-        self.health_file = f"/app/reinicio_flags/{obtiene_nombre_contenedor(JOINER)}.data"
+        self.archivo_result = open(MOVIES_FILE, "ab")
+        self.archivo_datos = open(DATA_FILE, "ab")
         if reiniciado:
             self.cargar_estado()
+        self.actualizaciones = {
+            MOD_DATOS: self.datos_par_health,
+            MOD_TERM: self.termino_movies,
+            MOD_RESULT: self.result_par_health,
+            MOD_DISK: self.files_on_disk,
+            MOD_PATHS: self.file_paths,
+        }
 
     def eliminar(self, es_global):
         if es_global:
@@ -56,8 +74,9 @@ class JoinerNode:
                 logging.info(f"Volumen limpiado por shutdown global")
             except Exception as e:
                 logging.error(f"Error limpiando volumen en shutdown global: {e}")
-        
         self.resultados_parciales.clear()
+        self.result_par_health.clear()
+        self.datos_par_health.clear()
         self.termino_movies.clear()
         self.datos.clear()
         self.locks.clear()
@@ -65,12 +84,9 @@ class JoinerNode:
         self.file_paths.clear()
         self.cambios.clear()
 
-    def marcar_modificado(self, clave, valor):
-        try:
-            self.cambios[clave] = valor
-            self.modifico = True
-        except Exception as e:
-            print(f"Error al serializar '{clave}': {e}", flush=True)
+    def modificar(self, claves):
+        for clave in claves:
+            self.cambios[clave] = True
 
 
     def cargar_estado(self):
@@ -109,38 +125,55 @@ class JoinerNode:
                     "credits": threading.Lock()
                 } for cid in self.datos
             }
-            self.marcar_modificado("datos", self.datos)
-            self.marcar_modificado("termino_movies", self.termino_movies)
-            self.marcar_modificado("resultados_parciales", self.resultados_parciales)
-            self.marcar_modificado("files_on_disk", self.files_on_disk)
-            self.marcar_modificado("file_paths", self.file_paths)
+            self.modificar([MOD_DATOS, MOD_TERM, MOD_RESULT, MOD_PATHS, MOD_DISK])
         except Exception as e:
             print(f"Error al cargar el estado: {e}", flush=True)
 
 
     def guardar_estado(self):
-        if not self.modifico:
-            return
         try:
-            with open(self.health_file, "ab") as f:
-                for clave, valor in self.cambios.items():
-                    # Convertimos clave y valor a bytes
-                    clave_b = clave.encode("utf-8")
-                    valor_b = str(valor).encode("utf-8")  # solo strings, int, float, etc.
+        
+            if self.cambios.get(MOD_DATOS, False):
+                self.guardar_estado_csv(MOD_DATOS)
+            if self.cambios.get(MOD_RESULT, False):
+                self.guardar_estado_csv(MOD_RESULT)
 
-                    # Escribimos longitud + contenido (4 bytes cada longitud)
-                    f.write(len(clave_b).to_bytes(4, "big"))
-                    f.write(clave_b)
-                    f.write(len(valor_b).to_bytes(4, "big"))
-                    f.write(valor_b)
-            self.modifico = False
+            otras_claves = [k for k in self.cambios if k not in (MOD_DATOS, MOD_RESULT)]
+            cambios_otras = any(self.cambios.get(k, False) for k in otras_claves)
+
+            if cambios_otras:
+                with open(HEALTH_FILE, "wb") as f:
+                    buffer = bytearray()
+                    for clave in otras_claves:
+                        if self.cambios.get(clave, False):
+                            valor = self.actualizaciones[clave]
+                            clave_b = clave.encode("utf-8")
+                            valor_b = str(valor).encode("utf-8")
+                            buffer.extend(len(clave_b).to_bytes(4, "big"))
+                            buffer.extend(clave_b)
+                            buffer.extend(len(valor_b).to_bytes(4, "big"))
+                            buffer.extend(valor_b)
+                            self.cambios[clave] = False
+                    f.write(buffer)
         except Exception as e:
             print(f"Error al guardar estado: {e}", flush=True)
+
+
+    def guardar_estado_csv(self, csv):
+        archivo = self.archivo_result if csv == MOD_RESULT else self.archivo_datos
+        valor = self.actualizaciones[csv]
+        archivo.write((repr(valor) + '\n').encode('utf-8'))
+        if csv == MOD_RESULT:
+            self.result_par_health = []
+        if csv == MOD_DATOS:
+            self.datos_par_health = []
+        self.cambios[csv] = False
 
 
     def crear_datos(self, client_id):
         self.datos[client_id] = {"ratings": [[], 0, False], "credits": [[], 0, False]}
          # "CSV": (datos, cantidad de datos, recibio el EOF correspondiente)
+        self.datos_par_health = []
         self.termino_movies[client_id] = {
             3: False,
             4: False,
@@ -149,6 +182,7 @@ class JoinerNode:
             3: [],
             4: [],
         }
+        self.result_par_health = []
 
         self.locks[client_id] = {
             "ratings": threading.Lock(),
@@ -180,6 +214,7 @@ class JoinerNode:
         df = create_dataframe(datos)
         df = normalize_movies_df(df)
         self.resultados_parciales[client_id][consulta_id].append(df)
+        self.result_par_health = [client_id, consulta_id, datos]
 
     def almacenar_csv(self, consulta_id, datos, client_id):
         csv = "ratings" if consulta_id == 3 else "credits"
@@ -191,6 +226,7 @@ class JoinerNode:
 
         self.datos[client_id][csv][LINEAS] += len(df)
         self.datos[client_id][csv][DATOS].append(df)
+        self.result_par_health = [client_id, csv, datos, self.datos[client_id][csv][LINEAS]]
 
         if not self.termino_movies[client_id][consulta_id]:
             bsize = BATCH_RATINGS if csv == "ratings" else BATCH_CREDITS
@@ -229,7 +265,6 @@ class JoinerNode:
                 self.procesar_y_enviar_batch_credit(batch, datos, canal, destino, mensaje, enviar_func)
             batch = None
         try:
-            gc.collect()
             os.remove(self.file_paths[client_id][csv])
         except Exception as e:
             logging.error(f"No se pudo borrar el archivo temporal {csv}: {e}")
@@ -254,7 +289,7 @@ class JoinerNode:
     def borrar_info(self, csv, client_id):
         self.datos[client_id][csv][DATOS] = []
         self.datos[client_id][csv][LINEAS] = 0
-        self.marcar_modificado("datos", self.datos)
+        self.modificar([MOD_DATOS])
 
     def limpiar_consulta(self, client_id, consulta_id):
         csv = "ratings" if consulta_id == 3 else "credits"
@@ -268,7 +303,8 @@ class JoinerNode:
         self.file_paths[client_id][csv] = ""
         self.borrar_info(csv, client_id)
         self.resultados_parciales[client_id][consulta_id] = []
-        gc.collect()
+        self.result_par_health = []
+        self.datos_par_health = []
 
     def ejecutar_consulta(self, datos, consulta_id, client_id):
         match consulta_id:
@@ -304,18 +340,14 @@ class JoinerNode:
         contenido = obtener_body(mensaje)
         if client_id not in self.datos:
             self.crear_datos(client_id)
-            self.marcar_modificado("datos", self.datos)
-            self.marcar_modificado("termino_movies", self.termino_movies)
-            self.marcar_modificado("resultados_parciales", self.resultados_parciales)
-            self.marcar_modificado("files_on_disk", self.files_on_disk)
-            self.marcar_modificado("file_paths", self.file_paths)
+            self.modificar([MOD_DATOS, MOD_TERM, MOD_RESULT, MOD_PATHS, MOD_DISK])
         if tipo_mensaje == "MOVIES":
             self.guardar_datos(consulta_id, contenido, client_id)
-            self.marcar_modificado("resultados_parciales", self.resultados_parciales)
+            self.modificar([MOD_RESULT])
         else:
             self.almacenar_csv(consulta_id, contenido, client_id)
-            self.marcar_modificado("datos", self.datos)
-            self.marcar_modificado("files_on_disk", self.files_on_disk)
+            self.modificar([MOD_DATOS, MOD_DISK])
+
 
     def procesar_resultado(self, consulta_id, canal, destino, mensaje, enviar_func, client_id):
         if self.puede_enviar(consulta_id, client_id):
@@ -338,9 +370,8 @@ class JoinerNode:
         if self.termino_movies[client_id][consulta_id]:
             if self.datos[client_id]["ratings"][TERMINO] or self.datos[client_id]["credits"][TERMINO]:
                 self.limpiar_consulta(client_id, consulta_id)
-                self.marcar_modificado("resultados_parciales", self.resultados_parciales)
-        self.marcar_modificado("file_paths", self.file_paths)
-        self.marcar_modificado("files_on_disk", self.files_on_disk)
+                self.modificar([MOD_RESULT])
+        self.modificar([MOD_PATHS, MOD_DISK])
 
 
 
@@ -355,12 +386,11 @@ class JoinerNode:
         consulta_id = obtener_query(mensaje)
         tipo_mensaje = obtener_tipo_mensaje(mensaje)
         client_id = obtener_client_id(mensaje)
-        self.modifico = False
         try:
             if tipo_mensaje == "EOF":
                 logging.info(f"Se recibio todo Movies, consulta {consulta_id} recibió EOF")
                 self.termino_movies[client_id][consulta_id] = True
-                self.marcar_modificado("termino_movies", self.termino_movies)
+                self.modificar([MOD_TERM])
                 self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
                 self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func, client_id)
             elif tipo_mensaje in ["MOVIES", "RATINGS", "CREDITS"]:
@@ -370,14 +400,14 @@ class JoinerNode:
             elif tipo_mensaje == "EOF_RATINGS":
                 logging.info("Recibí todos los ratings")
                 self.datos[client_id]["ratings"][TERMINO] = True
-                self.marcar_modificado("datos", self.datos)
+                self.modificar([MOD_DATOS])
                 if self.datos[client_id]["ratings"][LINEAS] != 0 or self.files_on_disk[client_id]["ratings"]:
                     self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
                 self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func, client_id)
             elif tipo_mensaje == "EOF_CREDITS":
                 logging.info("Recibí todos los credits")
                 self.datos[client_id]["credits"][TERMINO] = True
-                self.marcar_modificado("datos", self.datos)
+                self.modificar([MOD_DATOS])
                 if self.datos[client_id]["credits"][LINEAS] != 0 or self.files_on_disk[client_id]["credits"]:
                     self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
                 self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func, client_id)
