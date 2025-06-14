@@ -7,6 +7,7 @@ from io import StringIO
 import pandas as pd # type: ignore
 import os
 import configparser
+from pathlib import Path
 
 
 def get_batches(worker):
@@ -39,7 +40,9 @@ def graceful_quit(conexion, canal, nodo):
     def shutdown_handler(_, __):
         logging.info("Apagando nodo")
         try:
-            nodo.eliminar() 
+            es_global = os.path.exists("/tmp/shutdown_global.flag")
+            print(f"El shutdown es global {es_global}", flush=True)
+            nodo.eliminar(es_global) 
             logging.info("Datos eliminados del nodo.")
         except Exception as e:
             logging.error(f"Error al eliminar datos del nodo: {e}")
@@ -56,6 +59,14 @@ def graceful_quit(conexion, canal, nodo):
     signal.signal(signal.SIGINT, shutdown_handler)
     signal.signal(signal.SIGTERM, shutdown_handler)
 
+def borrar_contenido_carpeta(ruta):
+    for nombre in os.listdir(ruta):
+        ruta_completa = os.path.join(ruta, nombre)
+        if os.path.isdir(ruta_completa):
+            borrar_contenido_carpeta(ruta_completa)
+            os.rmdir(ruta_completa)
+        else:
+            os.remove(ruta_completa)
 
 # -------------------
 # PANDAS
@@ -197,6 +208,27 @@ def cargar_eofs():
                 k, v = par.split(":")
                 eofs[int(k)] = int(v)
     return eofs
+
+def cargar_nodo_siguiente():
+    return os.getenv("NODO_SIGUIENTE", "")
+
+def cargar_nodo_anterior():
+    return os.getenv("NODO_ANTERIOR", "")
+
+def cargar_puerto():
+    return os.getenv("PUERTO", "")
+
+def cargar_puerto_siguiente():
+    return os.getenv("PUERTO_SIGUIENTE", "")
+
+def obtiene_nombre_contenedor(tipo):
+    worker_id = int(os.environ.get("WORKER_ID", 0))
+    if tipo != "broker":
+        worker_id = int(os.environ.get("WORKER_ID", 0))
+        nombre_nodo = f"{tipo}{worker_id}"
+    else:
+        nombre_nodo = "broker"
+    return nombre_nodo
 
 # -------------------
 # NORMALIZATION

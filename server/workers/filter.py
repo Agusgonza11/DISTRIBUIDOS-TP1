@@ -1,8 +1,8 @@
 import logging
 import os
-import sys
+from multiprocessing import Process
 from common.utils import prepare_data_consult_1_3_4, prepare_data_consult_2, EOF, prepare_data_consult_5
-from common.communication import iniciar_nodo, obtener_body, obtener_query, obtener_tipo_mensaje
+from common.communication import iniciar_nodo, obtener_body, obtener_query, obtener_tipo_mensaje, run
 from common.excepciones import ConsultaInexistente
 
 FILTER = "filter"
@@ -11,7 +11,10 @@ FILTER = "filter"
 # Nodo Filtro
 # -----------------------
 class FiltroNode:
-    def eliminar(self):
+    def __init__(self):
+        pass
+
+    def eliminar(self, _):
         pass
 
     def ejecutar_consulta(self, consulta_id, datos):
@@ -75,7 +78,6 @@ class FiltroNode:
     def procesar_mensajes(self, canal, destino, mensaje, enviar_func):
         consulta_id = obtener_query(mensaje)
         tipo_mensaje = obtener_tipo_mensaje(mensaje)
-        mensaje['ack']()
         try:
             if tipo_mensaje == EOF:
                 logging.info(f"Consulta {consulta_id} recibió EOF")
@@ -83,6 +85,7 @@ class FiltroNode:
             else:
                 resultado = self.ejecutar_consulta(consulta_id, obtener_body(mensaje))
                 enviar_func(canal, destino, resultado, mensaje, tipo_mensaje)
+            mensaje['ack']()
         except ConsultaInexistente as e:
             logging.warning(f"Consulta inexistente: {e}")
         except Exception as e:
@@ -95,5 +98,4 @@ class FiltroNode:
 # -----------------------
 
 if __name__ == "__main__":
-    filtro = FiltroNode()
-    iniciar_nodo(FILTER, filtro, os.getenv("CONSULTAS", ""))
+    run(FILTER, FiltroNode)

@@ -1,10 +1,15 @@
+from multiprocessing import Process
+import os
 import sys
 import logging
-from common.utils import EOF, cargar_datos_broker, cargar_eofs
-from common.communication import iniciar_nodo, obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje
+from common.utils import EOF, borrar_contenido_carpeta, cargar_datos_broker, cargar_eofs, obtiene_nombre_contenedor
+from common.communication import iniciar_nodo, obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
 from common.excepciones import ConsultaInexistente
+import pickle
+
 
 BROKER = "broker"
+TMP_DIR = f"/tmp/{obtiene_nombre_contenedor(BROKER)}_tmp"
 
 CONSULTA_3 = 0
 CONSULTA_4 = 1
@@ -19,18 +24,74 @@ class Broker:
         self.eof_esperar = {}
         self.ultimo_nodo_consulta = {}
         self.clients = []
+        self.cambios = {}
+        self.modifico = False
+        self.health_file = f"{TMP_DIR}/health_file.data"
+        self.cargar_estado()
+
+    def marcar_modificado(self, clave, valor):
+        try:
+            self.cambios[clave] = pickle.dumps(valor)
+            self.modifico = True
+        except Exception as e:
+            print(f"Error al serializar '{clave}': {e}", flush=True)
+
+
+    def guardar_estado(self):
+        if not self.modifico:
+            return
+        try:
+            with open(self.health_file, "wb") as f:
+                pickle.dump(self.cambios, f)
+
+            self.modifico = False
+        except Exception as e:
+            print(f"Error al guardar el estado del broker: {e}", flush=True)
+
+    def cargar_estado(self):
+        try:
+            with open(self.health_file, "rb") as f:
+                cambios = pickle.load(f)
+
+            if "nodos_enviar" in cambios:
+                self.nodos_enviar = pickle.loads(cambios["nodos_enviar"])
+            if "eof_esperar" in cambios:
+                self.eof_esperar = pickle.loads(cambios["eof_esperar"])
+            if "ultimo_nodo_consulta" in cambios:
+                self.ultimo_nodo_consulta = pickle.loads(cambios["ultimo_nodo_consulta"])
+            if "clients" in cambios:
+                self.clients = pickle.loads(cambios["clients"])
+            self.marcar_modificado("ultimo_nodo_consulta", self.ultimo_nodo_consulta)      
+            self.marcar_modificado("nodos_enviar", self.nodos_enviar)      
+            self.marcar_modificado("eof_esperar", self.eof_esperar)      
+            self.marcar_modificado("clients", self.clients)      
+
+        except FileNotFoundError:
+            logging.info("No hay estado para cargar")
+        except Exception as e:
+            print(f"Error al cargar el estado: {e}", flush=True)
+
 
     def create_client(self, client):
         self.nodos_enviar[client] = cargar_datos_broker()
         self.eof_esperar[client] = cargar_eofs()
         self.ultimo_nodo_consulta[client] = [self.nodos_enviar[client][3][0], self.nodos_enviar[client][4][0], 1]
         self.clients.append(client)
+        self.marcar_modificado("clients", self.clients)
+        self.marcar_modificado("nodos_enviar", self.nodos_enviar)
 
-    def eliminar(self):
+    def eliminar(self, es_global):
         self.nodos_enviar = {}
         self.eof_esperar = {}
         self.ultimo_nodo_consulta = {}
+        self.cambios = {}
         self.clients = []
+        if es_global:
+            try:
+                borrar_contenido_carpeta(self.health_file)
+                logging.info(f"Volumen limpiado por shutdown global")
+            except Exception as e:
+                logging.error(f"Error limpiando volumen en shutdown global: {e}")
 
     def siguiente_nodo(self, consulta_id, client_id):
         if consulta_id == 5:
@@ -46,7 +107,8 @@ class Broker:
             lista_nodos = self.nodos_enviar[client_id][4]
             idx_actual = lista_nodos.index(self.ultimo_nodo_consulta[client_id][CONSULTA_4])
             idx_siguiente = (idx_actual + 1) % len(lista_nodos)
-            self.ultimo_nodo_consulta[client_id][CONSULTA_4] = lista_nodos[idx_siguiente]        
+            self.ultimo_nodo_consulta[client_id][CONSULTA_4] = lista_nodos[idx_siguiente]  
+        self.marcar_modificado("ultimo_nodo_consulta", self.ultimo_nodo_consulta)      
 
 
     def distribuir_informacion(self, client_id, consulta_id, mensaje, canal, enviar_func, tipo=None):
@@ -76,13 +138,14 @@ class Broker:
         consulta_id = obtener_query(mensaje)
         tipo_mensaje = obtener_tipo_mensaje(mensaje)
         client_id = obtener_client_id(mensaje)
-        mensaje['ack']()
+        self.modifico = False
         if client_id not in self.clients:
             self.create_client(client_id)
         try:
             if consulta_id == 5:
                 if tipo_mensaje == EOF:
                     self.eof_esperar[client_id][consulta_id] -= 1
+                    self.marcar_modificado("eof_esperar", self.eof_esperar)
                     if self.eof_esperar[client_id][consulta_id] == 0:
                         self.distribuir_informacion(client_id, consulta_id, mensaje, canal, enviar_func, EOF)
                 else:
@@ -98,15 +161,19 @@ class Broker:
 
                 elif tipo_mensaje == EOF:
                     self.eof_esperar[client_id][consulta_id] -= 1
+                    self.marcar_modificado("eof_esperar", self.eof_esperar)
                     if self.eof_esperar[client_id][consulta_id] == 0:
                         self.distribuir_informacion(client_id, consulta_id, mensaje, canal, enviar_func, EOF)
 
                 else:
                     logging.error(f"Tipo de mensaje inesperado en consulta {consulta_id}: {tipo_mensaje}")
+            self.guardar_estado()
+            mensaje['ack']()
         except ConsultaInexistente as e:
             logging.warning(f"Consulta inexistente: {e}")    
         except Exception as e:
             logging.error(f"Error procesando mensaje en consulta {consulta_id}: {e}")
+
 
 
 # -----------------------
@@ -114,6 +181,4 @@ class Broker:
 # -----------------------
 
 if __name__ == "__main__":
-    broker = Broker()
-    iniciar_nodo(BROKER, broker)
-
+    run(BROKER, Broker)

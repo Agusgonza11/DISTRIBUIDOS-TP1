@@ -1,7 +1,6 @@
 import sys
 import yaml
 
-
 def get_joiners_consultas_from_compose(compose):
     joiners = {}
     for service_name, service in compose.get('services', {}).items():
@@ -134,7 +133,7 @@ def calcular_eofs(tipo, distribucion):
 
     return eof_dict
 
-def agregar_broker(compose, cant_filter=1, cant_joiner=1, cant_aggregator=1, cant_pnl=1):
+def agregar_broker(compose, anillo, puertos, cant_filter=1, cant_joiner=1, cant_aggregator=1, cant_pnl=1, ):
     consultas_por_nodo = distribuir_consultas_por_nodo(cant_filter, cant_joiner, cant_aggregator, cant_pnl)
     eof_aggregator = calcular_eofs("aggregator", consultas_por_nodo)
     eof_str_agg = ",".join(f"{k}:{v}" for k, v in eof_aggregator.items())
@@ -144,24 +143,30 @@ def agregar_broker(compose, cant_filter=1, cant_joiner=1, cant_aggregator=1, can
     eof_str_joiner = ",".join(f"{k}:{v}" for k, v in eof_joiner.items())
     joiners = get_joiners_consultas_from_compose(compose)
     str_joiners = ";".join(f"{k}:{v}" for k, v in joiners.items())
-
     compose["services"]["broker"] = {
-                    "container_name": "broker",
-                    "image": "broker:latest",
-                    "entrypoint": f"python3 workers/broker.py",
-                    "environment": [
-                        f"EOF_ESPERADOS={eof_str_joiner}",
-                        f"EOF_ENVIAR={eof_str_agg}",
-                        f"JOINERS={str_joiners}",
-                        ],
-                    "networks": ["testing_net"],
-                    "depends_on": {
-                            "rabbitmq": {"condition": "service_healthy"}
-                    }
-                }
+        "container_name": "broker",
+        "image": "broker:latest",
+        "entrypoint": "python3 workers/broker.py",
+        "environment": [
+            f"EOF_ESPERADOS={eof_str_joiner}",
+            f"EOF_ENVIAR={eof_str_agg}",
+            f"JOINERS={str_joiners}",
+            f"NODO_SIGUIENTE={anillo['broker']['siguiente']}",
+            f"NODO_ANTERIOR={anillo['broker']['anterior']}",
+            f"PUERTO={puertos['broker']}",
+            f"PUERTO_SIGUIENTE={puertos[anillo['broker']['siguiente']]}",
+        ],
+        "networks": ["testing_net"],
+        "depends_on": {
+            "rabbitmq": {"condition": "service_healthy"}
+        },
+        "volumes": [
+            "/var/run/docker.sock:/var/run/docker.sock",
+            "broker_tmp:/tmp/broker_tmp"
+        ]
+    }
 
-
-def agregar_workers(compose, cant_filter=1, cant_joiner=1, cant_aggregator=1, cant_pnl=1):
+def agregar_workers(compose, anillo, puertos, cant_filter=1, cant_joiner=1, cant_aggregator=1, cant_pnl=1):
     # Distribuir consultas por tipo de nodo
     consultas_por_nodo = distribuir_consultas_por_nodo(cant_filter, cant_joiner, cant_aggregator, cant_pnl)
 
@@ -199,6 +204,18 @@ def agregar_workers(compose, cant_filter=1, cant_joiner=1, cant_aggregator=1, ca
                 eof_str = ",".join(f"{k}:{v}" for k, v in eof_aggregator.items())
                 env.append(f"EOF_ESPERADOS={eof_str}")
 
+            env.append(f"NODO_SIGUIENTE={anillo[nombre]['siguiente']}")
+            env.append(f"NODO_ANTERIOR={anillo[nombre]['anterior']}")
+            env.append(f"PUERTO={puertos[nombre]}")
+            env.append(f"PUERTO_SIGUIENTE={puertos[anillo[nombre]['siguiente']]}")
+
+            volumes = [
+                "/var/run/docker.sock:/var/run/docker.sock",
+            ]
+
+            # Volumen persistente adicional para joiner
+            if tipo != "filter":
+                volumes.append(f"{nombre}_tmp:/tmp/{nombre}_tmp")
 
             # Agregar al compose
             compose["services"][nombre] = {
@@ -208,8 +225,9 @@ def agregar_workers(compose, cant_filter=1, cant_joiner=1, cant_aggregator=1, ca
                 "environment": env,
                 "networks": ["testing_net"],
                 "depends_on": {
-                        "rabbitmq": {"condition": "service_healthy"}
-                }
+                    "rabbitmq": {"condition": "service_healthy"}
+                },
+                "volumes": volumes
             }
 
 def agregar_clientes(compose, cantidad_clientes):
@@ -293,11 +311,63 @@ def generar_yaml(clients, cant_filter, cant_joiner, cant_aggregator, cant_pnl):
             }
         }
     }
-
+    puertos = generar_diccionario_puertos(cant_filter, cant_joiner, cant_aggregator, cant_pnl)
+    anillo = crear_anillo(cant_filter, cant_joiner, cant_aggregator, cant_pnl)
     agregar_clientes(compose, clients)
-    agregar_workers(compose, cant_filter, cant_joiner, cant_aggregator, cant_pnl)
-    agregar_broker(compose, cant_filter, cant_joiner, cant_aggregator, cant_pnl)
+    agregar_workers(compose, anillo, puertos, cant_filter, cant_joiner, cant_aggregator, cant_pnl)
+    agregar_broker(compose, anillo, puertos, cant_filter, cant_joiner, cant_aggregator, cant_pnl)
+
+    if "volumes" not in compose:
+        compose["volumes"] = {}
+
+    tipos = [("joiner", cant_joiner), ("aggregator", cant_aggregator), ("pnl", cant_pnl), ("broker", 1)]
+    for tipo, cantidad in tipos:
+        if tipo == "broker":
+            compose["volumes"]["broker_tmp"] = None
+        else:
+            for i in range(1, int(cantidad)+1):
+                compose["volumes"][f"{tipo}{i}_tmp"] = None
+
     return compose
+
+def crear_anillo(cant_filter, cant_joiner, cant_aggregator, cant_pnl):
+    filtros = [f"filter{i+1}" for i in range(cant_filter)]
+    joiners = [f"joiner{i+1}" for i in range(cant_joiner)]
+    aggregators = [f"aggregator{i+1}" for i in range(cant_aggregator)]
+    pnls = [f"pnl{i+1}" for i in range(cant_pnl)]
+    
+    broker = "broker"
+    
+    nodos = filtros + joiners + aggregators + pnls + [broker]
+    
+    n = len(nodos)
+    anillo = {}
+    for i, nodo in enumerate(nodos):
+        siguiente = nodos[(i + 1) % n]   # El siguiente nodo (circular)
+        anterior = nodos[(i - 1) % n]    # El nodo anterior (circular)
+        anillo[nodo] = {
+            "siguiente": siguiente,
+            "anterior": anterior
+        }
+    
+    return anillo
+
+def generar_diccionario_puertos(cant_filter, cant_joiner, cant_aggregator, cant_pnl):
+    puerto_base = 7000  # puerto inicial seguro
+
+    dicc_puertos = {}
+
+    def asignar_puertos(prefijo, cantidad, puerto_inicio):
+        return {f"{prefijo}{i+1}": puerto_inicio + i for i in range(cantidad)}
+
+    dicc_puertos.update(asignar_puertos("filter", cant_filter, puerto_base))
+    dicc_puertos.update(asignar_puertos("joiner", cant_joiner, puerto_base + cant_filter))
+    dicc_puertos.update(asignar_puertos("aggregator", cant_aggregator, puerto_base + cant_filter + cant_joiner))
+    dicc_puertos.update(asignar_puertos("pnl", cant_pnl, puerto_base + cant_filter + cant_joiner + cant_aggregator))
+    total_previos = cant_filter + cant_joiner + cant_aggregator + cant_pnl
+    dicc_puertos["broker"] = puerto_base + total_previos
+    return dicc_puertos
+
 
 def construir_env_input_gateway(consultas_por_nodo):
     archivo_por_consulta = {

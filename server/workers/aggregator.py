@@ -1,40 +1,86 @@
 import logging
-import os
-import gc
-import sys
-from common.utils import EOF, cargar_eofs, concat_data, create_dataframe, prepare_data_aggregator_consult_3
-from common.communication import iniciar_nodo, obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje
-import tracemalloc
+import pickle
+
+from common.utils import EOF, borrar_contenido_carpeta, cargar_eofs, concat_data, create_dataframe, obtiene_nombre_contenedor, prepare_data_aggregator_consult_3
+from common.communication import obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
 from common.excepciones import ConsultaInexistente
 
 
 AGGREGATOR = "aggregator"
+TMP_DIR = f"/tmp/{obtiene_nombre_contenedor(AGGREGATOR)}_tmp"
 
 # -----------------------
 # Nodo Aggregator
 # -----------------------
 class AggregatorNode:
     def __init__(self):
-        tracemalloc.start()
         self.resultados_parciales = {}
+        self.resultados_health = {}
         self.eof_esperados = {}
+        self.health_file = f"{TMP_DIR}/health_file.data"
+        self.cargar_estado()
 
-    def eliminar(self):
+    def eliminar(self, es_global):
         self.resultados_parciales = {}
         self.eof_esperados = {}
+        self.resultados_health = {}
+        if es_global:
+            try:
+                borrar_contenido_carpeta(self.health_file)
+                logging.info(f"Volumen limpiado por shutdown global")
+                print(f"Volumen limpiado por shutdown global", flush=True)
+            except Exception as e:
+                logging.error(f"Error limpiando volumen en shutdown global: {e}")
+
+    def cargar_estado(self):
+        try:
+            with open(self.health_file, "rb") as f:
+                estado = pickle.load(f)
+                self.resultados_health = estado.get("resultados_parciales", {})
+                self.eof_esperados = estado.get("eof_esperados", {})
+                self.resultados_parciales = {}
+
+                # Recrear los DataFrames desde los datos crudos
+                for client_id, consultas in self.resultados_health.items():
+                    self.resultados_parciales[client_id] = {}
+                    for consulta_id, lista_datos in consultas.items():
+                        # Aplicar create_dataframe a cada entrada individual
+                        dfs = [create_dataframe(datos) for datos in lista_datos]
+                        self.resultados_parciales[client_id][consulta_id] = dfs
+        except FileNotFoundError:
+            logging.info("No hay estado para cargar")
+        except Exception as e:
+            print(f"Error al cargar el estado: {e}", flush=True)
+
+
+    def guardar_estado(self):
+        try:
+            with open(self.health_file, "wb") as f:
+                pickle.dump({
+                    "resultados_parciales": self.resultados_health,
+                    "eof_esperados": self.eof_esperados
+                }, f)
+        except Exception as e:
+            print(f"Error al guardar el estado: {e}", flush=True)
+
 
     def guardar_datos(self, consulta_id, datos, client_id):
         if client_id not in self.resultados_parciales:
             self.resultados_parciales[client_id] = {}
+            self.resultados_health[client_id] = {}
             self.eof_esperados[client_id] = {}
             
         if consulta_id not in self.resultados_parciales[client_id]:
             self.resultados_parciales[client_id][consulta_id] = []
+            self.resultados_health[client_id][consulta_id] = []
             
         if consulta_id not in self.eof_esperados[client_id]:
             self.eof_esperados[client_id][consulta_id] = cargar_eofs()[consulta_id]
 
         self.resultados_parciales[client_id][consulta_id].append(create_dataframe(datos))
+        self.resultados_health[client_id][consulta_id].append(datos)
+
+
 
     def ejecutar_consulta(self, consulta_id, client_id):
         if client_id not in self.resultados_parciales:
@@ -45,13 +91,6 @@ class AggregatorNode:
             return False 
         
         datos = concat_data(datos_cliente[consulta_id])
-        
-        logging.info(tracemalloc.get_traced_memory())
-        tracemalloc.stop()
-        logging.info("Memoria usada: \n")
-        size_bytes = sys.getsizeof(datos)
-        size_mb = size_bytes / (1024 ** 2)
-        logging.info(f"Uso de memoria: {size_mb:.2f} MB")
         
         match consulta_id:
             case 2:
@@ -100,7 +139,6 @@ class AggregatorNode:
         consulta_id = obtener_query(mensaje)
         tipo_mensaje = obtener_tipo_mensaje(mensaje)
         client_id = obtener_client_id(mensaje)
-        mensaje['ack']()
         try:
             if tipo_mensaje == EOF:
                 logging.info(f"Consulta {consulta_id} de aggregator recibió EOF")
@@ -117,15 +155,14 @@ class AggregatorNode:
                         del self.resultados_parciales[client_id]
                     if not self.eof_esperados[client_id]:
                         del self.eof_esperados[client_id]
-
-                    gc.collect()
             else:
                 self.guardar_datos(consulta_id, obtener_body(mensaje), client_id)
+            self.guardar_estado()
+            mensaje['ack']()
         except ConsultaInexistente as e:
             logging.warning(f"Consulta inexistente: {e}")
         except Exception as e:
             logging.error(f"Error procesando mensaje en consulta {consulta_id}: {e}")
-
 
 
 # -----------------------
@@ -133,5 +170,6 @@ class AggregatorNode:
 # -----------------------
 
 if __name__ == "__main__":
-    aggregator = AggregatorNode()
-    iniciar_nodo(AGGREGATOR, aggregator, os.getenv("CONSULTAS", ""))
+    run(AGGREGATOR, AggregatorNode)
+
+    

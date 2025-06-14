@@ -1,7 +1,11 @@
+from multiprocessing import Process
+import os
+import signal
 import sys
 import pika # type: ignore
 import logging
 from common.utils import cargar_broker, cargar_eof_a_enviar, create_body, graceful_quit, initialize_log, puede_enviar
+from common.health import HealthMonitor
 
 # ----------------------
 # ENRUTAMIENTO DE MENSAJE
@@ -53,9 +57,33 @@ def obtener_body(mensaje):
 # ---------------------
 # GENERALES
 # ---------------------
-def iniciar_nodo(tipo_nodo, nodo, consultas=None, worker_id=None):
+def run(tipo_nodo, nodo):
+    proceso_nodo = Process(target=iniciar_nodo, args=(tipo_nodo, nodo))
+    monitor = HealthMonitor(tipo_nodo)
+    proceso_monitor = Process(target=monitor.run)
+    def shutdown_parent_handler(_, __):
+        print("Recibida señal en padre, terminando hijos...")
+        for p in (proceso_nodo, proceso_monitor):
+            if p.is_alive():
+                p.terminate()
+        # sys.exit(0)
+
+    signal.signal(signal.SIGINT, shutdown_parent_handler)
+    signal.signal(signal.SIGTERM, shutdown_parent_handler)
+
+    proceso_nodo.start()
+    proceso_monitor.start()
+    proceso_nodo.join()
+    proceso_monitor.join()
+
+
+
+def iniciar_nodo(tipo_nodo, nodo):
     initialize_log("INFO")
-    logging.info(f"Se inicializó el {tipo_nodo} filter")
+    nodo = nodo()
+    consultas = os.getenv("CONSULTAS", "")
+    worker_id = int(os.environ.get("WORKER_ID", 0))
+    logging.info(f"Se inicializó el {tipo_nodo}")
     consultas = list(map(int, consultas.split(","))) if consultas else []
     conexion, canal = inicializar_comunicacion()
     graceful_quit(conexion, canal, nodo)
