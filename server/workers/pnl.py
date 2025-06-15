@@ -87,13 +87,14 @@ class PnlNode:
 
     def consulta_5(self, datos, client_id):
         logging.info("Procesando datos para consulta 5")
-        overviews = datos['overview'].fillna('').tolist()
+        overviews = [fila.get("overview", "") or "" for fila in datos]
         sentiments = self.sentiment_analyzer(overviews, truncation=True)
-        datos['sentiment'] = [result['label'] for result in sentiments]
-
+        for fila, resultado in zip(datos, sentiments):
+            fila['sentiment'] = resultado.get('label', 'UNKNOWN')
         self.borrar_info(client_id)
         return datos
-    
+        
+
     def procesar_mensajes(self, canal, destino, mensaje, enviar_func):
         consulta_id = obtener_query(mensaje)
         client_id = obtener_client_id(mensaje)
@@ -112,7 +113,7 @@ class PnlNode:
                     enviar_func(canal, destino, resultado, mensaje, "RESULT")
                 self.modifico = True
                 self.transaction.marcar_modificado([RESULT])
-            self.transaction.guardar_estado_pnl()
+            #self.transaction.guardar_estado_pnl()
             mensaje['ack']()
         except ConsultaInexistente as e:
             logging.warning(f"Consulta inexistente: {e}")

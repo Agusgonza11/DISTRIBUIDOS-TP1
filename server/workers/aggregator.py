@@ -1,5 +1,6 @@
 import logging
 import pickle
+from collections import defaultdict
 
 from common.utils import EOF, borrar_contenido_carpeta, cargar_eofs, concat_data, create_dataframe, obtiene_nombre_contenedor, prepare_data_aggregator_consult_3
 from common.communication import obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
@@ -115,9 +116,34 @@ class AggregatorNode:
 
     def consulta_5(self, datos):
         logging.info("Procesando datos para consulta 5")
-        datos["rate_revenue_budget"] = datos["revenue"] / datos["budget"]
-        average_rate_by_sentiment = datos.groupby("sentiment")["rate_revenue_budget"].mean().reset_index()
-        return average_rate_by_sentiment
+        for fila in datos:
+            try:
+                budget = float(fila['budget'])
+                revenue = float(fila['revenue'])
+                if budget == 0:
+                    fila['rate_revenue_budget'] = 0.0  # o podés hacer: continue
+                else:
+                    fila['rate_revenue_budget'] = revenue / budget
+            except (ValueError, ZeroDivisionError, KeyError):
+                fila['rate_revenue_budget'] = 0.0  # o podés saltarla
+
+        sumas = defaultdict(float)
+        cantidades = defaultdict(int)
+
+        for fila in datos:
+            sentimiento = fila.get('sentiment', 'UNKNOWN')
+            rate = fila.get('rate_revenue_budget', 0.0)
+            sumas[sentimiento] += rate
+            cantidades[sentimiento] += 1
+        resultado = []
+        for sentimiento in sumas:
+            promedio = sumas[sentimiento] / cantidades[sentimiento]
+            resultado.append({
+                "sentiment": sentimiento,
+                "rate_revenue_budget": promedio
+            })
+
+        return resultado
     
 
     def procesar_mensajes(self, canal, destino, mensaje, enviar_func):
@@ -143,7 +169,7 @@ class AggregatorNode:
                         del self.eof_esperados[client_id]
             else:
                 self.guardar_datos(consulta_id, obtener_body(mensaje), client_id)
-            self.transaction.guardar_estado_aggregator(self)
+            #self.transaction.guardar_estado_aggregator(self)
             mensaje['ack']()
         except ConsultaInexistente as e:
             logging.warning(f"Consulta inexistente: {e}")

@@ -76,7 +76,7 @@ def borrar_contenido_carpeta(ruta):
 def lista_dicts_a_csv(lista):
     if not lista:
         return ""
-    if lista == "EOF":
+    if lista == "EOF" or isinstance(lista, str):
         return lista
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=lista[0].keys())
@@ -182,9 +182,18 @@ def prepare_data_consult_4(data):
 
 def prepare_data_consult_5(data):
     datos = create_dataframe(data)
-    datos['budget'] = pd.to_numeric(datos['budget'], errors='coerce')
-    datos['revenue'] = pd.to_numeric(datos['revenue'], errors='coerce')
-    return datos
+    resultado_filtrado = []
+    for row in datos:
+        try:
+            budget = int(row['budget'])
+            revenue = int(row['revenue'])
+        except (ValueError, KeyError):
+            continue  # saltar si no es convertible a int o faltan campos
+
+        if budget != 0 and revenue != 0:
+            resultado_filtrado.append(row)
+
+    return resultado_filtrado
 
 
 def prepare_data_aggregator_consult_3(min, max):

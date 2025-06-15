@@ -73,13 +73,10 @@ class FiltroNode:
         return movies_arg_post_2000
 
 
-    def consulta_5(self, datos):
+    def consulta_5(self, datos_str):
         logging.info("Procesando datos para consulta 5")
-        datos = prepare_data_consult_5(datos)
-        q5_input_df = datos.copy()
-        q5_input_df = q5_input_df.loc[q5_input_df['budget'] != 0]
-        q5_input_df = q5_input_df.loc[q5_input_df['revenue'] != 0]
-        return q5_input_df
+        datos_filtrados = prepare_data_consult_5(datos_str)
+        return datos_filtrados
 
 
     def procesar_mensajes(self, canal, destino, mensaje, enviar_func):

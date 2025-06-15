@@ -147,38 +147,34 @@ class Broker:
         self.modifico = False
         if client_id not in self.clients:
             self.create_client(client_id)
-        try:
-            if consulta_id == 5:
-                if tipo_mensaje == EOF:
-                    self.eof_esperar[client_id][consulta_id] -= 1
-                    self.transaction.marcar_modificado([EOF_ESPERA])
-                    if self.eof_esperar[client_id][consulta_id] == 0:
-                        self.distribuir_informacion(client_id, consulta_id, mensaje, canal, enviar_func, EOF)
-                else:
-                    self.distribuir_informacion_round_robin(client_id, consulta_id, mensaje, canal, enviar_func)
+        if consulta_id == 5:
+            if tipo_mensaje == EOF:
+                self.eof_esperar[client_id][consulta_id] -= 1
+                self.transaction.marcar_modificado([EOF_ESPERA])
+                if self.eof_esperar[client_id][consulta_id] == 0:
+                    self.distribuir_informacion(client_id, consulta_id, mensaje, canal, enviar_func, EOF)
             else:
-                if tipo_mensaje in {"EOF_CREDITS", "EOF_RATINGS"}:
-                    logging.info(f"Recibi EOF: {tipo_mensaje}")
-                if tipo_mensaje in {"MOVIES", "EOF_CREDITS", "EOF_RATINGS"}:
-                    self.distribuir_informacion(client_id, consulta_id, mensaje, canal, enviar_func, tipo_mensaje)
+                self.distribuir_informacion_round_robin(client_id, consulta_id, mensaje, canal, enviar_func)
+        else:
+            if tipo_mensaje in {"EOF_CREDITS", "EOF_RATINGS"}:
+                logging.info(f"Recibi EOF: {tipo_mensaje}")
+            if tipo_mensaje in {"MOVIES", "EOF_CREDITS", "EOF_RATINGS"}:
+                self.distribuir_informacion(client_id, consulta_id, mensaje, canal, enviar_func, tipo_mensaje)
 
-                elif tipo_mensaje in {"CREDITS", "RATINGS"}:
-                    self.distribuir_informacion_round_robin(client_id, consulta_id, mensaje, canal, enviar_func, tipo_mensaje)
+            elif tipo_mensaje in {"CREDITS", "RATINGS"}:
+                self.distribuir_informacion_round_robin(client_id, consulta_id, mensaje, canal, enviar_func, tipo_mensaje)
 
-                elif tipo_mensaje == EOF:
-                    self.eof_esperar[client_id][consulta_id] -= 1
-                    self.transaction.marcar_modificado([EOF_ESPERA])
-                    if self.eof_esperar[client_id][consulta_id] == 0:
-                        self.distribuir_informacion(client_id, consulta_id, mensaje, canal, enviar_func, EOF)
+            elif tipo_mensaje == EOF:
+                self.eof_esperar[client_id][consulta_id] -= 1
+                self.transaction.marcar_modificado([EOF_ESPERA])
+                if self.eof_esperar[client_id][consulta_id] == 0:
+                    self.distribuir_informacion(client_id, consulta_id, mensaje, canal, enviar_func, EOF)
 
-                else:
-                    logging.error(f"Tipo de mensaje inesperado en consulta {consulta_id}: {tipo_mensaje}")
-            self.transaction.guardar_estado_broker(self)
-            mensaje['ack']()
-        except ConsultaInexistente as e:
-            logging.warning(f"Consulta inexistente: {e}")    
-        except Exception as e:
-            logging.error(f"Error procesando mensaje en consulta {consulta_id}: {e}")
+            else:
+                logging.error(f"Tipo de mensaje inesperado en consulta {consulta_id}: {tipo_mensaje}")
+        #self.transaction.guardar_estado_broker(self)
+        mensaje['ack']()
+
 
 
 
