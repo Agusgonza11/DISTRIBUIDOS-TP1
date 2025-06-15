@@ -76,6 +76,8 @@ def borrar_contenido_carpeta(ruta):
 def lista_dicts_a_csv(lista):
     if not lista:
         return ""
+    if lista == "EOF":
+        return lista
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=lista[0].keys())
     writer.writeheader()
@@ -116,7 +118,11 @@ def puede_enviar(body):
     return bool(body)
 
 def concat_data(data):
-    return pd.concat(data, ignore_index=True) if data else pd.DataFrame()
+    resultado = []
+    for sublista in data:
+        resultado.extend(sublista)
+    return resultado
+
 
 def dictionary_to_list(dictionary_str):
     try:
@@ -150,16 +156,27 @@ def prepare_data_consult_1_3_4(data):
         # Guardar como string para búsqueda rápida
         row["genres_str"] = ", ".join(row["genres"]).lower()
         row["production_countries_str"] = ", ".join(row["production_countries"]).lower()
-
     return rows
 
 
 def prepare_data_consult_2(data):
     data = create_dataframe(data)
-    data['production_countries'] = data['production_countries'].apply(dictionary_to_list)
-    data['production_countries'] = data['production_countries'].astype(str)
-    data['budget'] = pd.to_numeric(data['budget'], errors='coerce')
-    return data
+    resultado = []
+    for i, row in enumerate(data):
+        if i == 0:
+            continue
+
+        pc_str = row.get('production_countries', '[]')
+        row['production_countries'] = dictionary_to_list(pc_str)
+
+        try:
+            row['budget'] = float(row.get('budget', 0))
+        except (ValueError, TypeError):
+            row['budget'] = 0
+        
+        resultado.append(row)
+    return resultado
+
 
 def prepare_data_consult_4(data):
     credits = concat_data(data) 

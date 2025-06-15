@@ -53,12 +53,15 @@ class FiltroNode:
 
 
     def consulta_2(self, datos):
-        logging.info("Procesando datos para consulta 2") 
+        logging.info("Procesando datos para consulta 2")
         datos = prepare_data_consult_2(datos)
-        solo_country_df = datos[datos['production_countries'].apply(lambda x: len(eval(x)) == 1)]
-        solo_country_df = solo_country_df.copy()
-        solo_country_df.loc[:, 'country'] = solo_country_df['production_countries'].apply(lambda x: eval(x)[0])
-        return solo_country_df
+        resultado = []
+        for row in datos:
+            paises = row.get('production_countries', [])
+            if len(paises) == 1:
+                row['country'] = paises[0]
+                resultado.append(row)
+        return resultado
     
     def consulta_3_y_4(self, datos):
         datos = prepare_data_consult_1_3_4(datos)

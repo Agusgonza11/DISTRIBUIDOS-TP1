@@ -108,9 +108,23 @@ class AggregatorNode:
 
     def consulta_2(self, datos):
         logging.info("Procesando datos para consulta 2")
-        investment_by_country = datos.groupby('country')['budget'].sum().sort_values(ascending=False)
-        top_5_countries = investment_by_country.head(5).reset_index()
-        return top_5_countries
+        suma_por_pais = {}
+        for row in datos:
+            country = row.get('country')
+            try:
+                budget = float(row.get('budget', 0))
+            except (ValueError, TypeError):
+                budget = 0
+
+            if country not in suma_por_pais:
+                suma_por_pais[country] = 0
+            suma_por_pais[country] += budget
+
+        top_5 = sorted(suma_por_pais.items(), key=lambda x: x[1], reverse=True)[:5]
+
+        resultado = [{'country': pais, 'budget': suma} for pais, suma in top_5]
+
+        return resultado
 
     def consulta_3(self, datos):
         logging.info("Procesando datos para consulta 3")
