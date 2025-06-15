@@ -7,6 +7,8 @@ from common.communication import iniciar_nodo, obtener_body, obtener_client_id, 
 from common.excepciones import ConsultaInexistente
 import pickle
 
+from common.transaction import Transaction
+
 
 BROKER = "broker"
 TMP_DIR = f"/tmp/{obtiene_nombre_contenedor(BROKER)}_tmp"
@@ -14,6 +16,13 @@ TMP_DIR = f"/tmp/{obtiene_nombre_contenedor(BROKER)}_tmp"
 CONSULTA_3 = 0
 CONSULTA_4 = 1
 CONSULTA_5 = 2
+
+CAMBIOS = "cambios"
+
+ULTIMO_NODO = "ultimo_nodo_consulta"
+NODOS_ENVIAR = "nodos_enviar"
+EOF_ESPERA = "eof_esperar"
+CLIENTS = "clients"
 
 # -----------------------
 # Broker
@@ -26,8 +35,8 @@ class Broker:
         self.clients = []
         self.cambios = {}
         self.modifico = False
-        self.health_file = f"{TMP_DIR}/health_file.data"
-        self.cargar_estado()
+        self.transaction = Transaction(f"{TMP_DIR}/health_file.data", [CAMBIOS])
+        self.transaction.cargar_estado_broker(self)
 
     def marcar_modificado(self, clave, valor):
         try:
@@ -61,10 +70,7 @@ class Broker:
                 self.ultimo_nodo_consulta = pickle.loads(cambios["ultimo_nodo_consulta"])
             if "clients" in cambios:
                 self.clients = pickle.loads(cambios["clients"])
-            self.marcar_modificado("ultimo_nodo_consulta", self.ultimo_nodo_consulta)      
-            self.marcar_modificado("nodos_enviar", self.nodos_enviar)      
-            self.marcar_modificado("eof_esperar", self.eof_esperar)      
-            self.marcar_modificado("clients", self.clients)      
+            self.transaction.marcar_modificado([ULTIMO_NODO, NODOS_ENVIAR, EOF_ESPERA, CLIENTS])
 
         except FileNotFoundError:
             logging.info("No hay estado para cargar")
@@ -77,8 +83,8 @@ class Broker:
         self.eof_esperar[client] = cargar_eofs()
         self.ultimo_nodo_consulta[client] = [self.nodos_enviar[client][3][0], self.nodos_enviar[client][4][0], 1]
         self.clients.append(client)
-        self.marcar_modificado("clients", self.clients)
-        self.marcar_modificado("nodos_enviar", self.nodos_enviar)
+        self.transaction.marcar_modificado([NODOS_ENVIAR, CLIENTS])
+
 
     def eliminar(self, es_global):
         self.nodos_enviar = {}
@@ -108,7 +114,7 @@ class Broker:
             idx_actual = lista_nodos.index(self.ultimo_nodo_consulta[client_id][CONSULTA_4])
             idx_siguiente = (idx_actual + 1) % len(lista_nodos)
             self.ultimo_nodo_consulta[client_id][CONSULTA_4] = lista_nodos[idx_siguiente]  
-        self.marcar_modificado("ultimo_nodo_consulta", self.ultimo_nodo_consulta)      
+            self.transaction.marcar_modificado([ULTIMO_NODO])
 
 
     def distribuir_informacion(self, client_id, consulta_id, mensaje, canal, enviar_func, tipo=None):
@@ -145,7 +151,7 @@ class Broker:
             if consulta_id == 5:
                 if tipo_mensaje == EOF:
                     self.eof_esperar[client_id][consulta_id] -= 1
-                    self.marcar_modificado("eof_esperar", self.eof_esperar)
+                    self.transaction.marcar_modificado([EOF_ESPERA])
                     if self.eof_esperar[client_id][consulta_id] == 0:
                         self.distribuir_informacion(client_id, consulta_id, mensaje, canal, enviar_func, EOF)
                 else:
@@ -161,13 +167,13 @@ class Broker:
 
                 elif tipo_mensaje == EOF:
                     self.eof_esperar[client_id][consulta_id] -= 1
-                    self.marcar_modificado("eof_esperar", self.eof_esperar)
+                    self.transaction.marcar_modificado([EOF_ESPERA])
                     if self.eof_esperar[client_id][consulta_id] == 0:
                         self.distribuir_informacion(client_id, consulta_id, mensaje, canal, enviar_func, EOF)
 
                 else:
                     logging.error(f"Tipo de mensaje inesperado en consulta {consulta_id}: {tipo_mensaje}")
-            self.guardar_estado()
+            self.transaction.guardar_estado_broker(self)
             mensaje['ack']()
         except ConsultaInexistente as e:
             logging.warning(f"Consulta inexistente: {e}")    

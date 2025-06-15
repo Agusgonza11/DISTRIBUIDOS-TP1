@@ -8,6 +8,7 @@ from common.communication import iniciar_nodo, obtener_body, obtener_client_id, 
 from transformers import pipeline # type: ignore
 import torch # type: ignore
 from common.excepciones import ConsultaInexistente
+from common.transaction import Transaction
 
 
 PNL = "pnl"
@@ -18,6 +19,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
 torch.set_num_threads(1)
 
+RESULT = "resultados_parciales"
 
 # -----------------------
 # Nodo PNL
@@ -32,40 +34,8 @@ class PnlNode:
         self.resultados_parciales = {}
         self.lineas_actuales = {}
         self.resultados_health = {}
-        self.modifico = False
-        self.health_file = f"{TMP_DIR}/health_file.data"
-        self.cargar_estado()
-
-    def cargar_estado(self):
-        try:
-            with open(self.health_file, "rb") as f:
-                estado = pickle.load(f)
-                self.resultados_health = estado.get("resultados_parciales", {})
-                self.lineas_actuales = estado.get("lineas_actuales", {})
-                self.resultados_parciales = {}
-
-                # Recrear los DataFrames desde los datos crudos
-                for client_id, lista_datos in self.resultados_health.items():
-                    self.resultados_parciales[client_id] = [
-                        create_dataframe(datos) for datos in lista_datos
-                    ]
-        except FileNotFoundError:
-            logging.info("No hay estado para cargar")
-        except Exception as e:
-            print(f"Error al cargar el estado: {e}", flush=True)
-
-
-    def guardar_estado(self):
-        if not self.modifico:
-            return
-        try:
-            with open(self.health_file, "wb") as f:
-                pickle.dump({
-                    "resultados_parciales": self.resultados_health,
-                    "lineas_actuales": self.lineas_actuales
-                }, f)
-        except Exception as e:
-            print(f"Error al guardar el estado: {e}", flush=True)
+        self.transaction = Transaction(f"{TMP_DIR}/health_file.data", [RESULT])
+        self.transaction.cargar_estado_pnl(self)
 
 
     def eliminar(self, es_global):
@@ -134,14 +104,15 @@ class PnlNode:
                     resultado = self.ejecutar_consulta(consulta_id, client_id)
                     enviar_func(canal, destino, resultado, mensaje, "RESULT")
                 enviar_func(canal, destino, EOF, mensaje, EOF)
-                self.modifico = False
+                self.transaction.marcar_no_modificado([RESULT])
             else:
                 self.guardar_datos(obtener_body(mensaje), client_id) #guardar una variable para q solo guarde
                 if self.lineas_actuales[client_id] >= BATCH_PNL:
                     resultado = self.ejecutar_consulta(consulta_id, client_id)
                     enviar_func(canal, destino, resultado, mensaje, "RESULT")
                 self.modifico = True
-            self.guardar_estado()
+                self.transaction.marcar_modificado([RESULT])
+            self.transaction.guardar_estado_pnl()
             mensaje['ack']()
         except ConsultaInexistente as e:
             logging.warning(f"Consulta inexistente: {e}")
