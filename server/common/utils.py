@@ -163,9 +163,6 @@ def prepare_data_consult_2(data):
     data = create_dataframe(data)
     resultado = []
     for i, row in enumerate(data):
-        if i == 0:
-            continue
-
         pc_str = row.get('production_countries', '[]')
         row['production_countries'] = dictionary_to_list(pc_str)
 

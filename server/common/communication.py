@@ -109,6 +109,8 @@ def inicializar_comunicacion():
 def enviar_mensaje(canal, routing_key, body, mensaje_original, type=None):
     propiedades = config_header(mensaje_original, type)
     csv_str = lista_dicts_a_csv(body)
+    if csv_str == "":
+        return
     canal.basic_publish(
         exchange='',
         routing_key=routing_key,

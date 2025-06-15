@@ -119,9 +119,7 @@ class AggregatorNode:
             if country not in suma_por_pais:
                 suma_por_pais[country] = 0
             suma_por_pais[country] += budget
-
         top_5 = sorted(suma_por_pais.items(), key=lambda x: x[1], reverse=True)[:5]
-
         resultado = [{'country': pais, 'budget': suma} for pais, suma in top_5]
 
         return resultado
