@@ -197,7 +197,7 @@ class AggregatorNode:
                         del self.eof_esperados[client_id]
             else:
                 self.guardar_datos(consulta_id, obtener_body(mensaje), client_id)
-            self.transaction.guardar_estado(self)
+            self.transaction.guardar_estado(self, AGGREGATOR)
             mensaje['ack']()
         except ConsultaInexistente as e:
             logging.warning(f"Consulta inexistente: {e}")
