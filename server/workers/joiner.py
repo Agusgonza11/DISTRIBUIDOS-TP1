@@ -1,9 +1,10 @@
+import csv
 import pickle
 import logging
 import os
 import tempfile
 import threading
-from common.utils import EOF, borrar_contenido_carpeta, concat_data, create_dataframe, get_batches, obtiene_nombre_contenedor, prepare_data_consult_4
+from common.utils import EOF, borrar_contenido_carpeta, concat_data, create_dataframe, get_batches, obtiene_nombre_contenedor, prepare_data_consult_4, write_dicts_to_csv
 from common.utils import normalize_movies_df, normalize_credits_df, normalize_ratings_df
 from common.communication import obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
 import pandas as pd # type: ignore
@@ -160,16 +161,18 @@ class JoinerNode:
 
     def guardar_datos(self, consulta_id, datos, client_id):
         df = create_dataframe(datos)
-        df = normalize_movies_df(df)
+        #df = normalize_movies_df(df)
+        #print(f"los datos movies son {datos}", flush=True)
         self.resultados_parciales[client_id][consulta_id].append(df)
 
     def almacenar_csv(self, consulta_id, datos, client_id):
         csv = "ratings" if consulta_id == 3 else "credits"
         df = create_dataframe(datos)
-        if csv == "ratings":
-            df = normalize_ratings_df(df)
-        elif csv == "credits":
-            df = normalize_credits_df(df)
+        #print(f"los datos csv son {datos}", flush=True)
+        #if csv == "ratings":
+        #    df = normalize_ratings_df(df)
+        #elif csv == "credits":
+        #    df = normalize_credits_df(df)
 
         self.datos[client_id][csv][LINEAS] += len(df)
         self.datos[client_id][csv][DATOS].append(df)
@@ -178,29 +181,39 @@ class JoinerNode:
             bsize = BATCH_RATINGS if csv == "ratings" else BATCH_CREDITS
             if self.datos[client_id][csv][LINEAS] >= bsize:
                 with self.locks[client_id][csv]:
-                    df_total = concat_data(self.datos[client_id][csv][DATOS])
-                    df_total.to_csv(
+                    # concat_data junta listas de listas: convertimos a lista simple
+                    df_total = []
+                    for chunk in self.datos[client_id][csv][DATOS]:
+                        df_total.extend(chunk)
+                    write_dicts_to_csv(
                         self.file_paths[client_id][csv],
-                        mode='a',
-                        header=not self.files_on_disk[client_id][csv],
-                        index=False
+                        df_total,
+                        append=self.files_on_disk[client_id][csv]
                     )
                     self.files_on_disk[client_id][csv] = True
                 self.borrar_info(csv, client_id)
 
-    def leer_batches_de_disco(self, client_id, csv):
-        batch_size = BATCH_RATINGS if csv == "ratings" else BATCH_CREDITS
-        with self.locks[client_id][csv]:
-            file_path = self.file_paths[client_id][csv]
+
+    def leer_batches_de_disco(self, client_id, csv_name):
+        batch_size = BATCH_RATINGS if csv_name == "ratings" else BATCH_CREDITS
+        file_path = self.file_paths[client_id][csv_name]
+
+        with self.locks[client_id][csv_name]:
             if not os.path.exists(file_path):
                 logging.info(f"Filepath doesn't exist {file_path}")
                 return
-            for batch in pd.read_csv(file_path, chunksize=batch_size):
-                if csv == "ratings":
-                    batch = normalize_ratings_df(batch)
-                elif csv == "credits":
-                    batch = normalize_credits_df(batch)
-                yield batch
+
+            with open(file_path, newline='', encoding='utf-8') as csvfile:
+                reader = csv.DictReader(csvfile)
+                batch = []
+                for row in reader:
+                    batch.append(row)
+                    if len(batch) >= batch_size:
+                        yield batch
+                        batch = []
+                if batch:
+                    yield batch
+
 
     def enviar_resultados_disco(self, datos, client_id, canal, destino, mensaje, enviar_func, consulta_id):
         csv = "ratings" if consulta_id == 3 else "credits"
@@ -220,13 +233,21 @@ class JoinerNode:
 
 
     def procesar_y_enviar_batch_credit(self, batch, datos, canal, destino, mensaje, enviar_func):
-        if batch is not None and not batch.empty:
-            df_merge = datos[["id", "title"]].merge(batch, on="id", how="inner")
-            df_merge = df_merge[df_merge['cast'].map(lambda x: len(x) > 0)]
-            if not df_merge.empty:
-                df_cast = df_merge.explode('cast')
-                result = df_cast[['id', 'cast']].rename(columns={'cast': 'name'})
-                enviar_func(canal, destino, result, mensaje, "RESULT")
+        if batch is None or len(batch) == 0:
+            return
+        datos_dict = {entry['id']: entry['title'] for entry in datos}
+        joined = []
+        for row in batch:
+            movie_id = row.get('id')
+            cast_list = row.get('cast', [])
+            if movie_id in datos_dict and isinstance(cast_list, list) and len(cast_list) > 0:
+                for cast_member in cast_list:
+                    joined.append({'id': movie_id, 'name': cast_member})
+        print(f"en procesar y enviar 4 {joined}", flush=True)
+
+        if len(joined) > 0:
+            enviar_func(canal, destino, joined, mensaje, "RESULT")
+
 
     def procesar_y_enviar_batch_ratings(self, batch, datos, canal, destino, mensaje, enviar_func):
         if batch is not None and not batch.empty:
@@ -272,15 +293,33 @@ class JoinerNode:
         return ranking_arg_post_2000_df
 
     def consulta_4(self, datos, client_id):
-        logging.info(f"Procesando datos para consulta 4")
+        logging.info("Procesando datos para consulta 4")
         credits = prepare_data_consult_4(self.datos[client_id]["credits"][DATOS])
         self.borrar_info("credits", client_id)
-        if credits.empty:
+        if not credits:
             return False
-        cast_arg_post_2000_df = datos[["id", "title"]].merge(credits, on="id")
-        df_cast = cast_arg_post_2000_df.explode('cast')
-        cast_and_movie_arg_post_2000_df = df_cast[['id', 'cast']].rename(columns={'cast': 'name'})
-        return cast_and_movie_arg_post_2000_df
+        datos_list = [ {"id": d["id"], "title": d["title"]} for d in datos ]
+        merged = []
+        credits_by_id = {}
+        for c in credits:
+            credits_by_id.setdefault(c["id"], []).append(c)
+        for movie in datos_list:
+            movie_id = movie["id"]
+            if movie_id in credits_by_id:
+                for credit in credits_by_id[movie_id]:
+                    merged.append({**movie, **credit})
+        exploded = []
+        for entry in merged:
+            cast_list = entry.get('cast', [])
+            for cast_member in cast_list:
+                exploded.append({
+                    "id": entry["id"],
+                    "name": cast_member 
+                })
+        print(f"en consulta 4 {exploded}", flush=True)
+        return exploded
+
+
 
     def procesar_datos(self, consulta_id, tipo_mensaje, mensaje, client_id):
         contenido = obtener_body(mensaje)
@@ -336,37 +375,33 @@ class JoinerNode:
         tipo_mensaje = obtener_tipo_mensaje(mensaje)
         client_id = obtener_client_id(mensaje)
         self.modifico = False
-        try:
-            if tipo_mensaje == "EOF":
-                logging.info(f"Se recibio todo Movies, consulta {consulta_id} recibió EOF")
-                self.termino_movies[client_id][consulta_id] = True
-                self.marcar_modificado("termino_movies", self.termino_movies)
+        if tipo_mensaje == "EOF":
+            logging.info(f"Se recibio todo Movies, consulta {consulta_id} recibió EOF")
+            self.termino_movies[client_id][consulta_id] = True
+            self.marcar_modificado("termino_movies", self.termino_movies)
+            self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
+            self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func, client_id)
+        elif tipo_mensaje in ["MOVIES", "RATINGS", "CREDITS"]:
+            self.procesar_datos(consulta_id, tipo_mensaje, mensaje, client_id)
+            if tipo_mensaje != "MOVIES":
                 self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
-                self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func, client_id)
-            elif tipo_mensaje in ["MOVIES", "RATINGS", "CREDITS"]:
-                self.procesar_datos(consulta_id, tipo_mensaje, mensaje, client_id)
-                if tipo_mensaje != "MOVIES":
-                    self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
-            elif tipo_mensaje == "EOF_RATINGS":
-                logging.info("Recibí todos los ratings")
-                self.datos[client_id]["ratings"][TERMINO] = True
-                self.marcar_modificado("datos", self.datos)
-                if self.datos[client_id]["ratings"][LINEAS] != 0 or self.files_on_disk[client_id]["ratings"]:
-                    self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
-                self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func, client_id)
-            elif tipo_mensaje == "EOF_CREDITS":
-                logging.info("Recibí todos los credits")
-                self.datos[client_id]["credits"][TERMINO] = True
-                self.marcar_modificado("datos", self.datos)
-                if self.datos[client_id]["credits"][LINEAS] != 0 or self.files_on_disk[client_id]["credits"]:
-                    self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
-                self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func, client_id)
+        elif tipo_mensaje == "EOF_RATINGS":
+            logging.info("Recibí todos los ratings")
+            self.datos[client_id]["ratings"][TERMINO] = True
+            self.marcar_modificado("datos", self.datos)
+            if self.datos[client_id]["ratings"][LINEAS] != 0 or self.files_on_disk[client_id]["ratings"]:
+                self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
+            self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func, client_id)
+        elif tipo_mensaje == "EOF_CREDITS":
+            logging.info("Recibí todos los credits")
+            self.datos[client_id]["credits"][TERMINO] = True
+            self.marcar_modificado("datos", self.datos)
+            if self.datos[client_id]["credits"][LINEAS] != 0 or self.files_on_disk[client_id]["credits"]:
+                self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
+            self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func, client_id)
             #self.guardar_estado()
-            mensaje['ack']()
-        except ConsultaInexistente as e:
-            logging.warning(f"Consulta inexistente: {e}")
-        except Exception as e:
-            logging.error(f"Error procesando mensaje en consulta {consulta_id}: {e}")
+        mensaje['ack']()
+
 
 # -----------------------
 # Ejecutando nodo joiner

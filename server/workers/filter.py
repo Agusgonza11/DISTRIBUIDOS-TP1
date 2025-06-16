@@ -65,12 +65,18 @@ class FiltroNode:
     
     def consulta_3_y_4(self, datos):
         datos = prepare_data_consult_1_3_4(datos)
-        movies_arg_post_2000 = datos[
-            (datos['production_countries'].str.contains('Argentina', case=False, na=False)) &
-            (datos['release_date'].dt.year >= 2000)
-        ]
-        movies_arg_post_2000 = movies_arg_post_2000.astype({'id': int})
-        return movies_arg_post_2000
+        peliculas_filtradas = []
+        for fila in datos:
+            paises = fila.get("production_countries_str", "")
+            fecha = fila.get("release_date")
+            if fecha and fecha.year >= 2000 and "argentina" in paises:
+                try:
+                    fila["id"] = int(fila["id"])
+                except (ValueError, TypeError):
+                    continue 
+                peliculas_filtradas.append(fila)
+        return peliculas_filtradas
+
 
 
     def consulta_5(self, datos_str):

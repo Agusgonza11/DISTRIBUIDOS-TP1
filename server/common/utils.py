@@ -176,9 +176,26 @@ def prepare_data_consult_2(data):
 
 
 def prepare_data_consult_4(data):
-    credits = concat_data(data) 
-    credits['cast'] = credits['cast'].apply(dictionary_to_list)
-    return credits
+    if any(isinstance(el, list) for el in data):
+        data = [item for sublist in data for item in (sublist if isinstance(sublist, list) else [sublist])]
+
+    for entry in data:
+        cast_raw = entry.get('cast', '[]')
+        if isinstance(cast_raw, str):
+            try:
+                cast_list = ast.literal_eval(cast_raw)
+                entry['cast'] = cast_list if isinstance(cast_list, list) else []
+            except Exception:
+                entry['cast'] = []
+        elif isinstance(cast_raw, list):
+            entry['cast'] = cast_raw
+        else:
+            entry['cast'] = []
+
+    return data
+
+
+
 
 def prepare_data_consult_5(data):
     datos = create_dataframe(data)
@@ -298,34 +315,55 @@ def obtiene_nombre_contenedor(tipo):
 # NORMALIZATION
 # -------------------
 
-def normalize_ratings_df(df):
-    df['id'] = df['id'].astype(str)
-    return df
+def normalize_ratings_df(data):
+    # data es una lista de dicts
+    for row in data:
+        if "id" in row:
+            row["id"] = str(row["id"])
+    return data
 
-def normalize_credits_df(df):
-    df['id'] = df['id'].astype(str)
-    if 'cast' in df.columns:
-        df['cast'] = df['cast'].fillna('[]')
-        def process_cast(cell):
-            if isinstance(cell, list):
-                if all(isinstance(x, dict) for x in cell):
-                    return [x['name'] for x in cell if 'name' in x]
-                elif all(isinstance(x, str) for x in cell):
-                    return cell
-                else:
-                    return []
-            elif isinstance(cell, str):
-                try:
-                    valor = ast.literal_eval(cell)
-                    return process_cast(valor)
-                except Exception:
-                    return []
+def normalize_credits_df(data):
+    resultado = []
+    for row in data:
+        nuevo = {}
+        nuevo["id"] = str(row.get("id", "")).strip()
+        cast = row.get("cast", "[]")
+        if isinstance(cast, str):
+            try:
+                cast = ast.literal_eval(cast)
+            except Exception:
+                cast = []
+        if isinstance(cast, list):
+            if all(isinstance(x, dict) for x in cast):
+                cast = [x.get("name", "").strip() for x in cast if "name" in x]
+            elif all(isinstance(x, str) for x in cast):
+                cast = [x.strip() for x in cast]
             else:
-                return []
-        df['cast'] = df['cast'].apply(process_cast)
-    return df
+                cast = []
+        else:
+            cast = []
+        nuevo["cast"] = cast
+        resultado.append(nuevo)
+    return resultado
 
-def normalize_movies_df(df):
-    if 'id' in df.columns:
-        df['id'] = df['id'].astype(str)
-    return df
+
+
+
+def normalize_movies_df(data):
+    for row in data:
+        if "id" in row:
+            row["id"] = str(row["id"])
+    return data
+
+
+
+def write_dicts_to_csv(file_path, data, append=False):
+    if not data:
+        return
+    fieldnames = data[0].keys()
+    mode = 'a' if append else 'w'
+    with open(file_path, mode, newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        if not append:
+            writer.writeheader()
+        writer.writerows(data)

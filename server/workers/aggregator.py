@@ -1,6 +1,6 @@
 import logging
 import pickle
-from collections import defaultdict
+from collections import Counter, defaultdict
 
 from common.utils import EOF, borrar_contenido_carpeta, cargar_eofs, concat_data, create_dataframe, obtiene_nombre_contenedor, prepare_data_aggregator_consult_3
 from common.communication import obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
@@ -110,9 +110,15 @@ class AggregatorNode:
 
     def consulta_4(self, datos):
         logging.info("Procesando datos para consulta 4")
-        cast_per_movie_quantities = datos.groupby(["name"]).count().reset_index().rename(columns={"id":"count"})
-        top_ten = cast_per_movie_quantities.nlargest(10, 'count')
-        return top_ten
+        contador = Counter()
+        for fila in datos:
+            nombre = fila.get("name")
+            if nombre:
+                contador[nombre] += 1
+        top_10 = contador.most_common(10)
+        resultado = [{"name": nombre, "count": cantidad} for nombre, cantidad in top_10]
+        print(f"los datos q devuelvo son {datos}", flush=True)
+        return resultado
 
     def consulta_5(self, datos):
         logging.info("Procesando datos para consulta 5")
@@ -121,11 +127,11 @@ class AggregatorNode:
                 budget = float(fila['budget'])
                 revenue = float(fila['revenue'])
                 if budget == 0:
-                    fila['rate_revenue_budget'] = 0.0  # o podés hacer: continue
+                    fila['rate_revenue_budget'] = 0.0
                 else:
                     fila['rate_revenue_budget'] = revenue / budget
             except (ValueError, ZeroDivisionError, KeyError):
-                fila['rate_revenue_budget'] = 0.0  # o podés saltarla
+                fila['rate_revenue_budget'] = 0.0
 
         sumas = defaultdict(float)
         cantidades = defaultdict(int)
