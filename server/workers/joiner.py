@@ -256,10 +256,25 @@ class JoinerNode:
 
 
     def procesar_y_enviar_batch_ratings(self, batch, datos, canal, destino, mensaje, enviar_func):
-        if batch is not None and not batch.empty:
-            df_merge = datos[["id", "title"]].merge(batch, on="id", how="inner")
-            if not df_merge.empty:
-                enviar_func(canal, destino, df_merge, mensaje, "RESULT")
+        if batch is None or len(batch) == 0:
+            return
+
+        datos_dict = {entry["id"]: entry["title"] for entry in datos}
+        joined = []
+
+        for row in batch:
+            movie_id = row.get("id")
+            if movie_id in datos_dict:
+                merged = {
+                    "id": movie_id,
+                    "title": datos_dict[movie_id],
+                    **row
+                }
+                joined.append(merged)
+
+        if len(joined) > 0:
+            enviar_func(canal, destino, joined, mensaje, "RESULT")
+
 
     def borrar_info(self, csv, client_id):
         self.datos[client_id][csv][DATOS] = []
@@ -290,13 +305,26 @@ class JoinerNode:
                 raise ConsultaInexistente(f"Consulta {consulta_id} no encontrada")
 
     def consulta_3(self, datos, client_id):
-        logging.info("Procesando datos para consulta 3") 
+        logging.info("Procesando datos para consulta 3")
         ratings = concat_data(self.datos[client_id]["ratings"][DATOS])
         self.borrar_info("ratings", client_id)
-        if ratings.empty:
+        if not ratings:
             return False
-        ranking_arg_post_2000_df = datos[["id", "title"]].merge(ratings, on="id")
-        return ranking_arg_post_2000_df
+
+        datos_dict = {d["id"]: d["title"] for d in datos}
+        resultado = []
+
+        for r in ratings:
+            movie_id = r.get("id")
+            if movie_id in datos_dict:
+                merged = {
+                    "id": movie_id,
+                    "title": datos_dict[movie_id],
+                    **r
+                }
+                resultado.append(merged)
+        return resultado
+
 
     def consulta_4(self, datos, client_id):
         logging.info("Procesando datos para consulta 4")
@@ -322,7 +350,6 @@ class JoinerNode:
                     "id": entry["id"],
                     "name": cast_member 
                 })
-        print(f"en consulta 4 {exploded}", flush=True)
         return exploded
 
 

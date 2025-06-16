@@ -100,13 +100,43 @@ class AggregatorNode:
 
     def consulta_3(self, datos):
         logging.info("Procesando datos para consulta 3")
-        logging.info(f"Datos recibidos con shape: {datos.shape}")
-        
-        mean_ratings = datos.groupby(["id", "title"])['rating'].mean().reset_index()
-        max_rated = mean_ratings.iloc[mean_ratings['rating'].idxmax()]
-        min_rated = mean_ratings.iloc[mean_ratings['rating'].idxmin()]
+        if not datos:
+            return None
+
+        # Agrupar ratings por (id, title)
+        agrupados = {}
+        for d in datos:
+            key = (d["id"], d["title"])
+            try:
+                rating = float(d["rating"])
+            except (ValueError, TypeError):
+                continue
+            if key not in agrupados:
+                agrupados[key] = []
+            agrupados[key].append(rating)
+
+        # Calcular promedio por grupo
+        promedios = []
+        for (movie_id, title), ratings in agrupados.items():
+            if ratings:
+                avg_rating = sum(ratings) / len(ratings)
+                promedios.append({
+                    "id": movie_id,
+                    "title": title,
+                    "rating": avg_rating
+                })
+
+        if not promedios:
+            return None
+
+        # Buscar el de mayor y menor rating
+        max_rated = max(promedios, key=lambda x: x["rating"])
+        min_rated = min(promedios, key=lambda x: x["rating"])
+
         result = prepare_data_aggregator_consult_3(min_rated, max_rated)
         return result
+
+
 
     def consulta_4(self, datos):
         logging.info("Procesando datos para consulta 4")
@@ -117,8 +147,9 @@ class AggregatorNode:
                 contador[nombre] += 1
         top_10 = contador.most_common(10)
         resultado = [{"name": nombre, "count": cantidad} for nombre, cantidad in top_10]
-        print(f"los datos q devuelvo son {datos}", flush=True)
         return resultado
+
+
 
     def consulta_5(self, datos):
         logging.info("Procesando datos para consulta 5")

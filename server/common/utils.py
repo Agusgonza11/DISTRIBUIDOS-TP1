@@ -213,13 +213,14 @@ def prepare_data_consult_5(data):
     return resultado_filtrado
 
 
-def prepare_data_aggregator_consult_3(min, max):
+def prepare_data_aggregator_consult_3(min_result, max_result):
     headers = ["id", "title", "rating"]
     data = [
-        {**{h: max[h] for h in headers}, "tipo": "max"},
-        {**{h: min[h] for h in headers}, "tipo": "min"}
+        {**{h: max_result[h] for h in headers}, "tipo": "max"},
+        {**{h: min_result[h] for h in headers}, "tipo": "min"}
     ]
-    return pd.DataFrame(data)
+    return data
+
 
 
 
