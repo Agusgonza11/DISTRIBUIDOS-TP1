@@ -3,8 +3,8 @@ from multiprocessing import Process
 import os
 import pickle
 import sys
-from common.utils import EOF, borrar_contenido_carpeta, concat_data, create_dataframe, get_batches, obtiene_nombre_contenedor
-from common.communication import iniciar_nodo, obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
+from common.utils import EOF, concat_data, create_dataframe, get_batches, obtiene_nombre_contenedor
+from common.communication import obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
 from transformers import pipeline # type: ignore
 import torch # type: ignore
 from common.excepciones import ConsultaInexistente

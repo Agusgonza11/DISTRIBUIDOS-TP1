@@ -5,8 +5,7 @@ import logging
 import os
 import tempfile
 import threading
-from common.utils import EOF, borrar_contenido_carpeta, concat_data, create_dataframe, get_batches, obtiene_nombre_contenedor, prepare_data_consult_4, write_dicts_to_csv
-from common.utils import normalize_movies_df, normalize_credits_df, normalize_ratings_df
+from common.utils import EOF, concat_data, create_dataframe, get_batches, obtiene_nombre_contenedor, prepare_data_consult_4, write_dicts_to_csv
 from common.communication import obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
 from common.excepciones import ConsultaInexistente
 from common.transaction import Transaction

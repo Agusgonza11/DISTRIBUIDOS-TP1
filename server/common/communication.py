@@ -5,7 +5,7 @@ import os
 import signal
 import pika # type: ignore
 import logging
-from common.utils import cargar_broker, cargar_eof_a_enviar, create_body, graceful_quit, initialize_log, lista_dicts_a_csv, puede_enviar
+from common.utils import cargar_broker, cargar_eof_a_enviar, graceful_quit, initialize_log, lista_dicts_a_csv
 from common.health import HealthMonitor
 
 # ----------------------

@@ -84,22 +84,10 @@ def lista_dicts_a_csv(lista):
     return output.getvalue()
 
 
-# -------------------
-# PANDAS
-# -------------------
-def create_dataframe_manual(csv):
-    lines = csv.strip().split('\n')
-    headers = lines[0].split(',')
-    rows = []
-    for line in lines[1:]:
-        values = line.split(',')
-        # Si la fila tiene menos valores que columnas, completar con ""
-        values += [""] * (len(headers) - len(values))
-        row = dict(zip(headers, values))
-        rows.append(row)
-    return rows
 
-
+# -------------------
+# PREPARAR DATA
+# -------------------
 
 
 def create_dataframe(data_str):
@@ -123,11 +111,6 @@ def dictionary_to_list(dictionary_str):
     except (ValueError, SyntaxError):
         return [] 
 
-
-
-# -------------------
-# PREPARAR DATA
-# -------------------
 
 def prepare_data_consult_1_3_4(data):
     rows = create_dataframe(data)
@@ -304,45 +287,6 @@ def obtiene_nombre_contenedor(tipo):
 # -------------------
 # NORMALIZATION
 # -------------------
-
-def normalize_ratings_df(data):
-    for row in data:
-        if "id" in row:
-            row["id"] = str(row["id"])
-    return data
-
-def normalize_credits_df(data):
-    resultado = []
-    for row in data:
-        nuevo = {}
-        nuevo["id"] = str(row.get("id", "")).strip()
-        cast = row.get("cast", "[]")
-        if isinstance(cast, str):
-            try:
-                cast = ast.literal_eval(cast)
-            except Exception:
-                cast = []
-        if isinstance(cast, list):
-            if all(isinstance(x, dict) for x in cast):
-                cast = [x.get("name", "").strip() for x in cast if "name" in x]
-            elif all(isinstance(x, str) for x in cast):
-                cast = [x.strip() for x in cast]
-            else:
-                cast = []
-        else:
-            cast = []
-        nuevo["cast"] = cast
-        resultado.append(nuevo)
-    return resultado
-
-
-def normalize_movies_df(data):
-    for row in data:
-        if "id" in row:
-            row["id"] = str(row["id"])
-    return data
-
-
 
 def write_dicts_to_csv(file_path, data, append=False):
     if not data:

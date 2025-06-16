@@ -2,8 +2,8 @@ from multiprocessing import Process
 import os
 import sys
 import logging
-from common.utils import EOF, borrar_contenido_carpeta, cargar_datos_broker, cargar_eofs, obtiene_nombre_contenedor
-from common.communication import iniciar_nodo, obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
+from common.utils import EOF,  cargar_datos_broker, cargar_eofs, obtiene_nombre_contenedor
+from common.communication import  obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
 from common.excepciones import ConsultaInexistente
 import pickle
 

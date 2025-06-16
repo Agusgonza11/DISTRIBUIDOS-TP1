@@ -2,7 +2,7 @@ import logging
 import os
 from multiprocessing import Process
 from common.utils import prepare_data_consult_1_3_4, prepare_data_consult_2, EOF, prepare_data_consult_5
-from common.communication import iniciar_nodo, obtener_body, obtener_query, obtener_tipo_mensaje, run
+from common.communication import  obtener_body, obtener_query, obtener_tipo_mensaje, run
 from common.excepciones import ConsultaInexistente
 
 FILTER = "filter"
