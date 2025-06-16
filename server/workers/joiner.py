@@ -1,3 +1,4 @@
+import ast
 import csv
 import pickle
 import logging
@@ -239,12 +240,17 @@ class JoinerNode:
         joined = []
         for row in batch:
             movie_id = row.get('id')
-            cast_list = row.get('cast', [])
+            cast_raw = row.get('cast', '[]')
+            try:
+                cast_list = ast.literal_eval(cast_raw)
+            except (ValueError, SyntaxError):
+                cast_list = []
+
             if movie_id in datos_dict and isinstance(cast_list, list) and len(cast_list) > 0:
                 for cast_member in cast_list:
-                    joined.append({'id': movie_id, 'name': cast_member})
-        print(f"en procesar y enviar 4 {joined}", flush=True)
-
+                    actor_name = cast_member.get('name')
+                    if actor_name:
+                        joined.append({'id': movie_id, 'name': actor_name})
         if len(joined) > 0:
             enviar_func(canal, destino, joined, mensaje, "RESULT")
 
@@ -375,33 +381,37 @@ class JoinerNode:
         tipo_mensaje = obtener_tipo_mensaje(mensaje)
         client_id = obtener_client_id(mensaje)
         self.modifico = False
-        if tipo_mensaje == "EOF":
-            logging.info(f"Se recibio todo Movies, consulta {consulta_id} recibió EOF")
-            self.termino_movies[client_id][consulta_id] = True
-            self.marcar_modificado("termino_movies", self.termino_movies)
-            self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
-            self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func, client_id)
-        elif tipo_mensaje in ["MOVIES", "RATINGS", "CREDITS"]:
-            self.procesar_datos(consulta_id, tipo_mensaje, mensaje, client_id)
-            if tipo_mensaje != "MOVIES":
+        try:
+            if tipo_mensaje == "EOF":
+                logging.info(f"Se recibio todo Movies, consulta {consulta_id} recibió EOF")
+                self.termino_movies[client_id][consulta_id] = True
+                self.marcar_modificado("termino_movies", self.termino_movies)
                 self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
-        elif tipo_mensaje == "EOF_RATINGS":
-            logging.info("Recibí todos los ratings")
-            self.datos[client_id]["ratings"][TERMINO] = True
-            self.marcar_modificado("datos", self.datos)
-            if self.datos[client_id]["ratings"][LINEAS] != 0 or self.files_on_disk[client_id]["ratings"]:
-                self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
-            self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func, client_id)
-        elif tipo_mensaje == "EOF_CREDITS":
-            logging.info("Recibí todos los credits")
-            self.datos[client_id]["credits"][TERMINO] = True
-            self.marcar_modificado("datos", self.datos)
-            if self.datos[client_id]["credits"][LINEAS] != 0 or self.files_on_disk[client_id]["credits"]:
-                self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
-            self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func, client_id)
-            #self.guardar_estado()
-        mensaje['ack']()
-
+                self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func, client_id)
+            elif tipo_mensaje in ["MOVIES", "RATINGS", "CREDITS"]:
+                self.procesar_datos(consulta_id, tipo_mensaje, mensaje, client_id)
+                if tipo_mensaje != "MOVIES":
+                    self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
+            elif tipo_mensaje == "EOF_RATINGS":
+                logging.info("Recibí todos los ratings")
+                self.datos[client_id]["ratings"][TERMINO] = True
+                self.marcar_modificado("datos", self.datos)
+                if self.datos[client_id]["ratings"][LINEAS] != 0 or self.files_on_disk[client_id]["ratings"]:
+                    self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
+                self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func, client_id)
+            elif tipo_mensaje == "EOF_CREDITS":
+                logging.info("Recibí todos los credits")
+                self.datos[client_id]["credits"][TERMINO] = True
+                self.marcar_modificado("datos", self.datos)
+                if self.datos[client_id]["credits"][LINEAS] != 0 or self.files_on_disk[client_id]["credits"]:
+                    self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
+                self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func, client_id)
+                #self.guardar_estado()
+            mensaje['ack']()
+        except ConsultaInexistente as e:
+            logging.warning(f"Consulta inexistente: {e}")
+        except Exception as e:
+            logging.error(f"Error procesando mensaje en consulta {consulta_id}: {e}")
 
 # -----------------------
 # Ejecutando nodo joiner
