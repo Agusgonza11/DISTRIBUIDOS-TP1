@@ -6,7 +6,6 @@ import signal
 import sys
 import pika # type: ignore
 from io import StringIO
-import pandas as pd # type: ignore
 import os
 import configparser
 from pathlib import Path
@@ -106,16 +105,6 @@ def create_dataframe_manual(csv):
 def create_dataframe(data_str):
     return list(csv.DictReader(StringIO(data_str)))
 
-def create_body(body):
-    if isinstance(body, pd.DataFrame):
-        return body.to_csv(index=False)
-    else:
-        return body
-
-def puede_enviar(body):
-    if isinstance(body, pd.DataFrame):
-        return not body.empty
-    return bool(body)
 
 def concat_data(data):
     resultado = []
@@ -317,7 +306,6 @@ def obtiene_nombre_contenedor(tipo):
 # -------------------
 
 def normalize_ratings_df(data):
-    # data es una lista de dicts
     for row in data:
         if "id" in row:
             row["id"] = str(row["id"])
@@ -346,8 +334,6 @@ def normalize_credits_df(data):
         nuevo["cast"] = cast
         resultado.append(nuevo)
     return resultado
-
-
 
 
 def normalize_movies_df(data):

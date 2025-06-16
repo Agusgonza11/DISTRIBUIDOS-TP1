@@ -1,7 +1,25 @@
-import logging
 import os
 import pickle
-from common.utils import create_dataframe
+import threading
+
+AGGREGATOR = "aggregator"
+RESULT = "resultados_parciales"
+EOF_ESPERADOS = "eof_esperados"
+
+BROKER = "broker"
+ULTIMO_NODO = "ultimo_nodo_consulta"
+NODOS_ENVIAR = "nodos_enviar"
+EOF_ESPERA = "eof_esperar"
+CLIENTS = "clients"
+
+JOINER = "joiner"
+DATA = "datos"
+TERM = "termino_movies"
+DISK = "files_on_disk"
+PATHS = "file_paths"
+
+PNL = "pnl"
+LINEAS = "lineas_actuales"
 
 
 
@@ -25,19 +43,49 @@ class Transaction:
         for clave in claves:
             self.cambios[clave] = True
 
-    def marcar_no_modificado(self, claves):
-        for clave in claves:
-            self.cambios[clave] = False
 
 
 
 
     def estado_aggregator(self, datos, clave, agg):
-        if clave == "resultados_parciales":
-            print(f"lo que cargue es {len(datos)}",flush=True)
+        if clave == RESULT:
             agg.resultados_parciales = datos
-        elif clave == "eof_esperados":
+        elif clave == EOF_ESPERADOS:
             agg.eof_esperados = datos
+
+    def estado_broker(self, datos, clave, broker):
+        if clave == NODOS_ENVIAR:
+            broker.nodos_enviar = datos
+        if clave == EOF_ESPERA:
+            broker.eof_esperar = datos
+        if clave == ULTIMO_NODO:
+            broker.ultimo_nodo_consulta = datos
+        if clave == CLIENTS:
+            broker.clients = datos
+    
+    def estado_pnl(self, datos, clave, broker):
+        if clave == RESULT:
+            broker.resultados_parciales = datos
+        if clave == LINEAS:
+            broker.lineas_actuales = datos
+
+    def estado_joiner(self, datos, clave, joiner):
+        if clave == DATA:
+            joiner.datos = datos
+        if clave == TERM:
+            joiner.termino_movies = datos
+            joiner.locks = {
+                client_id: {
+                    "ratings": threading.Lock(),
+                    "credits": threading.Lock()
+                } for client_id in datos
+            }
+        if clave == RESULT:
+            joiner.resultados_parciales = datos
+        if clave == DISK:
+            joiner.files_on_disk = datos
+        if clave == PATHS:
+            joiner.file_paths = datos
 
 
 
@@ -61,8 +109,14 @@ class Transaction:
             try:
                 with open(ruta, "rb") as f:
                     datos = pickle.load(f)
-                    if tipo == "aggregator":
+                    if tipo == AGGREGATOR:
                         self.estado_aggregator(datos, clave, nodo)
+                    if tipo == BROKER:
+                        self.estado_broker(datos, clave, nodo)
+                    if tipo == PNL:
+                        self.estado_pnl(datos, clave, nodo)
+                    if tipo == JOINER:
+                        self.estado_joiner(datos, clave, nodo)
             except FileNotFoundError:
                 print(f"No hay estado para guardar", flush=True)
             except Exception as e:
@@ -70,70 +124,3 @@ class Transaction:
 
 
 
-
-    def cargar_estado_pnl(self, pnl):
-        try:
-            with open(self.health_file, "rb") as f:
-                estado = pickle.load(f)
-                pnl.resultados_health = estado.get("resultados_parciales", {})
-                pnl.lineas_actuales = estado.get("lineas_actuales", {})
-                pnl.resultados_parciales = {}
-
-                # Recrear los DataFrames desde los datos crudos
-                for client_id, lista_datos in pnl.resultados_health.items():
-                    pnl.resultados_parciales[client_id] = [
-                        create_dataframe(datos) for datos in lista_datos
-                    ]
-        except FileNotFoundError:
-            logging.info("No hay estado para cargar")
-        except Exception as e:
-            print(f"Error al cargar el estado: {e}", flush=True)
-
-
-    def guardar_estado_pnl(self, result, lineas):
-        if not self.cambios["RESULT"]:
-            return
-        try:
-            with open(self.health_file, "wb") as f:
-                pickle.dump({
-                    "resultados_parciales": result,
-                    "lineas_actuales": lineas
-                }, f)
-        except Exception as e:
-            print(f"Error al guardar el estado: {e}", flush=True)
-
-
-
-
-
-    def guardar_estado_broker(self, broker):
-        #if not self.modifico:
-        #    return
-        try:
-            with open(self.health_file, "wb") as f:
-                pickle.dump(broker.cambios, f)
-
-            self.modifico = False
-        except Exception as e:
-            print(f"Error al guardar el estado del broker: {e}", flush=True)
-
-    def cargar_estado_broker(self, broker):
-        try:
-            with open(self.health_file, "rb") as f:
-                cambios = pickle.load(f)
-
-            if "nodos_enviar" in cambios:
-                broker.nodos_enviar = pickle.loads(cambios["nodos_enviar"])
-            if "eof_esperar" in cambios:
-                broker.eof_esperar = pickle.loads(cambios["eof_esperar"])
-            if "ultimo_nodo_consulta" in cambios:
-                broker.ultimo_nodo_consulta = pickle.loads(cambios["ultimo_nodo_consulta"])
-            if "clients" in cambios:
-                broker.clients = pickle.loads(cambios["clients"])
-            #self.marcar_modificado([ULTIMO_NODO, NODOS_ENVIAR, EOF_ESPERA, CLIENTS])
-
-
-        except FileNotFoundError:
-            logging.info("No hay estado para cargar")
-        except Exception as e:
-            print(f"Error al cargar el estado: {e}", flush=True)

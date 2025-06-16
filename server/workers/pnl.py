@@ -20,6 +20,7 @@ os.environ["MKL_NUM_THREADS"] = "1"
 torch.set_num_threads(1)
 
 RESULT = "resultados_parciales"
+LINEAS = "lineas_actuales"
 
 # -----------------------
 # Nodo PNL
@@ -33,39 +34,43 @@ class PnlNode:
         )
         self.resultados_parciales = {}
         self.lineas_actuales = {}
-        self.resultados_health = {}
-        self.transaction = Transaction(f"{TMP_DIR}/health_file.data", [RESULT])
-        self.transaction.cargar_estado_pnl(self)
+        self.transaction = Transaction(TMP_DIR, [RESULT, LINEAS])
+        self.transaction.cargar_estado(self, PNL)
 
+    def estado_a_guardar(self):
+        return {
+            RESULT: self.resultados_parciales,
+            LINEAS: self.lineas_actuales
+        }
 
     def eliminar(self, es_global):
-        self.resultados_parciales = {}
-        self.lineas_actuales = {}
-        self.resultados_health = {}
-        self.cambios = {}
+        self.resultados_parciales.clear()
+        self.lineas_actuales.clear()
         if hasattr(self, 'sentiment_analyzer'):
             del self.sentiment_analyzer
         if es_global:
             try:
-                borrar_contenido_carpeta(self.health_file)
+                self.transaction.borrar_carpeta()
                 logging.info(f"Volumen limpiado por shutdown global")
             except Exception as e:
                 logging.error(f"Error limpiando volumen en shutdown global: {e}")
 
+
     def guardar_datos(self, datos, client_id):
         if not client_id in self.resultados_parciales:
             self.resultados_parciales[client_id] = []
-            self.resultados_health[client_id] = []
             self.lineas_actuales[client_id] = 0
         data = create_dataframe(datos)
         self.resultados_parciales[client_id].append(data)
-        self.resultados_health[client_id].append(datos)
         self.lineas_actuales[client_id] += len(data)
+        self.transaction.marcar_modificado([RESULT, LINEAS])
+
 
     def borrar_info(self, client_id):
         self.resultados_parciales[client_id] = []
-        self.resultados_health[client_id] = []
         self.lineas_actuales[client_id] = 0
+        self.transaction.marcar_modificado([RESULT, LINEAS])
+
 
     def ejecutar_consulta(self, consulta_id, client_id):
         if client_id not in self.resultados_parciales:
@@ -105,15 +110,12 @@ class PnlNode:
                     resultado = self.ejecutar_consulta(consulta_id, client_id)
                     enviar_func(canal, destino, resultado, mensaje, "RESULT")
                 enviar_func(canal, destino, EOF, mensaje, EOF)
-                self.transaction.marcar_no_modificado([RESULT])
             else:
-                self.guardar_datos(obtener_body(mensaje), client_id) #guardar una variable para q solo guarde
+                self.guardar_datos(obtener_body(mensaje), client_id)
                 if self.lineas_actuales[client_id] >= BATCH_PNL:
                     resultado = self.ejecutar_consulta(consulta_id, client_id)
                     enviar_func(canal, destino, resultado, mensaje, "RESULT")
-                self.modifico = True
-                self.transaction.marcar_modificado([RESULT])
-            #self.transaction.guardar_estado_pnl()
+            self.transaction.guardar_estado(self)
             mensaje['ack']()
         except ConsultaInexistente as e:
             logging.warning(f"Consulta inexistente: {e}")
