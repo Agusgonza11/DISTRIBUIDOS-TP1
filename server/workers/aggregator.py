@@ -1,13 +1,16 @@
 import logging
 import pickle
+from collections import Counter, defaultdict
 
-from common.utils import EOF, borrar_contenido_carpeta, cargar_eofs, concat_data, create_dataframe, obtiene_nombre_contenedor, prepare_data_aggregator_consult_3
+from common.utils import EOF, cargar_eofs, concat_data, create_dataframe, obtiene_nombre_contenedor, prepare_data_aggregator_consult_3
 from common.communication import obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
 from common.excepciones import ConsultaInexistente
-
+from common.transaction import Transaction
 
 AGGREGATOR = "aggregator"
 TMP_DIR = f"/tmp/{obtiene_nombre_contenedor(AGGREGATOR)}_tmp"
+RESULT = "resultados_parciales"
+EOF_ESPERADOS = "eof_esperados"
 
 # -----------------------
 # Nodo Aggregator
@@ -15,70 +18,41 @@ TMP_DIR = f"/tmp/{obtiene_nombre_contenedor(AGGREGATOR)}_tmp"
 class AggregatorNode:
     def __init__(self):
         self.resultados_parciales = {}
-        self.resultados_health = {}
         self.eof_esperados = {}
-        self.health_file = f"{TMP_DIR}/health_file.data"
-        self.cargar_estado()
+        self.transaction = Transaction(TMP_DIR, [RESULT, EOF_ESPERADOS])
+        self.transaction.cargar_estado(self, AGGREGATOR)
+
+    def estado_a_guardar(self):
+        return {
+            RESULT: self.resultados_parciales,
+            EOF_ESPERADOS: self.eof_esperados
+        }
 
     def eliminar(self, es_global):
-        self.resultados_parciales = {}
-        self.eof_esperados = {}
-        self.resultados_health = {}
+        self.resultados_parciales.clear()
+        self.eof_esperados.clear()
         if es_global:
             try:
-                borrar_contenido_carpeta(self.health_file)
+                self.transaction.borrar_carpeta()
                 logging.info(f"Volumen limpiado por shutdown global")
-                print(f"Volumen limpiado por shutdown global", flush=True)
             except Exception as e:
                 logging.error(f"Error limpiando volumen en shutdown global: {e}")
-
-    def cargar_estado(self):
-        try:
-            with open(self.health_file, "rb") as f:
-                estado = pickle.load(f)
-                self.resultados_health = estado.get("resultados_parciales", {})
-                self.eof_esperados = estado.get("eof_esperados", {})
-                self.resultados_parciales = {}
-
-                # Recrear los DataFrames desde los datos crudos
-                for client_id, consultas in self.resultados_health.items():
-                    self.resultados_parciales[client_id] = {}
-                    for consulta_id, lista_datos in consultas.items():
-                        # Aplicar create_dataframe a cada entrada individual
-                        dfs = [create_dataframe(datos) for datos in lista_datos]
-                        self.resultados_parciales[client_id][consulta_id] = dfs
-        except FileNotFoundError:
-            logging.info("No hay estado para cargar")
-        except Exception as e:
-            print(f"Error al cargar el estado: {e}", flush=True)
-
-
-    def guardar_estado(self):
-        try:
-            with open(self.health_file, "wb") as f:
-                pickle.dump({
-                    "resultados_parciales": self.resultados_health,
-                    "eof_esperados": self.eof_esperados
-                }, f)
-        except Exception as e:
-            print(f"Error al guardar el estado: {e}", flush=True)
 
 
     def guardar_datos(self, consulta_id, datos, client_id):
         if client_id not in self.resultados_parciales:
             self.resultados_parciales[client_id] = {}
-            self.resultados_health[client_id] = {}
             self.eof_esperados[client_id] = {}
             
         if consulta_id not in self.resultados_parciales[client_id]:
             self.resultados_parciales[client_id][consulta_id] = []
-            self.resultados_health[client_id][consulta_id] = []
             
         if consulta_id not in self.eof_esperados[client_id]:
             self.eof_esperados[client_id][consulta_id] = cargar_eofs()[consulta_id]
+            self.transaction.marcar_modificado([EOF_ESPERADOS])
 
         self.resultados_parciales[client_id][consulta_id].append(create_dataframe(datos))
-        self.resultados_health[client_id][consulta_id].append(datos)
+        self.transaction.marcar_modificado([RESULT])
 
 
 
@@ -108,31 +82,96 @@ class AggregatorNode:
 
     def consulta_2(self, datos):
         logging.info("Procesando datos para consulta 2")
-        investment_by_country = datos.groupby('country')['budget'].sum().sort_values(ascending=False)
-        top_5_countries = investment_by_country.head(5).reset_index()
-        return top_5_countries
+        suma_por_pais = {}
+        for row in datos:
+            country = row.get('country')
+            try:
+                budget = float(row.get('budget', 0))
+            except (ValueError, TypeError):
+                budget = 0
+
+            if country not in suma_por_pais:
+                suma_por_pais[country] = 0
+            suma_por_pais[country] += budget
+        top_5 = sorted(suma_por_pais.items(), key=lambda x: x[1], reverse=True)[:5]
+        resultado = [{'country': pais, 'budget': suma} for pais, suma in top_5]
+
+        return resultado
 
     def consulta_3(self, datos):
         logging.info("Procesando datos para consulta 3")
-        logging.info(f"Datos recibidos con shape: {datos.shape}")
-        
-        mean_ratings = datos.groupby(["id", "title"])['rating'].mean().reset_index()
-        max_rated = mean_ratings.iloc[mean_ratings['rating'].idxmax()]
-        min_rated = mean_ratings.iloc[mean_ratings['rating'].idxmin()]
+        if not datos:
+            return None
+        agrupados = {}
+        for d in datos:
+            key = (d["id"], d["title"])
+            try:
+                rating = float(d["rating"])
+            except (ValueError, TypeError):
+                continue
+            if key not in agrupados:
+                agrupados[key] = []
+            agrupados[key].append(rating)
+        promedios = []
+        for (movie_id, title), ratings in agrupados.items():
+            if ratings:
+                avg_rating = sum(ratings) / len(ratings)
+                promedios.append({
+                    "id": movie_id,
+                    "title": title,
+                    "rating": avg_rating
+                })
+        if not promedios:
+            return None
+        max_rated = max(promedios, key=lambda x: x["rating"])
+        min_rated = min(promedios, key=lambda x: x["rating"])
+
         result = prepare_data_aggregator_consult_3(min_rated, max_rated)
         return result
 
+
+
     def consulta_4(self, datos):
         logging.info("Procesando datos para consulta 4")
-        cast_per_movie_quantities = datos.groupby(["name"]).count().reset_index().rename(columns={"id":"count"})
-        top_ten = cast_per_movie_quantities.nlargest(10, 'count')
-        return top_ten
+        contador = Counter()
+        for fila in datos:
+            nombre = fila.get("name")
+            if nombre:
+                contador[nombre] += 1
+        top_10 = contador.most_common(10)
+        resultado = [{"name": nombre, "count": cantidad} for nombre, cantidad in top_10]
+        return resultado
+
+
 
     def consulta_5(self, datos):
         logging.info("Procesando datos para consulta 5")
-        datos["rate_revenue_budget"] = datos["revenue"] / datos["budget"]
-        average_rate_by_sentiment = datos.groupby("sentiment")["rate_revenue_budget"].mean().reset_index()
-        return average_rate_by_sentiment
+        for fila in datos:
+            try:
+                budget = float(fila['budget'])
+                revenue = float(fila['revenue'])
+                if budget == 0:
+                    fila['rate_revenue_budget'] = 0.0
+                else:
+                    fila['rate_revenue_budget'] = revenue / budget
+            except (ValueError, ZeroDivisionError, KeyError):
+                fila['rate_revenue_budget'] = 0.0
+        sumas = defaultdict(float)
+        cantidades = defaultdict(int)
+        for fila in datos:
+            sentimiento = fila.get('sentiment', 'UNKNOWN')
+            rate = fila.get('rate_revenue_budget', 0.0)
+            sumas[sentimiento] += rate
+            cantidades[sentimiento] += 1
+        resultado = []
+        for sentimiento in sumas:
+            promedio = sumas[sentimiento] / cantidades[sentimiento]
+            resultado.append({
+                "sentiment": sentimiento,
+                "rate_revenue_budget": promedio
+            })
+        return resultado
+    
     
 
     def procesar_mensajes(self, canal, destino, mensaje, enviar_func):
@@ -143,6 +182,7 @@ class AggregatorNode:
             if tipo_mensaje == EOF:
                 logging.info(f"Consulta {consulta_id} de aggregator recibió EOF")
                 self.eof_esperados[client_id][consulta_id] -= 1
+                self.transaction.marcar_modificado([EOF_ESPERADOS])
                 if self.eof_esperados[client_id][consulta_id] == 0:
                     logging.info(f"Consulta {consulta_id} recibió TODOS los EOF que esperaba")
                     resultado = self.ejecutar_consulta(consulta_id, client_id)
@@ -157,7 +197,7 @@ class AggregatorNode:
                         del self.eof_esperados[client_id]
             else:
                 self.guardar_datos(consulta_id, obtener_body(mensaje), client_id)
-            self.guardar_estado()
+            self.transaction.guardar_estado(self)
             mensaje['ack']()
         except ConsultaInexistente as e:
             logging.warning(f"Consulta inexistente: {e}")

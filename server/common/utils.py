@@ -1,13 +1,16 @@
 import ast
+from datetime import datetime
+import io
 import logging
 import signal
 import sys
 import pika # type: ignore
 from io import StringIO
-import pandas as pd # type: ignore
 import os
 import configparser
 from pathlib import Path
+import csv
+
 
 
 def get_batches(worker):
@@ -68,25 +71,35 @@ def borrar_contenido_carpeta(ruta):
         else:
             os.remove(ruta_completa)
 
-# -------------------
-# PANDAS
-# -------------------
-def create_dataframe(csv):
-    return pd.read_csv(StringIO(csv))
 
-def create_body(body):
-    if isinstance(body, pd.DataFrame):
-        return body.to_csv(index=False)
-    else:
-        return body
+def lista_dicts_a_csv(lista):
+    if not lista:
+        return ""
+    if lista == "EOF" or isinstance(lista, str):
+        return lista
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=lista[0].keys())
+    writer.writeheader()
+    writer.writerows(lista)
+    return output.getvalue()
 
-def puede_enviar(body):
-    if isinstance(body, pd.DataFrame):
-        return not body.empty
-    return bool(body)
+
+
+# -------------------
+# PREPARAR DATA
+# -------------------
+
+
+def create_dataframe(data_str):
+    return list(csv.DictReader(StringIO(data_str)))
+
 
 def concat_data(data):
-    return pd.concat(data, ignore_index=True) if data else pd.DataFrame()
+    resultado = []
+    for sublista in data:
+        resultado.extend(sublista)
+    return resultado
+
 
 def dictionary_to_list(dictionary_str):
     try:
@@ -99,46 +112,87 @@ def dictionary_to_list(dictionary_str):
         return [] 
 
 
-
-# -------------------
-# PREPARAR DATA
-# -------------------
-
 def prepare_data_consult_1_3_4(data):
-    data = create_dataframe(data)
-    data['release_date'] = pd.to_datetime(data['release_date'], format='%Y-%m-%d', errors='coerce')
-    data['genres'] = data['genres'].apply(dictionary_to_list)
-    data['production_countries'] = data['production_countries'].apply(dictionary_to_list)
-    data['genres'] = data['genres'].astype(str)
-    data['production_countries'] = data['production_countries'].astype(str)
-    return data
+    rows = create_dataframe(data)
+    for row in rows:
+        # Parsear fecha
+        try:
+            row["release_date"] = datetime.strptime(row.get("release_date", ""), "%Y-%m-%d")
+        except (ValueError, TypeError):
+            row["release_date"] = None
+        
+        # Parsear géneros y países
+        row["genres"] = dictionary_to_list(row.get("genres", "[]"))
+        row["production_countries"] = dictionary_to_list(row.get("production_countries", "[]"))
+
+        # Guardar como string para búsqueda rápida
+        row["genres_str"] = ", ".join(row["genres"]).lower()
+        row["production_countries_str"] = ", ".join(row["production_countries"]).lower()
+    return rows
+
 
 def prepare_data_consult_2(data):
     data = create_dataframe(data)
-    data['production_countries'] = data['production_countries'].apply(dictionary_to_list)
-    data['production_countries'] = data['production_countries'].astype(str)
-    data['budget'] = pd.to_numeric(data['budget'], errors='coerce')
-    return data
+    resultado = []
+    for i, row in enumerate(data):
+        pc_str = row.get('production_countries', '[]')
+        row['production_countries'] = dictionary_to_list(pc_str)
+
+        try:
+            row['budget'] = float(row.get('budget', 0))
+        except (ValueError, TypeError):
+            row['budget'] = 0
+        
+        resultado.append(row)
+    return resultado
+
 
 def prepare_data_consult_4(data):
-    credits = concat_data(data) 
-    credits['cast'] = credits['cast'].apply(dictionary_to_list)
-    return credits
+    if any(isinstance(el, list) for el in data):
+        data = [item for sublist in data for item in (sublist if isinstance(sublist, list) else [sublist])]
+
+    for entry in data:
+        cast_raw = entry.get('cast', '[]')
+        if isinstance(cast_raw, str):
+            try:
+                cast_list = ast.literal_eval(cast_raw)
+                entry['cast'] = cast_list if isinstance(cast_list, list) else []
+            except Exception:
+                entry['cast'] = []
+        elif isinstance(cast_raw, list):
+            entry['cast'] = cast_raw
+        else:
+            entry['cast'] = []
+
+    return data
+
+
+
 
 def prepare_data_consult_5(data):
     datos = create_dataframe(data)
-    datos['budget'] = pd.to_numeric(datos['budget'], errors='coerce')
-    datos['revenue'] = pd.to_numeric(datos['revenue'], errors='coerce')
-    return datos
+    resultado_filtrado = []
+    for row in datos:
+        try:
+            budget = int(row['budget'])
+            revenue = int(row['revenue'])
+        except (ValueError, KeyError):
+            continue  # saltar si no es convertible a int o faltan campos
+
+        if budget != 0 and revenue != 0:
+            resultado_filtrado.append(row)
+
+    return resultado_filtrado
 
 
-def prepare_data_aggregator_consult_3(min, max):
+def prepare_data_aggregator_consult_3(min_result, max_result):
     headers = ["id", "title", "rating"]
     data = [
-        {**{h: max[h] for h in headers}, "tipo": "max"},
-        {**{h: min[h] for h in headers}, "tipo": "min"}
+        {**{h: max_result[h] for h in headers}, "tipo": "max"},
+        {**{h: min_result[h] for h in headers}, "tipo": "min"}
     ]
-    return pd.DataFrame(data)
+    return data
+
 
 
 
@@ -234,34 +288,13 @@ def obtiene_nombre_contenedor(tipo):
 # NORMALIZATION
 # -------------------
 
-def normalize_ratings_df(df):
-    df['id'] = df['id'].astype(str)
-    return df
-
-def normalize_credits_df(df):
-    df['id'] = df['id'].astype(str)
-    if 'cast' in df.columns:
-        df['cast'] = df['cast'].fillna('[]')
-        def process_cast(cell):
-            if isinstance(cell, list):
-                if all(isinstance(x, dict) for x in cell):
-                    return [x['name'] for x in cell if 'name' in x]
-                elif all(isinstance(x, str) for x in cell):
-                    return cell
-                else:
-                    return []
-            elif isinstance(cell, str):
-                try:
-                    valor = ast.literal_eval(cell)
-                    return process_cast(valor)
-                except Exception:
-                    return []
-            else:
-                return []
-        df['cast'] = df['cast'].apply(process_cast)
-    return df
-
-def normalize_movies_df(df):
-    if 'id' in df.columns:
-        df['id'] = df['id'].astype(str)
-    return df
+def write_dicts_to_csv(file_path, data, append=False):
+    if not data:
+        return
+    fieldnames = data[0].keys()
+    mode = 'a' if append else 'w'
+    with open(file_path, mode, newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        if not append:
+            writer.writeheader()
+        writer.writerows(data)

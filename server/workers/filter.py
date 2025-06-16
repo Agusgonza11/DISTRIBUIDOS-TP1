@@ -2,7 +2,7 @@ import logging
 import os
 from multiprocessing import Process
 from common.utils import prepare_data_consult_1_3_4, prepare_data_consult_2, EOF, prepare_data_consult_5
-from common.communication import iniciar_nodo, obtener_body, obtener_query, obtener_tipo_mensaje, run
+from common.communication import  obtener_body, obtener_query, obtener_tipo_mensaje, run
 from common.excepciones import ConsultaInexistente
 
 FILTER = "filter"
@@ -35,44 +35,55 @@ class FiltroNode:
                 logging.warning(f"Consulta desconocida: {consulta_id}")
                 raise ConsultaInexistente(f"Consulta {consulta_id} no encontrada")
 
-    def consulta_1(self, datos):
+
+    def consulta_1(self, datos_csv):
         logging.info("Procesando datos para consulta 1") 
-        datos = prepare_data_consult_1_3_4(datos)
-        movies_argentina_españa_00s_df = datos[
-            (datos['production_countries'].str.contains('Argentina', case=False, na=False)) & 
-            (datos['production_countries'].str.contains('Spain', case=False, na=False)) & 
-            (datos['release_date'].dt.year >= 2000) & 
-            (datos['release_date'].dt.year < 2010)
-        ]
-        output_q1 = movies_argentina_españa_00s_df[["title", "genres"]]
-        return output_q1
+        datos = prepare_data_consult_1_3_4(datos_csv)
+        resultado = []
+        for row in datos:
+            fecha = row.get("release_date")
+            paises = row.get("production_countries_str", "")
+            if fecha and 2000 <= fecha.year < 2010:
+                if "argentina" in paises and "spain" in paises:
+                    resultado.append({
+                        "title": row.get("title", ""),
+                        "genres": row.get("genres", [])
+                    })
+        return resultado
 
 
     def consulta_2(self, datos):
-        logging.info("Procesando datos para consulta 2") 
+        logging.info("Procesando datos para consulta 2")
         datos = prepare_data_consult_2(datos)
-        solo_country_df = datos[datos['production_countries'].apply(lambda x: len(eval(x)) == 1)]
-        solo_country_df = solo_country_df.copy()
-        solo_country_df.loc[:, 'country'] = solo_country_df['production_countries'].apply(lambda x: eval(x)[0])
-        return solo_country_df
+        resultado = []
+        for row in datos:
+            paises = row.get('production_countries', [])
+            if len(paises) == 1:
+                row['country'] = paises[0]
+                resultado.append(row)
+        return resultado
+    
     
     def consulta_3_y_4(self, datos):
         datos = prepare_data_consult_1_3_4(datos)
-        movies_arg_post_2000 = datos[
-            (datos['production_countries'].str.contains('Argentina', case=False, na=False)) &
-            (datos['release_date'].dt.year >= 2000)
-        ]
-        movies_arg_post_2000 = movies_arg_post_2000.astype({'id': int})
-        return movies_arg_post_2000
+        peliculas_filtradas = []
+        for fila in datos:
+            paises = fila.get("production_countries_str", "")
+            fecha = fila.get("release_date")
+            if fecha and fecha.year >= 2000 and "argentina" in paises:
+                try:
+                    fila["id"] = int(fila["id"])
+                except (ValueError, TypeError):
+                    continue 
+                peliculas_filtradas.append(fila)
+        return peliculas_filtradas
 
 
-    def consulta_5(self, datos):
+
+    def consulta_5(self, datos_str):
         logging.info("Procesando datos para consulta 5")
-        datos = prepare_data_consult_5(datos)
-        q5_input_df = datos.copy()
-        q5_input_df = q5_input_df.loc[q5_input_df['budget'] != 0]
-        q5_input_df = q5_input_df.loc[q5_input_df['revenue'] != 0]
-        return q5_input_df
+        datos_filtrados = prepare_data_consult_5(datos_str)
+        return datos_filtrados
 
 
     def procesar_mensajes(self, canal, destino, mensaje, enviar_func):

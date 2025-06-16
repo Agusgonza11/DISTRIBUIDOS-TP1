@@ -1,10 +1,11 @@
+import csv
+import io
 from multiprocessing import Process
 import os
 import signal
-import sys
 import pika # type: ignore
 import logging
-from common.utils import cargar_broker, cargar_eof_a_enviar, create_body, graceful_quit, initialize_log, puede_enviar
+from common.utils import cargar_broker, cargar_eof_a_enviar, graceful_quit, initialize_log, lista_dicts_a_csv
 from common.health import HealthMonitor
 
 # ----------------------
@@ -105,17 +106,17 @@ def inicializar_comunicacion():
     return conexion, canal
 
 
-
 def enviar_mensaje(canal, routing_key, body, mensaje_original, type=None):
-    if puede_enviar(body):
-        #logging.info(f"A {routing_key} le voy a enviar: {type}")
-        propiedades = config_header(mensaje_original, type)
-        canal.basic_publish(
-            exchange='',
-            routing_key=routing_key,
-            body=create_body(body).encode(),
-            properties=propiedades
-        )
+    propiedades = config_header(mensaje_original, type)
+    csv_str = lista_dicts_a_csv(body)
+    if csv_str == "":
+        return
+    canal.basic_publish(
+        exchange='',
+        routing_key=routing_key,
+        body=csv_str.encode('utf-8'),
+        properties=propiedades
+    )
 
 
 
