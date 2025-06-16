@@ -1,16 +1,25 @@
 import logging
+import os
 import pickle
-from common.utils import borrar_contenido_carpeta, create_dataframe
-#from workers.broker import CLIENTS, EOF_ESPERA, NODOS_ENVIAR, ULTIMO_NODO
+from common.utils import create_dataframe
+
 
 
 class Transaction:
-    def __init__(self, health_file_path, modificaciones):
-        self.health_file = health_file_path
+    def __init__(self, base_dir, modificaciones):
+        self.directorio = base_dir
+        os.makedirs(self.directorio, exist_ok=True)
+
+        self.archivos = {
+            clave: os.path.join(self.directorio, f"{clave}.data")
+            for clave in modificaciones
+        }
         self.cambios = {clave: False for clave in modificaciones}
 
     def borrar_carpeta(self):
-        borrar_contenido_carpeta(self.health_file)
+        for archivo in self.archivos.values():
+            if os.path.exists(archivo):
+                os.remove(archivo)
 
     def marcar_modificado(self, claves):
         for clave in claves:
@@ -23,48 +32,41 @@ class Transaction:
 
 
 
-    def guardar_estado_aggregator(self, agg):
-        try:
-            with open(self.health_file, "wb") as f:
-                pickle.dump({
-                    "resultados_parciales": agg.resultados_health,
-                    "eof_esperados": agg.eof_esperados
-                }, f)
-        except Exception as e:
-            print(f"Error al guardar el estado: {e}", flush=True)
+    def estado_aggregator(self, datos, clave, agg):
+        if clave == "resultados_parciales":
+            print(f"lo que cargue es {len(datos)}",flush=True)
+            agg.resultados_parciales = datos
+        elif clave == "eof_esperados":
+            agg.eof_esperados = datos
 
 
-    def cargar_estado_aggregator(self, agg):
-        def clean_csv_data(raw_csv_str, expected_header="production_countries,budget,country"):
-            lines = raw_csv_str.splitlines()
-            filtered_lines = [line for line in lines if line.strip() != expected_header]
-            cleaned_csv = "\n".join(filtered_lines)
-            return cleaned_csv
-
-        try:
-            with open(self.health_file, "rb") as f:
-                estado = pickle.load(f)
-                agg.resultados_health = estado.get("resultados_parciales", {})
-                agg.eof_esperados = estado.get("eof_esperados", {})
-                agg.resultados_parciales = {}
-
-                # Recrear los DataFrames desde los datos crudos, limpiando encabezados intercalados
-                for client_id, consultas in agg.resultados_health.items():
-                    agg.resultados_parciales[client_id] = {}
-                    for consulta_id, lista_datos in consultas.items():
-                        dfs = []
-                        for datos in lista_datos:
-                            cleaned = clean_csv_data(datos)
-                            df = create_dataframe(cleaned)
-                            dfs.append(df)
-                        agg.resultados_parciales[client_id][consulta_id] = dfs
-
-        except FileNotFoundError:
-            logging.info("No hay estado para cargar")
-        except Exception as e:
-            print(f"Error al cargar el estado: {e}", flush=True)
 
 
+
+    def guardar_estado(self, nodo):
+        datos_dict = nodo.estado_a_guardar()
+        for clave, datos in datos_dict.items():
+            if self.cambios.get(clave, False):
+                try:
+                    with open(self.archivos[clave], "wb") as f:
+                        pickle.dump(datos, f)
+                        f.flush()
+                    self.cambios[clave] = False
+                except Exception as e:
+                    print(f"[Transaction] Error al guardar {clave}: {e}", flush=True)
+
+
+    def cargar_estado(self, nodo, tipo):
+        for clave, ruta in self.archivos.items():
+            try:
+                with open(ruta, "rb") as f:
+                    datos = pickle.load(f)
+                    if tipo == "aggregator":
+                        self.estado_aggregator(datos, clave, nodo)
+            except FileNotFoundError:
+                print(f"No hay estado para guardar", flush=True)
+            except Exception as e:
+                print(f"[Transaction] Error al cargar {clave}: {e}", flush=True)
 
 
 

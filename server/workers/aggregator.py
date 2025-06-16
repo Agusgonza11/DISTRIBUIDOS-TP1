@@ -18,20 +18,23 @@ EOF_ESPERADOS = "eof_esperados"
 class AggregatorNode:
     def __init__(self):
         self.resultados_parciales = {}
-        self.resultados_health = {}
         self.eof_esperados = {}
-        self.transaction = Transaction(f"{TMP_DIR}/health_file.data", [RESULT, EOF_ESPERADOS])
-        self.transaction.cargar_estado_aggregator(self)
+        self.transaction = Transaction(TMP_DIR, [RESULT, EOF_ESPERADOS])
+        self.transaction.cargar_estado(self, AGGREGATOR)
+
+    def estado_a_guardar(self):
+        return {
+            RESULT: self.resultados_parciales,
+            EOF_ESPERADOS: self.eof_esperados
+        }
 
     def eliminar(self, es_global):
-        self.resultados_parciales = {}
-        self.eof_esperados = {}
-        self.resultados_health = {}
+        self.resultados_parciales.clear()
+        self.eof_esperados.clear()
         if es_global:
             try:
                 self.transaction.borrar_carpeta()
                 logging.info(f"Volumen limpiado por shutdown global")
-                print(f"Volumen limpiado por shutdown global", flush=True)
             except Exception as e:
                 logging.error(f"Error limpiando volumen en shutdown global: {e}")
 
@@ -39,19 +42,16 @@ class AggregatorNode:
     def guardar_datos(self, consulta_id, datos, client_id):
         if client_id not in self.resultados_parciales:
             self.resultados_parciales[client_id] = {}
-            self.resultados_health[client_id] = {}
             self.eof_esperados[client_id] = {}
             
         if consulta_id not in self.resultados_parciales[client_id]:
             self.resultados_parciales[client_id][consulta_id] = []
-            self.resultados_health[client_id][consulta_id] = []
             
         if consulta_id not in self.eof_esperados[client_id]:
             self.eof_esperados[client_id][consulta_id] = cargar_eofs()[consulta_id]
             self.transaction.marcar_modificado([EOF_ESPERADOS])
 
         self.resultados_parciales[client_id][consulta_id].append(create_dataframe(datos))
-        self.resultados_health[client_id][consulta_id].append(datos)
         self.transaction.marcar_modificado([RESULT])
 
 
@@ -102,8 +102,6 @@ class AggregatorNode:
         logging.info("Procesando datos para consulta 3")
         if not datos:
             return None
-
-        # Agrupar ratings por (id, title)
         agrupados = {}
         for d in datos:
             key = (d["id"], d["title"])
@@ -114,8 +112,6 @@ class AggregatorNode:
             if key not in agrupados:
                 agrupados[key] = []
             agrupados[key].append(rating)
-
-        # Calcular promedio por grupo
         promedios = []
         for (movie_id, title), ratings in agrupados.items():
             if ratings:
@@ -125,11 +121,8 @@ class AggregatorNode:
                     "title": title,
                     "rating": avg_rating
                 })
-
         if not promedios:
             return None
-
-        # Buscar el de mayor y menor rating
         max_rated = max(promedios, key=lambda x: x["rating"])
         min_rated = min(promedios, key=lambda x: x["rating"])
 
@@ -163,10 +156,8 @@ class AggregatorNode:
                     fila['rate_revenue_budget'] = revenue / budget
             except (ValueError, ZeroDivisionError, KeyError):
                 fila['rate_revenue_budget'] = 0.0
-
         sumas = defaultdict(float)
         cantidades = defaultdict(int)
-
         for fila in datos:
             sentimiento = fila.get('sentiment', 'UNKNOWN')
             rate = fila.get('rate_revenue_budget', 0.0)
@@ -179,8 +170,8 @@ class AggregatorNode:
                 "sentiment": sentimiento,
                 "rate_revenue_budget": promedio
             })
-
         return resultado
+    
     
 
     def procesar_mensajes(self, canal, destino, mensaje, enviar_func):
@@ -206,7 +197,7 @@ class AggregatorNode:
                         del self.eof_esperados[client_id]
             else:
                 self.guardar_datos(consulta_id, obtener_body(mensaje), client_id)
-            #self.transaction.guardar_estado_aggregator(self)
+            self.transaction.guardar_estado(self)
             mensaje['ack']()
         except ConsultaInexistente as e:
             logging.warning(f"Consulta inexistente: {e}")

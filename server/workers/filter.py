@@ -63,6 +63,7 @@ class FiltroNode:
                 resultado.append(row)
         return resultado
     
+    
     def consulta_3_y_4(self, datos):
         datos = prepare_data_consult_1_3_4(datos)
         peliculas_filtradas = []
