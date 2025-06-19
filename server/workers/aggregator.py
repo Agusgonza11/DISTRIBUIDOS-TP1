@@ -3,7 +3,7 @@ import pickle
 from collections import Counter, defaultdict
 
 from common.utils import EOF, cargar_eofs, concat_data, create_dataframe, obtiene_nombre_contenedor, prepare_data_aggregator_consult_3
-from common.communication import obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
+from common.communication import obtener_batch, obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
 from common.excepciones import ConsultaInexistente
 from common.transaction import Transaction
 
@@ -11,6 +11,7 @@ AGGREGATOR = "aggregator"
 TMP_DIR = f"/tmp/{obtiene_nombre_contenedor(AGGREGATOR)}_tmp"
 RESULT = "resultados_parciales"
 EOF_ESPERADOS = "eof_esperados"
+BATCH_ID = "batch_id"
 
 # -----------------------
 # Nodo Aggregator
@@ -19,18 +20,21 @@ class AggregatorNode:
     def __init__(self):
         self.resultados_parciales = {}
         self.eof_esperados = {}
-        self.transaction = Transaction(TMP_DIR, [RESULT, EOF_ESPERADOS])
+        self.ultimo_mensaje = {}
+        self.transaction = Transaction(TMP_DIR, [RESULT, EOF_ESPERADOS, BATCH_ID])
         self.transaction.cargar_estado(self, AGGREGATOR)
 
     def estado_a_guardar(self):
         return {
             RESULT: self.resultados_parciales,
-            EOF_ESPERADOS: self.eof_esperados
+            EOF_ESPERADOS: self.eof_esperados,
+            BATCH_ID: self.ultimo_mensaje
         }
 
     def eliminar(self, es_global):
         self.resultados_parciales.clear()
         self.eof_esperados.clear()
+        self.ultimo_mensaje.clear()
         if es_global:
             try:
                 self.transaction.borrar_carpeta()
@@ -53,6 +57,7 @@ class AggregatorNode:
 
         self.resultados_parciales[client_id][consulta_id].append(create_dataframe(datos))
         self.transaction.marcar_modificado([RESULT])
+
 
 
 
@@ -178,6 +183,8 @@ class AggregatorNode:
         consulta_id = obtener_query(mensaje)
         tipo_mensaje = obtener_tipo_mensaje(mensaje)
         client_id = obtener_client_id(mensaje)
+        batch_id = obtener_batch(mensaje)
+        if self.transaction.comprobar(self, client_id, batch_id, enviar_func, mensaje, canal, destino): return
         try:
             if tipo_mensaje == EOF:
                 logging.info(f"Consulta {consulta_id} de aggregator recibió EOF")
@@ -186,6 +193,7 @@ class AggregatorNode:
                 if self.eof_esperados[client_id][consulta_id] == 0:
                     logging.info(f"Consulta {consulta_id} recibió TODOS los EOF que esperaba")
                     resultado = self.ejecutar_consulta(consulta_id, client_id)
+                    self.transaction.actualizar_estado(self, client_id, batch_id, resultado)
                     enviar_func(canal, destino, resultado, mensaje, "RESULT")
                     enviar_func(canal, destino, EOF, mensaje, EOF)
                     del self.resultados_parciales[client_id][consulta_id]
@@ -195,9 +203,11 @@ class AggregatorNode:
                         del self.resultados_parciales[client_id]
                     if not self.eof_esperados[client_id]:
                         del self.eof_esperados[client_id]
+                else:
+                    self.transaction.actualizar_estado(self, client_id, batch_id)
             else:
                 self.guardar_datos(consulta_id, obtener_body(mensaje), client_id)
-            self.transaction.guardar_estado(self)
+                self.transaction.actualizar_estado(self, client_id, batch_id)
             mensaje['ack']()
         except ConsultaInexistente as e:
             logging.warning(f"Consulta inexistente: {e}")

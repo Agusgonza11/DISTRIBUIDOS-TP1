@@ -2,6 +2,13 @@ import os
 import pickle
 import threading
 
+from common.utils import EOF
+
+ENVIAR = "ENVIAR"
+NO_ENVIAR = "NO ENVIAR"
+
+BATCH_ID = "batch_id"
+
 AGGREGATOR = "aggregator"
 RESULT = "resultados_parciales"
 EOF_ESPERADOS = "eof_esperados"
@@ -42,6 +49,25 @@ class Transaction:
     def marcar_modificado(self, claves):
         for clave in claves:
             self.cambios[clave] = True
+
+    def actualizar_estado(self, nodo, client_id, batch_id, resultado=None):
+        instruccion = NO_ENVIAR if resultado == None else ENVIAR
+        nodo.ultimo_mensaje[client_id] = [batch_id, resultado, instruccion]
+        self.marcar_modificado([BATCH_ID])
+        self.guardar_estado(nodo)
+
+
+    def comprobar(self, nodo, client_id, batch_id, enviar_func, mensaje, canal, destino):
+        if client_id in nodo.ultimo_mensaje:
+            if nodo.ultimo_mensaje[client_id][0] == batch_id:
+                instruccion = nodo.ultimo_mensaje[client_id][2]
+                if instruccion == ENVIAR:
+                    resultado = nodo.ultimo_mensaje[client_id][1]
+                    tipo = "RESULT" if resultado == EOF else EOF
+                    enviar_func(canal, destino, resultado, mensaje, tipo)
+                mensaje['ack']()
+                return True
+        return False
 
 
 

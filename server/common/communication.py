@@ -55,6 +55,9 @@ def obtener_tipo_mensaje(mensaje):
 def obtener_body(mensaje):
     return mensaje['body'].decode('utf-8')
 
+def obtener_batch(mensaje):
+    return mensaje['headers'].get("batchID")
+
 # ---------------------
 # GENERALES
 # ---------------------

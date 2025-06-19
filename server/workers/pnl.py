@@ -4,7 +4,7 @@ import os
 import pickle
 import sys
 from common.utils import EOF, concat_data, create_dataframe, get_batches, obtiene_nombre_contenedor
-from common.communication import obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
+from common.communication import obtener_batch, obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
 from transformers import pipeline # type: ignore
 import torch # type: ignore
 from common.excepciones import ConsultaInexistente
@@ -21,6 +21,7 @@ torch.set_num_threads(1)
 
 RESULT = "resultados_parciales"
 LINEAS = "lineas_actuales"
+BATCH_ID = "batch_id"
 
 # -----------------------
 # Nodo PNL
@@ -34,18 +35,21 @@ class PnlNode:
         )
         self.resultados_parciales = {}
         self.lineas_actuales = {}
-        self.transaction = Transaction(TMP_DIR, [RESULT, LINEAS])
+        self.ultimo_mensaje = {}
+        self.transaction = Transaction(TMP_DIR, [RESULT, LINEAS, BATCH_ID])
         self.transaction.cargar_estado(self, PNL)
 
     def estado_a_guardar(self):
         return {
             RESULT: self.resultados_parciales,
-            LINEAS: self.lineas_actuales
+            LINEAS: self.lineas_actuales,
+            BATCH_ID: self.ultimo_mensaje
         }
 
     def eliminar(self, es_global):
         self.resultados_parciales.clear()
         self.lineas_actuales.clear()
+        self.ultimo_mensaje.clear()
         if hasattr(self, 'sentiment_analyzer'):
             del self.sentiment_analyzer
         if es_global:
@@ -98,24 +102,31 @@ class PnlNode:
             fila['sentiment'] = resultado.get('label', 'UNKNOWN')
         self.borrar_info(client_id)
         return datos
-        
+    
+
 
     def procesar_mensajes(self, canal, destino, mensaje, enviar_func):
         consulta_id = obtener_query(mensaje)
         client_id = obtener_client_id(mensaje)
+        batch_id = obtener_batch(mensaje)
+        if self.transaction.comprobar(self, client_id, batch_id, enviar_func, mensaje, canal, destino): return
         try:
             if obtener_tipo_mensaje(mensaje) == EOF:
                 logging.info(f"Consulta {consulta_id} de pnl recibió EOF")
                 if self.resultados_parciales[client_id]:
                     resultado = self.ejecutar_consulta(consulta_id, client_id)
                     enviar_func(canal, destino, resultado, mensaje, "RESULT")
+                    self.transaction.actualizar_estado(self, client_id, batch_id, resultado)
+                self.transaction.actualizar_estado(self, client_id, batch_id, EOF)
                 enviar_func(canal, destino, EOF, mensaje, EOF)
             else:
                 self.guardar_datos(obtener_body(mensaje), client_id)
                 if self.lineas_actuales[client_id] >= BATCH_PNL:
                     resultado = self.ejecutar_consulta(consulta_id, client_id)
+                    self.transaction.actualizar_estado(self, client_id, batch_id, resultado)
                     enviar_func(canal, destino, resultado, mensaje, "RESULT")
-            self.transaction.guardar_estado(self)
+                else:
+                    self.transaction.actualizar_estado(self, client_id, batch_id, resultado)
             mensaje['ack']()
         except ConsultaInexistente as e:
             logging.warning(f"Consulta inexistente: {e}")
