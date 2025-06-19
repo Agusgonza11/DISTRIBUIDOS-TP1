@@ -53,11 +53,11 @@ class Transaction:
     def actualizar_estado(self, nodo, client_id, batch_id, resultado=None):
         instruccion = NO_ENVIAR if resultado == None else ENVIAR
         nodo.ultimo_mensaje[client_id] = [batch_id, resultado, instruccion]
-        self.marcar_modificado([BATCH_ID])
         self.guardar_estado(nodo)
 
 
     def comprobar(self, nodo, client_id, batch_id, enviar_func, mensaje, canal, destino):
+        self.marcar_modificado([BATCH_ID])
         if client_id in nodo.ultimo_mensaje:
             if nodo.ultimo_mensaje[client_id][0] == batch_id:
                 instruccion = nodo.ultimo_mensaje[client_id][2]
