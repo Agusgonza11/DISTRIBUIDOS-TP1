@@ -64,7 +64,10 @@ class Transaction:
                 if instruccion == ENVIAR:
                     resultado = nodo.ultimo_mensaje[client_id][1]
                     tipo = "RESULT" if resultado == EOF else EOF
+                    self.actualizar_estado(nodo, client_id, batch_id, resultado)
                     enviar_func(canal, destino, resultado, mensaje, tipo)
+                else:
+                    self.actualizar_estado(nodo, client_id, batch_id)
                 mensaje['ack']()
                 return True
         return False
