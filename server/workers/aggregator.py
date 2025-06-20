@@ -1,6 +1,5 @@
 from ast import literal_eval
 import logging
-import pickle
 from collections import Counter, defaultdict
 
 from common.utils import EOF, cargar_eofs, concat_data, create_dataframe, obtiene_nombre_contenedor, parse_repr_lista_dicts, prepare_data_aggregator_consult_3
@@ -20,14 +19,8 @@ class AggregatorNode:
     def __init__(self):
         self.resultados_parciales = {}
         self.eof_esperados = {}
-        self.transaction = Transaction(TMP_DIR, [RESULT, EOF_ESPERADOS])
-        self.transaction._cargar_estado(self)
-
-    def estado_a_guardar(self):
-        return {
-            RESULT: self.resultados_parciales,
-            EOF_ESPERADOS: self.eof_esperados
-        }
+        self.transaction = Transaction(TMP_DIR)
+        self.transaction.cargar_estado(self)
     
     def reconstruir(self, clave, contenido):
         client_id, consulta_id, valor = contenido.split("|", 2)
@@ -68,10 +61,10 @@ class AggregatorNode:
             
         if consulta_id not in self.eof_esperados[client_id]:
             self.eof_esperados[client_id][consulta_id] = cargar_eofs()[consulta_id]
-            self.transaction.commit([EOF_ESPERADOS], [client_id, consulta_id, self.eof_esperados[client_id][consulta_id]])
+            self.transaction.commit(EOF_ESPERADOS, [client_id, consulta_id, self.eof_esperados[client_id][consulta_id]])
         datos = create_dataframe(datos)
         self.resultados_parciales[client_id][consulta_id].append(datos)
-        self.transaction.commit([RESULT], [client_id, consulta_id, datos])
+        self.transaction.commit(RESULT, [client_id, consulta_id, datos])
 
 
 
@@ -201,7 +194,7 @@ class AggregatorNode:
             if tipo_mensaje == EOF:
                 logging.info(f"Consulta {consulta_id} de aggregator recibió EOF")
                 self.eof_esperados[client_id][consulta_id] -= 1
-                self.transaction.commit([EOF_ESPERADOS], [client_id, consulta_id, self.eof_esperados[client_id][consulta_id]])
+                self.transaction.commit(EOF_ESPERADOS, [client_id, consulta_id, self.eof_esperados[client_id][consulta_id]])
                 if self.eof_esperados[client_id][consulta_id] == 0:
                     logging.info(f"Consulta {consulta_id} recibió TODOS los EOF que esperaba")
                     resultado = self.ejecutar_consulta(consulta_id, client_id)

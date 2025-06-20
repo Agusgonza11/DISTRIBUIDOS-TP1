@@ -1,13 +1,12 @@
 import logging
 from multiprocessing import Process
 import os
-import pickle
 import sys
-from common.utils import EOF, concat_data, create_dataframe, get_batches, obtiene_nombre_contenedor
+from common.utils import EOF, concat_data, create_dataframe, get_batches, obtiene_nombre_contenedor, parse_repr_lista_dicts
 from common.communication import obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
 from transformers import pipeline # type: ignore
 import torch # type: ignore
-from common.excepciones import ConsultaInexistente
+from common.excepciones import ConsultaInexistente, ErrorCargaDelEstado
 from common.transaction import Transaction
 
 
@@ -20,7 +19,6 @@ os.environ["MKL_NUM_THREADS"] = "1"
 torch.set_num_threads(1)
 
 RESULT = "resultados_parciales"
-LINEAS = "lineas_actuales"
 
 # -----------------------
 # Nodo PNL
@@ -34,14 +32,21 @@ class PnlNode:
         )
         self.resultados_parciales = {}
         self.lineas_actuales = {}
-        self.transaction = Transaction(TMP_DIR, [RESULT, LINEAS])
-        self.transaction.cargar_estado(self, PNL)
+        self.transaction = Transaction(TMP_DIR)
+        self.transaction.cargar_estado(self)
 
-    def estado_a_guardar(self):
-        return {
-            RESULT: self.resultados_parciales,
-            LINEAS: self.lineas_actuales
-        }
+    
+    def reconstruir(self, _, contenido):
+        client_id, _, valor, lineas = contenido.split("|", 3)
+        if client_id not in self.resultados_parciales:
+            self.resultados_parciales[client_id] = []
+        if valor == "BORRADO":
+            self.resultados_parciales[client_id] = []
+            self.lineas_actuales[client_id] = 0
+        else:
+            self.resultados_parciales[client_id].append(parse_repr_lista_dicts(valor))
+            self.lineas_actuales[client_id] = int(lineas)
+
 
     def eliminar(self, es_global):
         self.resultados_parciales.clear()
@@ -63,13 +68,14 @@ class PnlNode:
         data = create_dataframe(datos)
         self.resultados_parciales[client_id].append(data)
         self.lineas_actuales[client_id] += len(data)
-        self.transaction.marcar_modificado([RESULT, LINEAS])
+        self.transaction.commit(RESULT, [client_id, 5, data, self.lineas_actuales[client_id]])
 
 
     def borrar_info(self, client_id):
         self.resultados_parciales[client_id] = []
         self.lineas_actuales[client_id] = 0
-        self.transaction.marcar_modificado([RESULT, LINEAS])
+        self.transaction.commit(RESULT, [client_id, 5, "BORRADO", 0])
+
 
 
     def ejecutar_consulta(self, consulta_id, client_id):
@@ -115,7 +121,6 @@ class PnlNode:
                 if self.lineas_actuales[client_id] >= BATCH_PNL:
                     resultado = self.ejecutar_consulta(consulta_id, client_id)
                     enviar_func(canal, destino, resultado, mensaje, "RESULT")
-            self.transaction.guardar_estado(self)
             mensaje['ack']()
         except ConsultaInexistente as e:
             logging.warning(f"Consulta inexistente: {e}")

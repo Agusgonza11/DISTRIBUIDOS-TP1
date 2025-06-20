@@ -4,8 +4,7 @@ import sys
 import logging
 from common.utils import EOF,  cargar_datos_broker, cargar_eofs, obtiene_nombre_contenedor
 from common.communication import  obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
-from common.excepciones import ConsultaInexistente
-import pickle
+from common.excepciones import ConsultaInexistente, ErrorCargaDelEstado
 
 from common.transaction import Transaction
 
@@ -18,9 +17,7 @@ CONSULTA_4 = 1
 CONSULTA_5 = 2
 
 ULTIMO_NODO = "ultimo_nodo_consulta"
-NODOS_ENVIAR = "nodos_enviar"
 EOF_ESPERA = "eof_esperar"
-CLIENTS = "clients"
 
 # -----------------------
 # Broker
@@ -31,23 +28,32 @@ class Broker:
         self.eof_esperar = {}
         self.ultimo_nodo_consulta = {}
         self.clients = []
-        self.transaction = Transaction(TMP_DIR, [ULTIMO_NODO, NODOS_ENVIAR, EOF_ESPERA, CLIENTS])
-        self.transaction.cargar_estado(self, BROKER)
+        self.transaction = Transaction(TMP_DIR)
+        self.transaction.cargar_estado(self)
 
-    def estado_a_guardar(self):
-        return {
-            ULTIMO_NODO: self.ultimo_nodo_consulta,
-            NODOS_ENVIAR: self.nodos_enviar,
-            EOF_ESPERA: self.eof_esperar,
-            CLIENTS: self.clients,
-        }
+    
+    def reconstruir(self, clave, contenido):
+        client_id, consulta_id, valor = contenido.split("|", 2)
+        if client_id not in self.nodos_enviar:
+            self.create_client(client_id)
+        consulta_id = int(consulta_id)
+        match clave:
+            case "ultimo_nodo_consulta":
+                if consulta_id not in self.ultimo_nodo_consulta[client_id]:
+                    self.ultimo_nodo_consulta[client_id][consulta_id] = 0
+                self.ultimo_nodo_consulta[client_id][consulta_id] = int(valor)
+            case "eof_esperar":
+                if consulta_id not in self.eof_esperar[client_id]:
+                    self.eof_esperar[client_id][consulta_id] = 0
+                self.eof_esperar[client_id][consulta_id] = int(valor)
+            case _:
+                raise ErrorCargaDelEstado(f"Error en la carga del estado")
 
     def create_client(self, client):
         self.nodos_enviar[client] = cargar_datos_broker()
         self.eof_esperar[client] = cargar_eofs()
         self.ultimo_nodo_consulta[client] = [self.nodos_enviar[client][3][0], self.nodos_enviar[client][4][0], 1]
         self.clients.append(client)
-        self.transaction.marcar_modificado([ULTIMO_NODO, NODOS_ENVIAR, EOF_ESPERA, CLIENTS])
 
 
     def eliminar(self, es_global):
@@ -67,18 +73,21 @@ class Broker:
         if consulta_id == 5:
             self.ultimo_nodo_consulta[client_id][CONSULTA_5] += 1
             if self.ultimo_nodo_consulta[client_id][CONSULTA_5] > self.nodos_enviar[client_id][5]:
-                self.ultimo_nodo_consulta[client_id][CONSULTA_5] = 1           
+                self.ultimo_nodo_consulta[client_id][CONSULTA_5] = 1      
+            self.transaction.commit(ULTIMO_NODO, [client_id, CONSULTA_5, self.ultimo_nodo_consulta[client_id][CONSULTA_5]])            
         elif consulta_id == 3:
             lista_nodos = self.nodos_enviar[client_id][3]
             idx_actual = lista_nodos.index(self.ultimo_nodo_consulta[client_id][CONSULTA_3])
             idx_siguiente = (idx_actual + 1) % len(lista_nodos)
-            self.ultimo_nodo_consulta[client_id][CONSULTA_3] = lista_nodos[idx_siguiente]            
+            self.ultimo_nodo_consulta[client_id][CONSULTA_3] = lista_nodos[idx_siguiente]     
+            self.transaction.commit(ULTIMO_NODO, [client_id, CONSULTA_3, lista_nodos[idx_siguiente]])       
         else:
             lista_nodos = self.nodos_enviar[client_id][4]
             idx_actual = lista_nodos.index(self.ultimo_nodo_consulta[client_id][CONSULTA_4])
             idx_siguiente = (idx_actual + 1) % len(lista_nodos)
             self.ultimo_nodo_consulta[client_id][CONSULTA_4] = lista_nodos[idx_siguiente]  
-            self.transaction.marcar_modificado([ULTIMO_NODO])
+            self.transaction.commit(ULTIMO_NODO, [client_id, CONSULTA_4, lista_nodos[idx_siguiente]])
+
 
 
     def distribuir_informacion(self, client_id, consulta_id, mensaje, canal, enviar_func, tipo=None):
@@ -114,7 +123,7 @@ class Broker:
             if consulta_id == 5:
                 if tipo_mensaje == EOF:
                     self.eof_esperar[client_id][consulta_id] -= 1
-                    self.transaction.marcar_modificado([EOF_ESPERA])
+                    self.transaction.commit(EOF_ESPERA, [client_id, consulta_id, self.eof_esperar[client_id][consulta_id]])
                     if self.eof_esperar[client_id][consulta_id] == 0:
                         self.distribuir_informacion(client_id, consulta_id, mensaje, canal, enviar_func, EOF)
                 else:
@@ -130,13 +139,12 @@ class Broker:
 
                 elif tipo_mensaje == EOF:
                     self.eof_esperar[client_id][consulta_id] -= 1
-                    self.transaction.marcar_modificado([EOF_ESPERA])
+                    self.transaction.commit(EOF_ESPERA, [client_id, consulta_id, self.eof_esperar[client_id][consulta_id]])
                     if self.eof_esperar[client_id][consulta_id] == 0:
                         self.distribuir_informacion(client_id, consulta_id, mensaje, canal, enviar_func, EOF)
 
                 else:
                     logging.error(f"Tipo de mensaje inesperado en consulta {consulta_id}: {tipo_mensaje}")
-            self.transaction.guardar_estado(self)
             mensaje['ack']()
         except ConsultaInexistente as e:
             logging.warning(f"Consulta inexistente: {e}")    
