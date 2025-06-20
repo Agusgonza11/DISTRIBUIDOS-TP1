@@ -298,3 +298,42 @@ def write_dicts_to_csv(file_path, data, append=False):
         if not append:
             writer.writeheader()
         writer.writerows(data)
+
+
+def parse_repr_lista_dicts(s):
+    s = s.strip()
+    if not s.startswith("[") or not s.endswith("]"):
+        raise ValueError("No es una lista válida")
+
+    items = []
+    actual = ""
+    nivel = 0
+    dentro = False
+
+    for c in s[1:-1]:
+        if c == '{':
+            nivel += 1
+            dentro = True
+        if dentro:
+            actual += c
+        if c == '}':
+            nivel -= 1
+            if nivel == 0:
+                dentro = False
+                items.append(actual.strip())
+                actual = ""
+
+    lista_dicts = []
+    for item in items:
+        d = {}
+        item = item.strip("{}")
+        for par in item.split(", "):
+            if ": " not in par:
+                continue
+            k, v = par.split(": ", 1)
+            k = k.strip("'\" ")
+            v = v.strip("'\" ")
+            d[k] = v
+        lista_dicts.append(d)
+
+    return lista_dicts
