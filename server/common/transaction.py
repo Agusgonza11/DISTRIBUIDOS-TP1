@@ -13,6 +13,7 @@ DATA = "datos"
 TERM = "termino_movies"
 DATA_TERM = "termino_datos"
 DISK = "files_on_disk"
+PATH = "file_paths"
 
 PNL = "pnl"
 
@@ -28,6 +29,7 @@ COMMITS = {
     TERM: "/T",
     DATA_TERM: "/Y",
     DISK: "/K",
+    PATH: "/P"
 }
 
 SUFIJOS_A_CLAVE = {v: k for k, v in COMMITS.items()}
@@ -69,5 +71,6 @@ class Transaction:
                     clave = SUFIJOS_A_CLAVE[sufijo]
                     contenido = linea[:-2]
                     nodo.reconstruir(clave, contenido)
+            #DESPUES DESTRUIR
         except FileNotFoundError:
             print(f"No hay estado para guardar", flush=True)

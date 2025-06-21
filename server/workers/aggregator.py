@@ -2,7 +2,7 @@ from ast import literal_eval
 import logging
 from collections import Counter, defaultdict
 
-from common.utils import EOF, cargar_eofs, concat_data, create_dataframe, obtiene_nombre_contenedor, parse_repr_lista_dicts, prepare_data_aggregator_consult_3
+from common.utils import EOF, cargar_eofs, concat_data, create_dataframe, obtiene_nombre_contenedor, parse_datos, prepare_data_aggregator_consult_3
 from common.communication import obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
 from common.excepciones import ConsultaInexistente, ErrorCargaDelEstado
 from common.transaction import Transaction
@@ -31,7 +31,7 @@ class AggregatorNode:
                 consulta_id = int(consulta_id)
                 if consulta_id not in self.resultados_parciales[client_id]:
                     self.resultados_parciales[client_id][consulta_id] = []
-                self.resultados_parciales[client_id][consulta_id].append(parse_repr_lista_dicts(valor))
+                self.resultados_parciales[client_id][consulta_id].append(parse_datos(valor))
             case "eof_esperados":
                 if client_id not in self.eof_esperados:
                     self.eof_esperados[client_id] = {}

@@ -2,7 +2,7 @@ import logging
 from multiprocessing import Process
 import os
 import sys
-from common.utils import EOF, concat_data, create_dataframe, get_batches, obtiene_nombre_contenedor, parse_repr_lista_dicts
+from common.utils import EOF, concat_data, create_dataframe, get_batches, obtiene_nombre_contenedor, parse_datos
 from common.communication import obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
 from transformers import pipeline # type: ignore
 import torch # type: ignore
@@ -44,7 +44,7 @@ class PnlNode:
             self.resultados_parciales[client_id] = []
             self.lineas_actuales[client_id] = 0
         else:
-            self.resultados_parciales[client_id].append(parse_repr_lista_dicts(valor))
+            self.resultados_parciales[client_id].append(parse_datos(valor))
             self.lineas_actuales[client_id] = int(lineas)
 
 
