@@ -284,6 +284,10 @@ def obtiene_nombre_contenedor(tipo):
         nombre_nodo = "broker"
     return nombre_nodo
 
+def obtener_batch(mensaje):
+    return mensaje['headers'].get("batchID")
+
+
 # -------------------
 # NORMALIZATION
 # -------------------
@@ -298,3 +302,115 @@ def write_dicts_to_csv(file_path, data, append=False):
         if not append:
             writer.writeheader()
         writer.writerows(data)
+
+
+def parse_datos(s, convertir_numeros=False):
+    s = s.strip()
+    if not s.startswith("[") or not s.endswith("]"):
+        raise ValueError("No es una lista válida")
+
+    items = []
+    actual = ""
+    nivel = 0
+    dentro = False
+
+    for c in s[1:-1]:
+        if c == '{':
+            nivel += 1
+            dentro = True
+        if dentro:
+            actual += c
+        if c == '}':
+            nivel -= 1
+            if nivel == 0:
+                dentro = False
+                items.append(actual.strip())
+                actual = ""
+
+    lista_dicts = []
+    for item in items:
+        d = {}
+        item = item.strip("{}")
+        for par in item.split(", "):
+            if ": " not in par:
+                continue
+            k, v = par.split(": ", 1)
+            k = k.strip("'\" ")
+            v = v.strip("'\" ")
+            if convertir_numeros:
+                # Si v parece tener caracteres extraños no intentes convertir
+                if v == "None":
+                    v = None
+                elif all(c.isdigit() for c in v):
+                    v = int(v)
+                else:
+                    try:
+                        v_float = float(v)
+                        v = v_float
+                    except ValueError:
+                        # No convertible, lo dejamos string tal cual
+                        pass
+
+            d[k] = v
+        lista_dicts.append(d)
+
+    return lista_dicts
+
+
+def limpiar_cast_string(cast_str):
+    # Reemplazar comillas simples literales (\' => ')  
+    # y también convertir cualquier escape excesivo de barras invertidas
+    # Para que quede una string parseable.
+
+    # 1. Reemplazo \' por ' simple:
+    cast_str = cast_str.replace("\\'", "'")
+    # 2. Reemplazo \" por " (por si hay)
+    cast_str = cast_str.replace('\\"', '"')
+    # 3. Reemplazo dobles barras invertidas \\ por una sola \
+    cast_str = cast_str.replace('\\\\', '\\')
+    return cast_str
+
+def parse_credits(s):
+    s = s.strip()
+    if not s.startswith("[") or not s.endswith("]"):
+        raise ValueError("No es una lista válida de películas")
+
+    items = []
+    actual = ""
+    nivel = 0
+    dentro = False
+
+    for c in s[1:-1]:
+        if c == '{':
+            nivel += 1
+            dentro = True
+        if dentro:
+            actual += c
+        if c == '}':
+            nivel -= 1
+            if nivel == 0:
+                dentro = False
+                items.append(actual.strip())
+                actual = ""
+
+    resultado = []
+    for item in items:
+        d = {}
+        item = item.strip("{}")
+        for par in item.split(", ", 1):  
+            if ": " not in par:
+                continue
+            k, v = par.split(": ", 1)
+            k = k.strip("'\" ")
+            v = v.strip("'\" ")
+            d[k] = v
+
+        if "cast" in d:
+            try:
+                limpio = limpiar_cast_string(d['cast'])
+                d["cast"] = f"{parse_datos(limpio, True)}"
+            except Exception as e:
+                d["cast"] = f"{[]}" 
+        resultado.append(d)
+
+    return resultado
