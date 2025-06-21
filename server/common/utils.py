@@ -284,6 +284,10 @@ def obtiene_nombre_contenedor(tipo):
         nombre_nodo = "broker"
     return nombre_nodo
 
+def obtener_batch(mensaje):
+    return mensaje['headers'].get("batchID")
+
+
 # -------------------
 # NORMALIZATION
 # -------------------

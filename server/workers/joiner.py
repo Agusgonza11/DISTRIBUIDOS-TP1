@@ -4,10 +4,10 @@ import logging
 import os
 import tempfile
 import threading
-from common.utils import EOF, concat_data, create_dataframe, get_batches, obtiene_nombre_contenedor, parse_credits, parse_datos, prepare_data_consult_4, write_dicts_to_csv
+from common.utils import EOF, concat_data, create_dataframe, get_batches, obtener_batch, obtiene_nombre_contenedor, parse_credits, parse_datos, prepare_data_consult_4, write_dicts_to_csv
 from common.communication import obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
 from common.excepciones import ConsultaInexistente, ErrorCargaDelEstado
-from common.transaction import Transaction
+from common.transaction import ACCION, Transaction
 
 
 JOINER = "joiner"
@@ -26,6 +26,9 @@ RESULT = "resultados_parciales"
 DISK = "files_on_disk"
 PATH = "file_paths"
 
+NO_ENVIAR = "no_enviar"
+ENVIAR = "enviar"
+
 # -----------------------
 # Nodo Joiner
 # -----------------------
@@ -39,7 +42,11 @@ class JoinerNode:
         self.files_on_disk = {}
         self.file_paths = {}
         self.transaction = Transaction(TMP_DIR)
-        self.transaction.cargar_estado(self)
+        if self.transaction.cargar_estado(self):
+            for client_id in self.resultados_parciales.keys():
+                print(f"entra a actualizar {self.file_paths[client_id]['ratings']}", flush=True)
+                self.transaction.commit(PATH, [client_id, self.file_paths[client_id]["ratings"], self.file_paths[client_id]["credits"]])
+
 
 
     def reconstruir(self, clave, contenido):
@@ -50,7 +57,6 @@ class JoinerNode:
         if client_id not in self.resultados_parciales:
             self.crear_datos(client_id, True)
         match clave:
-            #DESPUES DE ENVIAR VOLVER A COMMITEAR
             case "datos":
                 csv_almacenado, datos, lineas = contenido
                 if datos == "BORRADO":
@@ -71,7 +77,7 @@ class JoinerNode:
                 consulta_id, booleano = contenido
                 consulta_id = int(consulta_id)
                 valor = booleano == "True"
-                self.termino_movies[consulta_id] = valor
+                self.termino_movies[client_id][consulta_id] = valor
             case "resultados_parciales":
                 consulta_id, valor = contenido
                 consulta_id = int(consulta_id)
@@ -246,7 +252,10 @@ class JoinerNode:
                     if actor_name:
                         joined.append({'id': movie_id, 'name': actor_name})
         if len(joined) > 0:
+            batch_id = obtener_batch(mensaje)
+            self.transaction.commit(ACCION, [batch_id, joined, ENVIAR])
             enviar_func(canal, destino, joined, mensaje, "RESULT")
+            self.transaction.commit(ACCION, [batch_id, "", NO_ENVIAR])
 
 
     def procesar_y_enviar_batch_ratings(self, batch, datos, canal, destino, mensaje, enviar_func):
@@ -267,7 +276,10 @@ class JoinerNode:
                 joined.append(merged)
 
         if len(joined) > 0:
+            batch_id = obtener_batch(mensaje)
+            self.transaction.commit(ACCION, [batch_id, joined, ENVIAR])
             enviar_func(canal, destino, joined, mensaje, "RESULT")
+            self.transaction.commit(ACCION, [batch_id, "", NO_ENVIAR])
 
 
     def borrar_info(self, csv, client_id):
@@ -361,7 +373,7 @@ class JoinerNode:
             self.almacenar_csv(consulta_id, contenido, client_id)
 
 
-    def procesar_resultado(self, consulta_id, canal, destino, mensaje, enviar_func, client_id):
+    def procesar_resultado(self, consulta_id, canal, destino, mensaje, enviar_func, client_id, batch_id):
         if self.puede_enviar(consulta_id, client_id):
             if client_id not in self.resultados_parciales:
                 logging.info(f"Para el cliente {client_id} NO esta en resultados parciales")
@@ -372,7 +384,9 @@ class JoinerNode:
                 return False
             datos = concat_data(datos_cliente[consulta_id])
             resultado = self.ejecutar_consulta(datos, consulta_id, client_id)
+            self.transaction.commit(ACCION, [batch_id, resultado, ENVIAR])
             enviar_func(canal, destino, resultado, mensaje, "RESULT")
+            self.transaction.commit(ACCION, [batch_id, "", NO_ENVIAR])
 
             if consulta_id == 3 and self.files_on_disk[client_id]["ratings"]:
                 self.enviar_resultados_disco(datos, client_id, canal, destino, mensaje, enviar_func, consulta_id)
@@ -383,42 +397,47 @@ class JoinerNode:
             if self.datos[client_id]["ratings"][TERMINO] or self.datos[client_id]["credits"][TERMINO]:
                 self.limpiar_consulta(client_id, consulta_id)
 
-    def enviar_eof(self, consulta_id, canal, destino, mensaje, enviar_func, client_id):
+    def enviar_eof(self, consulta_id, canal, destino, mensaje, enviar_func, client_id, batch_id):
         if self.termino_movies[client_id][consulta_id] and (
             (consulta_id == 3 and (self.datos[client_id]["ratings"][TERMINO]))
             or (consulta_id == 4 and (self.datos[client_id]["credits"][TERMINO]))
         ):
+            self.transaction.commit(ACCION, [batch_id, EOF, ENVIAR])
             enviar_func(canal, destino, EOF, mensaje, EOF)
+            self.transaction.commit(ACCION, [batch_id, "", NO_ENVIAR])
+
 
     def procesar_mensajes(self, canal, destino, mensaje, enviar_func):
         consulta_id = obtener_query(mensaje)
         tipo_mensaje = obtener_tipo_mensaje(mensaje)
         client_id = obtener_client_id(mensaje)
+        batch_id = obtener_batch(mensaje)
         try:
             if tipo_mensaje == "EOF":
                 logging.info(f"Se recibio todo Movies, consulta {consulta_id} recibió EOF")
                 self.termino_movies[client_id][consulta_id] = True
                 self.transaction.commit(TERM, [client_id, consulta_id, True])
-                self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
-                self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func, client_id)
+                self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id, batch_id)
+                self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func, client_id, batch_id)
             elif tipo_mensaje in ["MOVIES", "RATINGS", "CREDITS"]:
                 self.procesar_datos(consulta_id, tipo_mensaje, mensaje, client_id)
                 if tipo_mensaje != "MOVIES":
-                    self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
+                    self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id, batch_id)
             elif tipo_mensaje == "EOF_RATINGS":
                 logging.info("Recibí todos los ratings")
                 self.datos[client_id]["ratings"][TERMINO] = True
                 self.transaction.commit(DATA_TERM, [client_id, "ratings", True])
+                print(f"y esto {self.termino_movies[client_id][consulta_id]}", flush=True)
                 if self.datos[client_id]["ratings"][LINEAS] != 0 or self.files_on_disk[client_id]["ratings"]:
-                    self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
-                self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func, client_id)
+                    self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id, batch_id)
+                self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func, client_id, batch_id)
             elif tipo_mensaje == "EOF_CREDITS":
                 logging.info("Recibí todos los credits")
                 self.datos[client_id]["credits"][TERMINO] = True
                 self.transaction.commit(DATA_TERM, [client_id, "credits", True])
                 if self.datos[client_id]["credits"][LINEAS] != 0 or self.files_on_disk[client_id]["credits"]:
-                    self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
-                self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func, client_id)
+                    self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id, batch_id)
+                self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func, client_id, batch_id)
             mensaje['ack']()
         except ConsultaInexistente as e:
             logging.warning(f"Consulta inexistente: {e}")

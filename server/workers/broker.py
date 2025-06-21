@@ -2,11 +2,11 @@ from multiprocessing import Process
 import os
 import sys
 import logging
-from common.utils import EOF,  cargar_datos_broker, cargar_eofs, obtiene_nombre_contenedor
+from common.utils import EOF,  cargar_datos_broker, cargar_eofs, obtener_batch, obtiene_nombre_contenedor
 from common.communication import  obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
 from common.excepciones import ConsultaInexistente, ErrorCargaDelEstado
 
-from common.transaction import Transaction
+from common.transaction import ACCION, Transaction
 
 
 BROKER = "broker"
