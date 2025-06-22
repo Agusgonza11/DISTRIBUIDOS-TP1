@@ -93,11 +93,13 @@ def lista_dicts_a_csv(lista):
 def create_dataframe(data_str):
     return list(csv.DictReader(StringIO(data_str)))
 
-
 def concat_data(data):
     resultado = []
-    for sublista in data:
-        resultado.extend(sublista)
+    for chunk in data:
+        if isinstance(chunk, dict) and "datos" in chunk:
+            resultado.extend(chunk["datos"])
+        else:
+            resultado.extend(chunk)
     return resultado
 
 
@@ -284,8 +286,8 @@ def obtiene_nombre_contenedor(tipo):
         nombre_nodo = "broker"
     return nombre_nodo
 
-def obtener_batch(mensaje):
-    return mensaje['headers'].get("batchID")
+def obtener_message_id(mensaje):
+    return mensaje['headers'].get("MessageID")
 
 
 # -------------------
@@ -305,7 +307,7 @@ def write_dicts_to_csv(file_path, data, append=False):
 
 
 def parse_datos(s, convertir_numeros=False):
-    s = s.strip()
+    s = str(s).strip()
     if not s.startswith("[") or not s.endswith("]"):
         raise ValueError("No es una lista válida")
 
@@ -371,7 +373,7 @@ def limpiar_cast_string(cast_str):
     return cast_str
 
 def parse_credits(s):
-    s = s.strip()
+    s = str(s).strip()
     if not s.startswith("[") or not s.endswith("]"):
         raise ValueError("No es una lista válida de películas")
 

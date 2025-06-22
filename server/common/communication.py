@@ -39,13 +39,25 @@ def obtener_query(mensaje):
     tipo = mensaje['headers'].get("Query")
     return QUERY[tipo]
 
-
 def config_header(mensaje_original, tipo=None):
-    headers = {"Query": mensaje_original['headers'].get("Query"), "ClientID": mensaje_original['headers'].get("ClientID")}
-    if type != None:
-        headers["type"] = tipo
-    return pika.BasicProperties(headers=headers)
+    headers = {
+        "Query": mensaje_original['headers'].get("Query"),
+        "ClientID": mensaje_original['headers'].get("ClientID")
+    }
 
+    message_id = mensaje_original['headers'].get("MessageID")
+    if message_id is not None:
+        headers["MessageID"] = message_id
+
+    batch_id = mensaje_original['headers'].get("BatchID")
+    if batch_id is not None:
+        headers["BatchID"] = batch_id
+
+    if tipo is not None:
+        headers["type"] = tipo
+
+    return pika.BasicProperties(headers=headers)
+    
 def obtener_client_id(mensaje):
     return mensaje['headers'].get("ClientID")
 

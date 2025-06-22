@@ -240,6 +240,8 @@ func (g *Gateway) handleCommonMessage(
 			map[string]interface{}{
 				"Query":    query,
 				"ClientID": clientID,
+				"MessageID":  batchID,
+				"BatchID":  batchID,
 				"type":     file,
 			},
 			body,

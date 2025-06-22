@@ -2,7 +2,7 @@ from ast import literal_eval
 import logging
 from collections import Counter, defaultdict
 
-from common.utils import EOF, cargar_eofs, concat_data, create_dataframe, obtener_batch, obtiene_nombre_contenedor, parse_datos, prepare_data_aggregator_consult_3
+from common.utils import EOF, cargar_eofs, concat_data, create_dataframe, obtener_message_id, obtiene_nombre_contenedor, parse_datos, prepare_data_aggregator_consult_3
 from common.communication import obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
 from common.excepciones import ConsultaInexistente, ErrorCargaDelEstado
 from common.transaction import Transaction
@@ -194,7 +194,8 @@ class AggregatorNode:
         consulta_id = obtener_query(mensaje)
         tipo_mensaje = obtener_tipo_mensaje(mensaje)
         client_id = obtener_client_id(mensaje)
-        batch_id = obtener_batch(mensaje)
+        message_id = obtener_message_id(mensaje)
+        logging.info(f"Mensaje con ids: {message_id}")
         try:
             if tipo_mensaje == EOF:
                 logging.info(f"Consulta {consulta_id} de aggregator recibió EOF")
@@ -203,12 +204,12 @@ class AggregatorNode:
                 if self.eof_esperados[client_id][consulta_id] == 0:
                     logging.info(f"Consulta {consulta_id} recibió TODOS los EOF que esperaba")
                     resultado = self.ejecutar_consulta(consulta_id, client_id)
-                    self.transaction.commit(ACCION, [batch_id, resultado, ENVIAR])
+                    self.transaction.commit(ACCION, [message_id, resultado, ENVIAR])
                     enviar_func(canal, destino, resultado, mensaje, "RESULT")
-                    self.transaction.commit(ACCION, [batch_id, "", NO_ENVIAR])
-                    self.transaction.commit(ACCION, [batch_id, EOF, ENVIAR])
+                    self.transaction.commit(ACCION, [message_id, "", NO_ENVIAR])
+                    self.transaction.commit(ACCION, [message_id, EOF, ENVIAR])
                     enviar_func(canal, destino, EOF, mensaje, EOF)
-                    self.transaction.commit(ACCION, [batch_id, "", NO_ENVIAR])
+                    self.transaction.commit(ACCION, [message_id, "", NO_ENVIAR])
                     del self.resultados_parciales[client_id][consulta_id]
                     del self.eof_esperados[client_id][consulta_id]
 

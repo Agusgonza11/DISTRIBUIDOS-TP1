@@ -61,18 +61,18 @@ class Transaction:
             os.remove(self.archivo)
 
     def cargar_ultima_accion(self, contenido):
-        batch_id, resultado, accion = contenido.split("|", 2)
-        self.ultima_accion = [batch_id, accion, resultado]
+        message_id, resultado, accion = contenido.split("|", 2)
+        self.ultima_accion = [message_id, accion, resultado]
 
-    def comprobar_ultima_accion(self, client_id, batch_id, enviar_func, mensaje, canal, destino):
+    def comprobar_ultima_accion(self, client_id, message_id, enviar_func, mensaje, canal, destino):
         # a esta funcion tienen que llamar todos los nodos cuando reciben mensaje
-        if self.ultima_accion[0] == batch_id:
+        if self.ultima_accion[0] == message_id:
             if self.ultima_accion[1] == ENVIAR:
                 resultado = self.ultima_accion[2]
-                self.commit(ACCION, [destino, mensaje, client_id, batch_id, resultado, ENVIAR])
+                self.commit(ACCION, [destino, mensaje, client_id, message_id, resultado, ENVIAR])
                 tipo = "EOF" if resultado == "EOF" else "RESULT"
                 enviar_func(canal, destino, resultado, mensaje, tipo)
-                self.commit(ACCION, ["", "", client_id, batch_id, "", NO_ENVIAR])
+                self.commit(ACCION, ["", "", client_id, message_id, "", NO_ENVIAR])
             mensaje['ack']()
             return True
         return False
@@ -113,5 +113,5 @@ class Transaction:
                     self.cargar_ultima_accion(contenido)
                 return True
         except FileNotFoundError:
-            print(f"No hay estado para guardar", flush=True)
+            print(f"No hay estado para cargar", flush=True)
             return False

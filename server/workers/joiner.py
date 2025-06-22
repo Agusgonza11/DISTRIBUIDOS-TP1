@@ -4,7 +4,7 @@ import logging
 import os
 import tempfile
 import threading
-from common.utils import EOF, concat_data, create_dataframe, get_batches, obtener_batch, obtiene_nombre_contenedor, parse_credits, parse_datos, prepare_data_consult_4, write_dicts_to_csv
+from common.utils import EOF, concat_data, create_dataframe, get_batches, obtiene_nombre_contenedor, parse_credits, parse_datos, prepare_data_consult_4, write_dicts_to_csv
 from common.communication import obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
 from common.excepciones import ConsultaInexistente, ErrorCargaDelEstado
 from common.transaction import ACCION, Transaction
@@ -63,12 +63,28 @@ class JoinerNode:
                     self.datos[client_id][csv_almacenado][DATOS] = []
                     self.datos[client_id][csv_almacenado][LINEAS] = 0
                 else:
+                    try:
+                        datos_dict = ast.literal_eval(datos)
+                    except Exception as e:
+                        logging.error(f"No se pudo parsear 'datos' con ast.literal_eval: {datos}")
+                        raise
+
+                    content = datos_dict.get('datos', None)
+                    batch_id = datos_dict.get('batch_id', None)
+                    if content is None:
+                        return
+
+                    
                     if csv_almacenado == "ratings":
-                        valor = parse_datos(datos)
+                        valor = parse_datos(content)
                     elif csv_almacenado == "credits":
-                        valor = parse_credits(datos)
-                    self.datos[client_id][csv_almacenado][DATOS].append(valor)
+                        valor = parse_credits(content)
+
+                    print(f"[RECOVER] Reconstruyendo (batch_id: {batch_id}) para {csv_almacenado}, cliente {client_id}")
+
+                    self.datos[client_id][csv_almacenado][DATOS].append({"batch_id": batch_id, "datos": content})
                     self.datos[client_id][csv_almacenado][LINEAS] = int(lineas)
+
             case "termino_datos":
                 csv_almacenado, booleano = contenido
                 valor = booleano == "True"
@@ -170,26 +186,40 @@ class JoinerNode:
         self.transaction.commit(RESULT, [client_id, consulta_id, df])
 
 
-    def almacenar_csv(self, consulta_id, datos, client_id):
+    def almacenar_csv(self, consulta_id, datos, client_id, mensaje):
         csv = "ratings" if consulta_id == 3 else "credits"
+        batch_id = mensaje['headers'].get('BatchID')
+
         df = create_dataframe(datos)
         self.datos[client_id][csv][LINEAS] += len(df)
-        self.datos[client_id][csv][DATOS].append(df)
-        self.transaction.commit(DATA, [client_id, csv, df, self.datos[client_id][csv][LINEAS]])
+
+        data_dict = {"batch_id": batch_id, "datos": df}
+        self.datos[client_id][csv][DATOS].append(data_dict)
+
+        self.transaction.commit(DATA, [client_id, csv, data_dict, self.datos[client_id][csv][LINEAS]])
 
         if not self.termino_movies[client_id][consulta_id]:
             bsize = BATCH_RATINGS if csv == "ratings" else BATCH_CREDITS
             if self.datos[client_id][csv][LINEAS] >= bsize:
                 with self.locks[client_id][csv]:
                     df_total = []
+
                     for chunk in self.datos[client_id][csv][DATOS]:
-                        df_total.extend(chunk)
+                        batch_id = chunk["batch_id"]
+                        for row in chunk["datos"]:
+                            print(f"[STORE] Almacenando (batch_id: {batch_id}) en disco para {client_id}, csv {csv}")
+
+                            row["_batch_id"] = batch_id
+                            df_total.append(row)
+
                     write_dicts_to_csv(
                         self.file_paths[client_id][csv],
                         df_total,
                         append=self.files_on_disk[client_id][csv]
                     )
                     self.files_on_disk[client_id][csv] = True
+
+
                 self.borrar_info(csv, client_id)
                 self.transaction.commit(DISK, [client_id, csv, True])
 
@@ -207,22 +237,33 @@ class JoinerNode:
             with open(file_path, newline='', encoding='utf-8') as csvfile:
                 reader = csv.DictReader(csvfile)
                 batch = []
+                last_batch_id = None
                 for row in reader:
-                    batch.append(row)
-                    if len(batch) >= batch_size:
-                        yield batch
+                    batch_id = row.pop('_batch_id', None)
+
+                    if last_batch_id is None:
+                        last_batch_id = batch_id
+                    if batch_id != last_batch_id or len(batch) >= batch_size:
+                        if batch:
+                            yield batch, last_batch_id  
                         batch = []
+                        last_batch_id = batch_id
+                    batch.append(row)
                 if batch:
-                    yield batch
+                    yield batch, last_batch_id
 
 
     def enviar_resultados_disco(self, datos, client_id, canal, destino, mensaje, enviar_func, consulta_id):
         csv = "ratings" if consulta_id == 3 else "credits"
-        for batch in self.leer_batches_de_disco(client_id, csv):
+        for batch, batch_id in self.leer_batches_de_disco(client_id, csv):
+            batch_mensaje = mensaje.copy()
+            batch_mensaje['headers'] = batch_mensaje.get('headers', {}).copy()
+            batch_mensaje['headers']['MessageID'] = str(batch_id)
+
             if consulta_id == 3:
-                self.procesar_y_enviar_batch_ratings(batch, datos, canal, destino, mensaje, enviar_func)
+                self.procesar_y_enviar_batch_ratings(batch, datos, canal, destino, mensaje, enviar_func, batch_id)
             else:
-                self.procesar_y_enviar_batch_credit(batch, datos, canal, destino, mensaje, enviar_func)
+                self.procesar_y_enviar_batch_credit(batch, datos, canal, destino, mensaje, enviar_func, batch_id)
             batch = None
         try:
             os.remove(self.file_paths[client_id][csv])
@@ -231,9 +272,7 @@ class JoinerNode:
         self.files_on_disk[client_id][csv] = False
         self.transaction.commit(DISK, [client_id, csv, False])
 
-
-
-    def procesar_y_enviar_batch_credit(self, batch, datos, canal, destino, mensaje, enviar_func):
+    def procesar_y_enviar_batch_credit(self, batch, datos, canal, destino, mensaje, enviar_func, message_id):
         if batch is None or len(batch) == 0:
             return
         datos_dict = {entry['id']: entry['title'] for entry in datos}
@@ -252,13 +291,12 @@ class JoinerNode:
                     if actor_name:
                         joined.append({'id': movie_id, 'name': actor_name})
         if len(joined) > 0:
-            batch_id = obtener_batch(mensaje)
-            self.transaction.commit(ACCION, [batch_id, joined, ENVIAR])
+            self.transaction.commit(ACCION, [message_id, joined, ENVIAR])
             enviar_func(canal, destino, joined, mensaje, "RESULT")
-            self.transaction.commit(ACCION, [batch_id, "", NO_ENVIAR])
+            self.transaction.commit(ACCION, [message_id, "", NO_ENVIAR])
 
 
-    def procesar_y_enviar_batch_ratings(self, batch, datos, canal, destino, mensaje, enviar_func):
+    def procesar_y_enviar_batch_ratings(self, batch, datos, canal, destino, mensaje, enviar_func, message_id):
         if batch is None or len(batch) == 0:
             return
 
@@ -276,10 +314,9 @@ class JoinerNode:
                 joined.append(merged)
 
         if len(joined) > 0:
-            batch_id = obtener_batch(mensaje)
-            self.transaction.commit(ACCION, [batch_id, joined, ENVIAR])
+            self.transaction.commit(ACCION, [message_id, joined, ENVIAR])
             enviar_func(canal, destino, joined, mensaje, "RESULT")
-            self.transaction.commit(ACCION, [batch_id, "", NO_ENVIAR])
+            self.transaction.commit(ACCION, [message_id, "", NO_ENVIAR])
 
 
     def borrar_info(self, csv, client_id):
@@ -322,7 +359,6 @@ class JoinerNode:
 
         datos_dict = {d["id"]: d["title"] for d in datos}
         resultado = []
-
         for r in ratings:
             movie_id = r.get("id")
             if movie_id in datos_dict:
@@ -370,23 +406,36 @@ class JoinerNode:
         if tipo_mensaje == "MOVIES":
             self.guardar_datos(consulta_id, contenido, client_id)
         else:
-            self.almacenar_csv(consulta_id, contenido, client_id)
+            self.almacenar_csv(consulta_id, contenido, client_id, mensaje)
 
 
-    def procesar_resultado(self, consulta_id, canal, destino, mensaje, enviar_func, client_id, batch_id):
+    def procesar_resultado(self, consulta_id, canal, destino, mensaje, enviar_func, client_id):
         if self.puede_enviar(consulta_id, client_id):
             if client_id not in self.resultados_parciales:
-                logging.info(f"Para el cliente {client_id} NO esta en resultados parciales")
                 return False
+            
             datos_cliente = self.resultados_parciales[client_id]
             if not datos_cliente or consulta_id not in datos_cliente:
-                logging.info(f"Para la consulta {consulta_id} NO esta en resultados parciales[{client_id}]")
                 return False
+            
             datos = concat_data(datos_cliente[consulta_id])
+
+            if consulta_id == 3:
+                batch_info = self.datos[client_id]["ratings"][DATOS]
+            else:
+                batch_info = self.datos[client_id]["credits"][DATOS]
+
+            batch_ids = [str(b.get('batch_id')) for b in batch_info if 'batch_id' in b]
+            batch_ids = sorted(set(batch_ids))  
+            message_id = "-".join(batch_ids)
+
+            mensaje['headers']['MessageID'] = message_id
+
             resultado = self.ejecutar_consulta(datos, consulta_id, client_id)
-            self.transaction.commit(ACCION, [batch_id, resultado, ENVIAR])
+
+            self.transaction.commit(ACCION, [message_id, resultado, ENVIAR])
             enviar_func(canal, destino, resultado, mensaje, "RESULT")
-            self.transaction.commit(ACCION, [batch_id, "", NO_ENVIAR])
+            self.transaction.commit(ACCION, [message_id, "", NO_ENVIAR])
 
             if consulta_id == 3 and self.files_on_disk[client_id]["ratings"]:
                 self.enviar_resultados_disco(datos, client_id, canal, destino, mensaje, enviar_func, consulta_id)
@@ -397,47 +446,49 @@ class JoinerNode:
             if self.datos[client_id]["ratings"][TERMINO] or self.datos[client_id]["credits"][TERMINO]:
                 self.limpiar_consulta(client_id, consulta_id)
 
-    def enviar_eof(self, consulta_id, canal, destino, mensaje, enviar_func, client_id, batch_id):
+    def enviar_eof(self, consulta_id, canal, destino, mensaje, enviar_func, client_id):
         if self.termino_movies[client_id][consulta_id] and (
             (consulta_id == 3 and (self.datos[client_id]["ratings"][TERMINO]))
             or (consulta_id == 4 and (self.datos[client_id]["credits"][TERMINO]))
         ):
-            self.transaction.commit(ACCION, [batch_id, EOF, ENVIAR])
+            message_id = f"{client_id}-{consulta_id}"
+            mensaje['headers']['MessageID'] = message_id
+
+            self.transaction.commit(ACCION, [message_id, EOF, ENVIAR])
             enviar_func(canal, destino, EOF, mensaje, EOF)
-            self.transaction.commit(ACCION, [batch_id, "", NO_ENVIAR])
+            self.transaction.commit(ACCION, [message_id, "", NO_ENVIAR])
 
 
     def procesar_mensajes(self, canal, destino, mensaje, enviar_func):
         consulta_id = obtener_query(mensaje)
         tipo_mensaje = obtener_tipo_mensaje(mensaje)
         client_id = obtener_client_id(mensaje)
-        batch_id = obtener_batch(mensaje)
         try:
             if tipo_mensaje == "EOF":
                 logging.info(f"Se recibio todo Movies, consulta {consulta_id} recibió EOF")
                 self.termino_movies[client_id][consulta_id] = True
                 self.transaction.commit(TERM, [client_id, consulta_id, True])
-                self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id, batch_id)
-                self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func, client_id, batch_id)
+                self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
+                self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func, client_id)
             elif tipo_mensaje in ["MOVIES", "RATINGS", "CREDITS"]:
                 self.procesar_datos(consulta_id, tipo_mensaje, mensaje, client_id)
                 if tipo_mensaje != "MOVIES":
-                    self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id, batch_id)
+                    self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
             elif tipo_mensaje == "EOF_RATINGS":
                 logging.info("Recibí todos los ratings")
                 self.datos[client_id]["ratings"][TERMINO] = True
                 self.transaction.commit(DATA_TERM, [client_id, "ratings", True])
                 print(f"y esto {self.termino_movies[client_id][consulta_id]}", flush=True)
                 if self.datos[client_id]["ratings"][LINEAS] != 0 or self.files_on_disk[client_id]["ratings"]:
-                    self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id, batch_id)
-                self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func, client_id, batch_id)
+                    self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
+                self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func, client_id)
             elif tipo_mensaje == "EOF_CREDITS":
                 logging.info("Recibí todos los credits")
                 self.datos[client_id]["credits"][TERMINO] = True
                 self.transaction.commit(DATA_TERM, [client_id, "credits", True])
                 if self.datos[client_id]["credits"][LINEAS] != 0 or self.files_on_disk[client_id]["credits"]:
-                    self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id, batch_id)
-                self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func, client_id, batch_id)
+                    self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
+                self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func, client_id)
             mensaje['ack']()
         except ConsultaInexistente as e:
             logging.warning(f"Consulta inexistente: {e}")

@@ -2,7 +2,7 @@ import logging
 from multiprocessing import Process
 import os
 import sys
-from common.utils import EOF, concat_data, create_dataframe, get_batches, obtener_batch, obtiene_nombre_contenedor, parse_datos
+from common.utils import EOF, concat_data, create_dataframe, get_batches, obtener_message_id, obtiene_nombre_contenedor, parse_datos
 from common.communication import obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
 from transformers import pipeline # type: ignore
 import torch # type: ignore
@@ -112,25 +112,25 @@ class PnlNode:
     def procesar_mensajes(self, canal, destino, mensaje, enviar_func):
         consulta_id = obtener_query(mensaje)
         client_id = obtener_client_id(mensaje)
-        batch_id = obtener_batch(mensaje)
+        message_id = obtener_message_id(mensaje)
         try:
             if obtener_tipo_mensaje(mensaje) == EOF:
                 logging.info(f"Consulta {consulta_id} de pnl recibió EOF")
                 if self.resultados_parciales[client_id]:
                     resultado = self.ejecutar_consulta(consulta_id, client_id)
-                    self.transaction.commit(ACCION, [batch_id, resultado, ENVIAR])
+                    self.transaction.commit(ACCION, [message_id, resultado, ENVIAR])
                     enviar_func(canal, destino, resultado, mensaje, "RESULT")
-                    self.transaction.commit(ACCION, [batch_id, "", NO_ENVIAR])
-                self.transaction.commit(ACCION, [batch_id, EOF, ENVIAR])
+                    self.transaction.commit(ACCION, [message_id, "", NO_ENVIAR])
+                self.transaction.commit(ACCION, [message_id, EOF, ENVIAR])
                 enviar_func(canal, destino, EOF, mensaje, EOF)
-                self.transaction.commit(ACCION, [batch_id, "", NO_ENVIAR])
+                self.transaction.commit(ACCION, [message_id, "", NO_ENVIAR])
             else:
                 self.guardar_datos(obtener_body(mensaje), client_id)
                 if self.lineas_actuales[client_id] >= BATCH_PNL:
                     resultado = self.ejecutar_consulta(consulta_id, client_id)
-                    self.transaction.commit(ACCION, [batch_id, resultado, ENVIAR])
+                    self.transaction.commit(ACCION, [message_id, resultado, ENVIAR])
                     enviar_func(canal, destino, resultado, mensaje, "RESULT")
-                    self.transaction.commit(ACCION, [batch_id, "", NO_ENVIAR])
+                    self.transaction.commit(ACCION, [message_id, "", NO_ENVIAR])
             mensaje['ack']()
         except ConsultaInexistente as e:
             logging.warning(f"Consulta inexistente: {e}")
