@@ -3,11 +3,13 @@ package output_gateway
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	goIO "io"
 	"net"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -27,6 +29,8 @@ type Gateway struct {
 	config       config.OutputGatewayConfig
 	broker       Broker
 	eofByClient  map[string]int
+	statePath    string
+	stateMutex   sync.Mutex
 	clients      map[string]net.Conn
 	clientsMutex sync.RWMutex
 	running      bool
@@ -34,15 +38,20 @@ type Gateway struct {
 	logger       *logging.Logger
 }
 
-func NewGateway(broker Broker, config config.OutputGatewayConfig, logger *logging.Logger) (*Gateway, error) {
-	return &Gateway{
+func NewGateway(broker Broker, config config.OutputGatewayConfig, logger *logging.Logger) *Gateway {
+	g := &Gateway{
 		config:      config,
 		broker:      broker,
 		eofByClient: make(map[string]int),
+		statePath:   "/tmp/output_gateway_tmp/state.json",
 		clients:     make(map[string]net.Conn),
 		running:     true,
 		logger:      logger,
-	}, nil
+	}
+
+	g.handleStateRecovery()
+
+	return g
 }
 
 func (g *Gateway) Start(ctx context.Context) {
@@ -78,11 +87,13 @@ func (g *Gateway) Start(ctx context.Context) {
 func (g *Gateway) acceptConnections(listener net.Listener) {
 	for g.isRunning() {
 		g.logger.Info("Waiting for conns")
+
 		conn, err := listener.Accept()
 		if err != nil {
 			if g.isRunning() {
 				g.logger.Errorf("failed to accept connection: %v", err)
 			}
+
 			continue
 		}
 
@@ -218,18 +229,24 @@ func (g *Gateway) handleEOFMessage(conn net.Conn, clientID string, query string)
 		if count, exists := g.eofByClient[key]; exists {
 			if count > 1 {
 				g.eofByClient[key]--
+				g.saveState()
+
 				g.logger.Infof("receive EOF from client %s waiting %d more to send to client", clientID, count)
+
 				return
 			}
 
 			g.logger.Infof("receive EOF from client %s sending to client...", clientID)
 
 			delete(g.eofByClient, key)
+
+			g.saveState()
 		} else {
 			eofsCount, _ := strconv.Atoi(os.Getenv("CONSULTA_1_EOF_COUNT"))
 			g.logger.Infof("setting EOF count to %d", eofsCount)
 
 			g.eofByClient[key] = eofsCount - 1
+			g.saveState()
 		}
 	}
 
@@ -259,4 +276,59 @@ func (g *Gateway) isRunning() bool {
 	g.runningMutex.RLock()
 	defer g.runningMutex.RUnlock()
 	return g.running
+}
+
+func (g *Gateway) saveState() {
+	g.stateMutex.Lock()
+	defer g.stateMutex.Unlock()
+
+	os.MkdirAll(filepath.Dir(g.statePath), 0o755)
+	f, err := os.Create(g.statePath)
+	if err != nil {
+		g.logger.Errorf("Error saving state: %v", err)
+		return
+	}
+	
+	defer f.Close()
+	
+	enc := json.NewEncoder(f)
+	
+	err = enc.Encode(g.eofByClient)
+	if err != nil {
+		g.logger.Errorf("Error encoding state: %v", err)
+	}
+}
+
+func (g *Gateway) handleStateRecovery() {
+	g.stateMutex.Lock()
+	defer g.stateMutex.Unlock()
+
+	if _, err := os.Stat(g.statePath); os.IsNotExist(err) {
+		g.eofByClient = make(map[string]int)
+		return
+	}
+
+	f, err := os.Open(g.statePath)
+	if err != nil {
+		g.logger.Errorf("Error opening state file: %v", err)
+		return
+	}
+
+	defer f.Close()
+
+	dec := json.NewDecoder(f)
+
+	m := make(map[string]int)
+
+	err = dec.Decode(&m)
+	if err != nil {
+		g.logger.Errorf("Error decoding state: %v", err)
+		return
+	}
+
+	g.eofByClient = m
+
+	for k, v := range g.eofByClient {
+		g.logger.Infof("[RECOVERY] EOF pendientes para %s: %d", k, v)
+	}
 }

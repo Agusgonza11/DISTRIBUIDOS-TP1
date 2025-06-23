@@ -279,7 +279,7 @@ def generar_yaml(clients, cant_filter, cant_joiner, cant_aggregator, cant_pnl):
                     "CLI_LOG_LEVEL=DEBUG",
                     *construir_env_input_gateway(consultas_por_nodo)
                 ],
-                "ports": ["5000:5000", "5001:5001", "5002:5002"],
+                "ports": ["5000:5000", "5001:5001", "5002:5002", "6000:6000"],
                 "networks": ["testing_net"],
                 "depends_on": {
                     "rabbitmq": {"condition": "service_healthy"}
@@ -294,7 +294,7 @@ def generar_yaml(clients, cant_filter, cant_joiner, cant_aggregator, cant_pnl):
                     "CLI_LOG_LEVEL=DEBUG",
                     *construir_env_output_gateway(consultas_por_nodo)
                 ],
-                "ports": ["6000:6000"],
+                "ports": ["6001:6001"],
                 "networks": ["testing_net"],
                 "depends_on": {
                     "rabbitmq": {"condition": "service_healthy"}

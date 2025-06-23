@@ -195,7 +195,6 @@ class AggregatorNode:
         tipo_mensaje = obtener_tipo_mensaje(mensaje)
         client_id = obtener_client_id(mensaje)
         message_id = obtener_message_id(mensaje)
-        logging.info(f"Mensaje con ids: {message_id}")
         try:
             if tipo_mensaje == EOF:
                 logging.info(f"Consulta {consulta_id} de aggregator recibió EOF")

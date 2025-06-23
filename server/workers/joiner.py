@@ -44,9 +44,8 @@ class JoinerNode:
         self.transaction = Transaction(TMP_DIR)
         if self.transaction.cargar_estado(self):
             for client_id in self.resultados_parciales.keys():
-                print(f"entra a actualizar {self.file_paths[client_id]['ratings']}", flush=True)
+                logging.debug(f"entra a actualizar {self.file_paths[client_id]['ratings']}", flush=True)
                 self.transaction.commit(PATH, [client_id, self.file_paths[client_id]["ratings"], self.file_paths[client_id]["credits"]])
-
 
 
     def reconstruir(self, clave, contenido):
@@ -76,11 +75,11 @@ class JoinerNode:
 
                     
                     if csv_almacenado == "ratings":
+                        logging.info("Joiner recibe datos de ratings")
                         valor = parse_datos(content)
                     elif csv_almacenado == "credits":
+                        logging.info("Joiner recibe datos de credits")
                         valor = parse_credits(content)
-
-                    print(f"[RECOVER] Reconstruyendo (batch_id: {batch_id}) para {csv_almacenado}, cliente {client_id}")
 
                     self.datos[client_id][csv_almacenado][DATOS].append({"batch_id": batch_id, "datos": content})
                     self.datos[client_id][csv_almacenado][LINEAS] = int(lineas)
@@ -174,9 +173,9 @@ class JoinerNode:
         if not self.termino_movies[client_id][consulta_id]:
             return False
         if consulta_id == 3:
-            return (self.datos[client_id]["ratings"][LINEAS] >= BATCH_RATINGS) or self.files_on_disk[client_id]["ratings"]
+            return self.datos[client_id]["ratings"][TERMINO] or (self.datos[client_id]["ratings"][LINEAS] >= BATCH_RATINGS) or self.files_on_disk[client_id]["ratings"]
         if consulta_id == 4:
-            return (self.datos[client_id]["credits"][LINEAS] >= BATCH_CREDITS) or self.files_on_disk[client_id]["credits"]
+            return self.datos[client_id]["credits"][TERMINO] or (self.datos[client_id]["credits"][LINEAS] >= BATCH_CREDITS) or self.files_on_disk[client_id]["credits"]
 
         return False
 
@@ -207,8 +206,6 @@ class JoinerNode:
                     for chunk in self.datos[client_id][csv][DATOS]:
                         batch_id = chunk["batch_id"]
                         for row in chunk["datos"]:
-                            print(f"[STORE] Almacenando (batch_id: {batch_id}) en disco para {client_id}, csv {csv}")
-
                             row["_batch_id"] = batch_id
                             df_total.append(row)
 
@@ -291,6 +288,8 @@ class JoinerNode:
                     if actor_name:
                         joined.append({'id': movie_id, 'name': actor_name})
         if len(joined) > 0:
+            logging.debug(f"Enviando {len(joined)} resultados para el batch {message_id}")
+            logging.debug(f"Resultados del batch {message_id}: {joined[:1]}")  
             self.transaction.commit(ACCION, [message_id, joined, ENVIAR])
             enviar_func(canal, destino, joined, mensaje, "RESULT")
             self.transaction.commit(ACCION, [message_id, "", NO_ENVIAR])
@@ -314,6 +313,8 @@ class JoinerNode:
                 joined.append(merged)
 
         if len(joined) > 0:
+            logging.debug(f"Enviando {len(joined)} resultados para el batch {message_id}")
+            logging.debug(f"Resultados del batch {message_id}: {joined[:5]}") 
             self.transaction.commit(ACCION, [message_id, joined, ENVIAR])
             enviar_func(canal, destino, joined, mensaje, "RESULT")
             self.transaction.commit(ACCION, [message_id, "", NO_ENVIAR])
@@ -373,10 +374,13 @@ class JoinerNode:
 
     def consulta_4(self, datos, client_id):
         logging.info("Procesando datos para consulta 4")    
-        credits = prepare_data_consult_4(self.datos[client_id]["credits"][DATOS])
+        credits = prepare_data_consult_4(concat_data(self.datos[client_id]["credits"][DATOS]))
         self.borrar_info("credits", client_id)
         if not credits:
+            logging.info("No hay datos de creditos para procesar")
             return False
+        logging.debug(f"Cantidad de creditos: {len(credits)}")
+        logging.debug(credits[:5])
         datos_list = [ {"id": d["id"], "title": d["title"]} for d in datos ]
         merged = []
         credits_by_id = {}
@@ -391,10 +395,17 @@ class JoinerNode:
         for entry in merged:
             cast_list = entry.get('cast', [])
             for cast_member in cast_list:
-                exploded.append({
-                    "id": entry["id"],
-                    "name": cast_member 
-                })
+                if isinstance(cast_member, dict):
+                    actor_name = cast_member.get("name")
+                else:
+                    actor_name = cast_member
+                if actor_name:
+                    exploded.append({
+                        "id": entry["id"],
+                        "name": actor_name
+                    })
+        logging.debug(f"Cantidad de resultados de la consulta 4: {len(exploded)}")
+        logging.debug(f"Primeros 5 resultados: {exploded[:5]}")
         return exploded
 
 

@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/op/go-logging"
 
@@ -613,19 +614,32 @@ func (c *Client) closeOutputFiles() {
 }
 
 func getClientIDFromGateway(connectionAddr string, logger *logging.Logger) (string, error) {
-	conn, err := net.Dial("tcp", connectionAddr)
-	if err != nil {
-		return "", fmt.Errorf("could not connect to gateway in %s: %w", connectionAddr, err)
+	const maxRetries = 3
+	const retryInterval = 5 * time.Second
+
+	var lastErr error
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		conn, err := net.Dial("tcp", connectionAddr)
+		if err != nil {
+			logger.Warningf("attempt %d: could not connect to gateway in %s: %v", attempt, connectionAddr, err)
+			lastErr = err
+			if attempt < maxRetries {
+				time.Sleep(retryInterval)
+			}
+			continue
+		}
+
+		defer conn.Close()
+
+		id, err := io.ReadMessage(conn)
+		if err != nil {
+			return "", fmt.Errorf("could not read client-id from gateway: %w", err)
+		}
+
+		logger.Infof("assigned client-id from gateway: %s", id)
+		return strings.TrimSpace(id), nil
 	}
 
-	defer conn.Close()
-
-	id, err := io.ReadMessage(conn)
-	if err != nil {
-		return "", fmt.Errorf("could not read client-id from gateway: %w", err)
-	}
-
-	logger.Infof("assigned client-id from gateway: %s", id)
-
-	return strings.TrimSpace(id), nil
+	return "", fmt.Errorf("could not connect to gateway in %s after %d retries: %w", connectionAddr, maxRetries, lastErr)
 }

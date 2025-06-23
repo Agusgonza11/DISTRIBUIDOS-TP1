@@ -35,6 +35,7 @@ services:
     - 5000:5000
     - 5001:5001
     - 5002:5002
+    - 6000:6000
     networks:
     - testing_net
     depends_on:
@@ -57,7 +58,7 @@ services:
     - PUERTO=7005
     - PUERTO_SIGUIENTE=7006
     ports:
-    - 6000:6000
+    - 6001:6001
     networks:
     - testing_net
     depends_on:
@@ -70,36 +71,6 @@ services:
     - output_gateway_tmp:/tmp/output_gateway_tmp
   client_1:
     container_name: client_1
-    image: client:latest
-    entrypoint: /client
-    environment:
-    - CLI_LOG_LEVEL=DEBUG
-    volumes:
-    - ./client/data/movies.csv:/app/data/movies.csv:ro
-    - ./client/data/ratings.csv:/app/data/ratings.csv:ro
-    - ./client/data/credits.csv:/app/data/credits.csv:ro
-    networks:
-    - testing_net
-    depends_on:
-    - input_gateway
-    - output_gateway
-  client_2:
-    container_name: client_2
-    image: client:latest
-    entrypoint: /client
-    environment:
-    - CLI_LOG_LEVEL=DEBUG
-    volumes:
-    - ./client/data/movies.csv:/app/data/movies.csv:ro
-    - ./client/data/ratings.csv:/app/data/ratings.csv:ro
-    - ./client/data/credits.csv:/app/data/credits.csv:ro
-    networks:
-    - testing_net
-    depends_on:
-    - input_gateway
-    - output_gateway
-  client_3:
-    container_name: client_3
     image: client:latest
     entrypoint: /client
     environment:

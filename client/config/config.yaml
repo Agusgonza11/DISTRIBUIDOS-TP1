@@ -1,8 +1,8 @@
 queries: [
-#  "ARGENTINIAN-SPANISH-PRODUCTIONS",
-#  "TOP-INVESTING-COUNTRIES",
+   "ARGENTINIAN-SPANISH-PRODUCTIONS",
+   "TOP-INVESTING-COUNTRIES",
   "TOP-ARGENTINIAN-MOVIES-BY-RATING",
-#  "TOP-ARGENTINIAN-ACTORS",
+   "TOP-ARGENTINIAN-ACTORS",
 #  "SENTIMENT-ANALYSIS"
 ]
 
@@ -11,7 +11,7 @@ gateway:
   input_movies_address: "input_gateway:5000"
   input_credits_address: "input_gateway:5001"
   input_ratings_address: "input_gateway:5002"
-  output_address: "output_gateway:6000"
+  output_address: "output_gateway:6001"
 file:
   movies_path: "./app/data/movies.csv"
   credits_path: "./app/data/credits.csv"

@@ -45,7 +45,7 @@ func NewGateway(broker Broker, config config.InputGatewayConfig, logger *logging
 		logger:             logger,
 	}
 
-	g.handleRecovery()
+	g.handleStateRecovery()
 
 	return g
 }
@@ -146,6 +146,8 @@ func (g *Gateway) Start(ctx context.Context) {
 
 func (g *Gateway) acceptConnections(listener net.Listener, messageBuilderFunc func([]string, string) ([]byte, error)) {
 	for g.isRunning() {
+		g.logger.Info("Waiting for conns")
+
 		conn, err := listener.Accept()
 		if err != nil {
 			if g.isRunning() {
@@ -154,6 +156,8 @@ func (g *Gateway) acceptConnections(listener net.Listener, messageBuilderFunc fu
 
 			continue
 		}
+
+		g.logger.Info("Connection accepted")
 
 		go g.handleMessage(conn, messageBuilderFunc)
 	}
@@ -406,6 +410,7 @@ func (g *Gateway) stopRunning() {
 
 func (g *Gateway) addQueries(clientID string, queries []string, file string) {
 	g.stateMutex.Lock()
+	defer g.stateMutex.Unlock()
 
 	if g.requestsByClientID[clientID] == nil {
 		g.requestsByClientID[clientID] = make(map[string]struct{})
@@ -415,7 +420,6 @@ func (g *Gateway) addQueries(clientID string, queries []string, file string) {
 		g.requestsByClientID[clientID][fmt.Sprintf("%s|%s", file, q)] = struct{}{}
 	}
 
-	g.stateMutex.Unlock()
 
 	g.saveState()
 }
@@ -441,7 +445,7 @@ func (g *Gateway) removeClientQueries(clientID string, queries []string, file st
 	g.saveState()
 }
 
-func (g *Gateway) handleRecovery() {
+func (g *Gateway) handleStateRecovery() {
 	g.stateMutex.Lock()
 	defer g.stateMutex.Unlock()
 
@@ -488,9 +492,6 @@ func (g *Gateway) handleRecovery() {
 }
 
 func (g *Gateway) saveState() {
-	g.stateMutex.Lock()
-	defer g.stateMutex.Unlock()
-
 	os.MkdirAll(filepath.Dir(g.statePath), 0o755)
 
 	f, err := os.Create(g.statePath)

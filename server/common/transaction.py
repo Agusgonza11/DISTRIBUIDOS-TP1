@@ -113,5 +113,4 @@ class Transaction:
                     self.cargar_ultima_accion(contenido)
                 return True
         except FileNotFoundError:
-            print(f"No hay estado para cargar", flush=True)
             return False

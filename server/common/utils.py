@@ -93,15 +93,17 @@ def lista_dicts_a_csv(lista):
 def create_dataframe(data_str):
     return list(csv.DictReader(StringIO(data_str)))
 
-def concat_data(data):
-    resultado = []
-    for chunk in data:
-        if isinstance(chunk, dict) and "datos" in chunk:
-            resultado.extend(chunk["datos"])
-        else:
-            resultado.extend(chunk)
-    return resultado
+def concat_data(batches):
+    all_data = []
+    for batch in batches:
+        if isinstance(batch, dict) and 'datos' in batch:
+            all_data.extend(batch['datos'])
+        elif isinstance(batch, list):
+            all_data.extend(batch)
+        elif isinstance(batch, dict):
+            all_data.append(batch)
 
+    return all_data
 
 def dictionary_to_list(dictionary_str):
     try:

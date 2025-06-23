@@ -57,15 +57,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	gateway, err := output_gateway.NewGateway(broker, config, logging.MustGetLogger("gateway"))
-	if err != nil {
-		log.Criticalf("Error starting gateway: %s", err)
-		os.Exit(1)
-	}
-
 	healthChecker := health_checker.NewHealthChecker(logging.MustGetLogger("hc_output_gateway"))
 
 	go healthChecker.Start()
+	
+	gateway := output_gateway.NewGateway(broker, config, logging.MustGetLogger("gateway"))
 
 	gateway.Start(ctx)
 }
