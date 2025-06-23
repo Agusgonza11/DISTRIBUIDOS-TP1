@@ -195,6 +195,9 @@ class AggregatorNode:
         tipo_mensaje = obtener_tipo_mensaje(mensaje)
         client_id = obtener_client_id(mensaje)
         message_id = obtener_message_id(mensaje)
+        if self.transaction.comprobar_ultima_accion(client_id, message_id, enviar_func, mensaje, canal, destino):
+            logging.debug(f"Mensaje {message_id} ya procesado, ignorando")
+            return
         try:
             if tipo_mensaje == EOF:
                 logging.info(f"Consulta {consulta_id} de aggregator recibió EOF")

@@ -65,7 +65,8 @@ class Transaction:
         self.ultima_accion = [message_id, accion, resultado]
 
     def comprobar_ultima_accion(self, client_id, message_id, enviar_func, mensaje, canal, destino):
-        # a esta funcion tienen que llamar todos los nodos cuando reciben mensaje
+        if len(self.ultima_accion) == 0:
+            return False
         if self.ultima_accion[0] == message_id:
             if self.ultima_accion[1] == ENVIAR:
                 resultado = self.ultima_accion[2]

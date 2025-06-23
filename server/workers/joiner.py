@@ -4,7 +4,7 @@ import logging
 import os
 import tempfile
 import threading
-from common.utils import EOF, concat_data, create_dataframe, get_batches, obtiene_nombre_contenedor, parse_credits, parse_datos, prepare_data_consult_4, write_dicts_to_csv
+from common.utils import EOF, concat_data, create_dataframe, get_batches, obtener_message_id, obtiene_nombre_contenedor, parse_credits, parse_datos, prepare_data_consult_4, write_dicts_to_csv
 from common.communication import obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
 from common.excepciones import ConsultaInexistente, ErrorCargaDelEstado
 from common.transaction import ACCION, Transaction
@@ -474,6 +474,10 @@ class JoinerNode:
         consulta_id = obtener_query(mensaje)
         tipo_mensaje = obtener_tipo_mensaje(mensaje)
         client_id = obtener_client_id(mensaje)
+        message_id = obtener_message_id(mensaje)
+        if self.transaction.comprobar_ultima_accion(client_id, message_id, enviar_func, mensaje, canal, destino):
+            logging.debug(f"Mensaje {message_id} ya procesado, ignorando")
+            return
         try:
             if tipo_mensaje == "EOF":
                 logging.info(f"Se recibio todo Movies, consulta {consulta_id} recibió EOF")
