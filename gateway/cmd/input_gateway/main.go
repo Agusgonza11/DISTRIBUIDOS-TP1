@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/viper"
 
 	"tp1-sistemas-distribuidos/gateway/internal/config"
+	"tp1-sistemas-distribuidos/gateway/internal/health_checker"
 	"tp1-sistemas-distribuidos/gateway/internal/input_gateway"
 	"tp1-sistemas-distribuidos/gateway/internal/message_broker"
 )
@@ -84,6 +85,10 @@ func main() {
 		log.Criticalf("Error starting gateway: %s", err)
 		os.Exit(1)
 	}
+
+	healthChecker := health_checker.NewHealthChecker(logging.MustGetLogger("hc_input_gateway"))
+
+	go healthChecker.Start()
 
 	gateway.Start(ctx)
 }

@@ -22,16 +22,24 @@ class HealthMonitor:
         self.recv = None
         self.send = None
 
+
     def reinicio(self):
         client = docker.from_env()
         nombre = self.nodo_anterior
 
         try:
             container = client.containers.get(nombre)
-            container.restart()
-
+            container.reload() 
+            status = container.status
+            if status == "running":
+                return
+            
+            print(f"[MONITOR] Intentando iniciar contenedor: {nombre}", flush=True)
+            container.start()
+            print(f"[MONITOR] Contenedor {nombre} iniciado correctamente", flush=True)
         except Exception as e:
-            print(f"Error reiniciando contenedor {nombre}: {e}", flush=True)
+            print(f"Error iniciando contenedor {nombre}: {e}", flush=True)
+
 
     def eliminar(self):
         print("[MONITOR] Cerrando conexiones sockets...", flush=True)

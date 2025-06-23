@@ -27,6 +27,10 @@ services:
     - CONSULTA_5_FILTER=1
     - CONSULTA_3_JOIN=1
     - CONSULTA_4_JOIN=1
+    - NODO_SIGUIENTE=filter1
+    - NODO_ANTERIOR=broker
+    - PUERTO=7004
+    - PUERTO_SIGUIENTE=7000
     ports:
     - 5000:5000
     - 5001:5001
@@ -38,6 +42,8 @@ services:
         condition: service_healthy
     links:
     - rabbitmq
+    volumes:
+    - /var/run/docker.sock:/var/run/docker.sock
   output_gateway:
     container_name: output_gateway
     image: output_gateway:latest
@@ -45,6 +51,10 @@ services:
     environment:
     - CLI_LOG_LEVEL=DEBUG
     - CONSULTA_1_EOF_COUNT=1
+    - NODO_SIGUIENTE=broker
+    - NODO_ANTERIOR=pnl1
+    - PUERTO=7005
+    - PUERTO_SIGUIENTE=7006
     ports:
     - 6000:6000
     networks:
@@ -54,6 +64,8 @@ services:
         condition: service_healthy
     links:
     - rabbitmq
+    volumes:
+    - /var/run/docker.sock:/var/run/docker.sock
   client_1:
     container_name: client_1
     image: client:latest
@@ -78,7 +90,7 @@ services:
     - WORKER_TYPE=FILTER
     - CONSULTAS=1,2,3,4,5
     - NODO_SIGUIENTE=joiner1
-    - NODO_ANTERIOR=broker
+    - NODO_ANTERIOR=input_gateway
     - PUERTO=7000
     - PUERTO_SIGUIENTE=7001
     networks:
@@ -139,10 +151,10 @@ services:
     - WORKER_TYPE=PNL
     - CONSULTAS=5
     - EOF_ESPERADOS=5:1
-    - NODO_SIGUIENTE=broker
+    - NODO_SIGUIENTE=output_gateway
     - NODO_ANTERIOR=aggregator1
     - PUERTO=7003
-    - PUERTO_SIGUIENTE=7004
+    - PUERTO_SIGUIENTE=7005
     networks:
     - testing_net
     depends_on:
@@ -159,10 +171,10 @@ services:
     - EOF_ESPERADOS=3:1,4:1,5:1
     - EOF_ENVIAR=2:1,3:1,4:1,5:1
     - JOINERS=1:[3, 4]
-    - NODO_SIGUIENTE=filter1
-    - NODO_ANTERIOR=pnl1
-    - PUERTO=7004
-    - PUERTO_SIGUIENTE=7000
+    - NODO_SIGUIENTE=input_gateway
+    - NODO_ANTERIOR=output_gateway
+    - PUERTO=7006
+    - PUERTO_SIGUIENTE=7004
     networks:
     - testing_net
     depends_on:

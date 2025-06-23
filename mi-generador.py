@@ -317,6 +317,23 @@ def generar_yaml(clients, cant_filter, cant_joiner, cant_aggregator, cant_pnl):
     agregar_workers(compose, anillo, puertos, cant_filter, cant_joiner, cant_aggregator, cant_pnl)
     agregar_broker(compose, anillo, puertos, cant_filter, cant_joiner, cant_aggregator, cant_pnl)
 
+    compose["services"]["input_gateway"]["environment"] += [
+        f"NODO_SIGUIENTE={anillo['input_gateway']['siguiente']}",
+        f"NODO_ANTERIOR={anillo['input_gateway']['anterior']}",
+        f"PUERTO={puertos['input_gateway']}",
+        f"PUERTO_SIGUIENTE={puertos[anillo['input_gateway']['siguiente']]}"
+    ]
+
+    compose["services"]["output_gateway"]["environment"] += [
+        f"NODO_SIGUIENTE={anillo['output_gateway']['siguiente']}",
+        f"NODO_ANTERIOR={anillo['output_gateway']['anterior']}",
+        f"PUERTO={puertos['output_gateway']}",
+        f"PUERTO_SIGUIENTE={puertos[anillo['output_gateway']['siguiente']]}"
+    ]
+    
+    compose["services"]["input_gateway"]["volumes"] = ["/var/run/docker.sock:/var/run/docker.sock"]
+    compose["services"]["output_gateway"]["volumes"] = ["/var/run/docker.sock:/var/run/docker.sock"]
+
     if "volumes" not in compose:
         compose["volumes"] = {}
 
@@ -331,6 +348,8 @@ def generar_yaml(clients, cant_filter, cant_joiner, cant_aggregator, cant_pnl):
     return compose
 
 def crear_anillo(cant_filter, cant_joiner, cant_aggregator, cant_pnl):
+    input_gateway = "input_gateway"
+    output_gateway = "output_gateway"
     filtros = [f"filter{i+1}" for i in range(cant_filter)]
     joiners = [f"joiner{i+1}" for i in range(cant_joiner)]
     aggregators = [f"aggregator{i+1}" for i in range(cant_aggregator)]
@@ -339,9 +358,11 @@ def crear_anillo(cant_filter, cant_joiner, cant_aggregator, cant_pnl):
     broker = "broker"
     
     nodos = filtros + joiners + aggregators + pnls + [broker]
-    
+    nodos = [input_gateway] + filtros + joiners + aggregators + pnls + [output_gateway] + [broker]
+
     n = len(nodos)
     anillo = {}
+
     for i, nodo in enumerate(nodos):
         siguiente = nodos[(i + 1) % n]   # El siguiente nodo (circular)
         anterior = nodos[(i - 1) % n]    # El nodo anterior (circular)
@@ -365,7 +386,10 @@ def generar_diccionario_puertos(cant_filter, cant_joiner, cant_aggregator, cant_
     dicc_puertos.update(asignar_puertos("aggregator", cant_aggregator, puerto_base + cant_filter + cant_joiner))
     dicc_puertos.update(asignar_puertos("pnl", cant_pnl, puerto_base + cant_filter + cant_joiner + cant_aggregator))
     total_previos = cant_filter + cant_joiner + cant_aggregator + cant_pnl
-    dicc_puertos["broker"] = puerto_base + total_previos
+    dicc_puertos["input_gateway"] = puerto_base + total_previos
+    dicc_puertos["output_gateway"] = puerto_base + total_previos + 1
+    dicc_puertos["broker"] = puerto_base + total_previos + 2
+
     return dicc_puertos
 
 
