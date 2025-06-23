@@ -3,16 +3,17 @@ package input_gateway
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/google/uuid"
+	"github.com/op/go-logging"
 	goIO "io"
 	"net"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
-
-	"github.com/op/go-logging"
-
 	"tp1-sistemas-distribuidos/gateway/internal/config"
 	"tp1-sistemas-distribuidos/gateway/internal/models"
 	io "tp1-sistemas-distribuidos/gateway/internal/utils"
@@ -24,20 +25,29 @@ type Broker interface {
 }
 
 type Gateway struct {
-	config       config.InputGatewayConfig
-	running      bool
-	runningMutex sync.RWMutex
-	broker       Broker
-	logger       *logging.Logger
+	config             config.InputGatewayConfig
+	running            bool
+	runningMutex       sync.RWMutex
+	broker             Broker
+	requestsByClientID map[string]map[string]struct{}
+	statePath          string
+	stateMutex         sync.Mutex
+	logger             *logging.Logger
 }
 
-func NewGateway(broker Broker, config config.InputGatewayConfig, logger *logging.Logger) (*Gateway, error) {
-	return &Gateway{
-		config:  config,
-		broker:  broker,
-		running: true,
-		logger:  logger,
-	}, nil
+func NewGateway(broker Broker, config config.InputGatewayConfig, logger *logging.Logger) *Gateway {
+	g := &Gateway{
+		config:             config,
+		broker:             broker,
+		running:            true,
+		requestsByClientID: make(map[string]map[string]struct{}),
+		statePath:          "/tmp/input_gateway_tmp/state.json",
+		logger:             logger,
+	}
+
+	g.handleRecovery()
+
+	return g
 }
 
 func (g *Gateway) listenForConnections(ctx context.Context) {
@@ -65,11 +75,11 @@ func (g *Gateway) listenForConnections(ctx context.Context) {
 			continue
 		}
 
-		go g.handleConnectionRequest(conn)
+		go g.assignIDToClient(conn)
 	}
 }
 
-func (g *Gateway) handleConnectionRequest(conn net.Conn) {
+func (g *Gateway) assignIDToClient(conn net.Conn) {
 	defer conn.Close()
 
 	clientID := uuid.New().String()
@@ -186,24 +196,14 @@ func (g *Gateway) handleMessage(
 			queries = []string{rawQueries}
 		}
 
+		g.addQueries(clientID, queries, file)
+
 		if isEOF {
 			g.handleEOFMessage(conn, queries, file, clientID)
 		} else {
 			g.handleCommonMessage(conn, queries, file, batchID, clientID, lines, messageBuilderFunc)
 		}
 	}
-}
-func (g *Gateway) assignIDToClient(conn net.Conn) string {
-	clientID := uuid.New()
-
-	err := io.WriteMessage(conn, []byte(clientID.String()))
-	if err != nil {
-		errMessage := fmt.Sprintf("error sending id to client: %v", err)
-		g.logger.Errorf(errMessage)
-		return ""
-	}
-
-	return clientID.String()
 }
 
 func (g *Gateway) handleCommonMessage(
@@ -213,16 +213,7 @@ func (g *Gateway) handleCommonMessage(
 	lines []string,
 	messageBuilderFunc func([]string, string) ([]byte, error),
 ) {
-	//g.logger.Infof(fmt.Sprintf("%s_ACK:%s", file, batchID))
-
-	err := io.WriteMessage(conn, []byte(fmt.Sprintf("%s_ACK:%s", file, batchID)))
-	if err != nil {
-		g.logger.Errorf("failed trying to send movies ack: %v", err)
-		return
-	}
-
 	for _, query := range queries {
-
 		queueName, exists := g.getQueueNameByQuery(query, file)
 		if !exists {
 			g.logger.Errorf("queue not found: message_type: %s, file: %s", query, file)
@@ -238,11 +229,11 @@ func (g *Gateway) handleCommonMessage(
 		err = g.broker.PublishMessage(
 			queueName,
 			map[string]interface{}{
-				"Query":    query,
-				"ClientID": clientID,
-				"MessageID":  batchID,
-				"BatchID":  batchID,
-				"type":     file,
+				"Query":     query,
+				"ClientID":  clientID,
+				"MessageID": batchID,
+				"BatchID":   batchID,
+				"type":      file,
 			},
 			body,
 		)
@@ -251,9 +242,17 @@ func (g *Gateway) handleCommonMessage(
 			continue
 		}
 	}
+
+	err := io.WriteMessage(conn, []byte(fmt.Sprintf("%s_ACK:%s", file, batchID)))
+	if err != nil {
+		g.logger.Errorf("failed trying to send movies ack: %v", err)
+		return
+	}
 }
 
 func (g *Gateway) handleEOFMessage(conn net.Conn, queries []string, file, clientID string) {
+	g.publishEOFs(queries, file, clientID)
+
 	eofACK := fmt.Sprintf("%s_EOF_ACK", file)
 
 	g.logger.Infof("%s sent", eofACK)
@@ -264,8 +263,11 @@ func (g *Gateway) handleEOFMessage(conn net.Conn, queries []string, file, client
 		return
 	}
 
-	for _, query := range queries {
+	g.removeClientQueries(clientID, queries, file)
+}
 
+func (g *Gateway) publishEOFs(queries []string, file, clientID string) {
+	for _, query := range queries {
 		messagesToSend := g.getEOFCountByQuery(query, file)
 		eofHeader := g.getEOFHeaderByQuery(query, file)
 		queueName, exists := g.getQueueNameByQuery(query, file)
@@ -277,7 +279,7 @@ func (g *Gateway) handleEOFMessage(conn net.Conn, queries []string, file, client
 		g.logger.Infof("sending %d EOF's: %s to %s queue", messagesToSend, eofHeader, queueName)
 
 		for i := 0; i < messagesToSend; i++ {
-			err = g.broker.PublishMessage(
+			err := g.broker.PublishMessage(
 				queueName,
 				map[string]interface{}{
 					"Query":    query,
@@ -400,4 +402,109 @@ func (g *Gateway) stopRunning() {
 	g.runningMutex.Lock()
 	defer g.runningMutex.Unlock()
 	g.running = false
+}
+
+func (g *Gateway) addQueries(clientID string, queries []string, file string) {
+	g.stateMutex.Lock()
+
+	if g.requestsByClientID[clientID] == nil {
+		g.requestsByClientID[clientID] = make(map[string]struct{})
+	}
+
+	for _, q := range queries {
+		g.requestsByClientID[clientID][fmt.Sprintf("%s|%s", file, q)] = struct{}{}
+	}
+
+	g.stateMutex.Unlock()
+
+	g.saveState()
+}
+
+func (g *Gateway) removeClientQueries(clientID string, queries []string, file string) {
+	g.stateMutex.Lock()
+	defer g.stateMutex.Unlock()
+
+	m, exists := g.requestsByClientID[clientID]
+	if !exists {
+		g.saveState()
+		return
+	}
+
+	for _, q := range queries {
+		delete(m, fmt.Sprintf("%s|%s", file, q))
+	}
+
+	if len(m) == 0 {
+		delete(g.requestsByClientID, clientID)
+	}
+
+	g.saveState()
+}
+
+func (g *Gateway) handleRecovery() {
+	g.stateMutex.Lock()
+	defer g.stateMutex.Unlock()
+
+	if _, err := os.Stat(g.statePath); os.IsNotExist(err) {
+		g.requestsByClientID = make(map[string]map[string]struct{})
+		return
+	}
+
+	f, err := os.Open(g.statePath)
+	if err != nil {
+		g.logger.Errorf("Error opening state file: %v", err)
+		return
+	}
+
+	defer f.Close()
+
+	dec := json.NewDecoder(f)
+
+	m := make(map[string]map[string]struct{})
+	err = dec.Decode(&m)
+	if err != nil {
+		g.logger.Errorf("Error decoding state: %v", err)
+	}
+
+	for clientID, queries := range m {
+		queriesByFile := make(map[string][]string)
+
+		for q := range queries {
+			values := strings.Split(q, "|")
+			file := values[0]
+			query := values[1]
+			queriesByFile[file] = append(queriesByFile[file], query)
+		}
+
+		for file, queriesSlice := range queriesByFile {
+			g.publishEOFs(queriesSlice, file, clientID)
+			g.logger.Infof("[RECOVERY] eof's delivered successfully for clientID: %s, file: %s, queries: %v", clientID, file, queriesSlice)
+		}
+	}
+
+	g.requestsByClientID = make(map[string]map[string]struct{})
+
+	g.saveState()
+}
+
+func (g *Gateway) saveState() {
+	g.stateMutex.Lock()
+	defer g.stateMutex.Unlock()
+
+	os.MkdirAll(filepath.Dir(g.statePath), 0o755)
+
+	f, err := os.Create(g.statePath)
+	if err != nil {
+		g.logger.Errorf("Error saving state: %v", err)
+		return
+	}
+
+	defer f.Close()
+
+	enc := json.NewEncoder(f)
+
+	err = enc.Encode(g.requestsByClientID)
+	if err != nil {
+		g.logger.Errorf("Error encoding state: %v", err)
+	}
 }

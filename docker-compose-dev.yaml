@@ -44,6 +44,7 @@ services:
     - rabbitmq
     volumes:
     - /var/run/docker.sock:/var/run/docker.sock
+    - input_gateway_tmp:/tmp/input_gateway_tmp
   output_gateway:
     container_name: output_gateway
     image: output_gateway:latest
@@ -66,8 +67,39 @@ services:
     - rabbitmq
     volumes:
     - /var/run/docker.sock:/var/run/docker.sock
+    - output_gateway_tmp:/tmp/output_gateway_tmp
   client_1:
     container_name: client_1
+    image: client:latest
+    entrypoint: /client
+    environment:
+    - CLI_LOG_LEVEL=DEBUG
+    volumes:
+    - ./client/data/movies.csv:/app/data/movies.csv:ro
+    - ./client/data/ratings.csv:/app/data/ratings.csv:ro
+    - ./client/data/credits.csv:/app/data/credits.csv:ro
+    networks:
+    - testing_net
+    depends_on:
+    - input_gateway
+    - output_gateway
+  client_2:
+    container_name: client_2
+    image: client:latest
+    entrypoint: /client
+    environment:
+    - CLI_LOG_LEVEL=DEBUG
+    volumes:
+    - ./client/data/movies.csv:/app/data/movies.csv:ro
+    - ./client/data/ratings.csv:/app/data/ratings.csv:ro
+    - ./client/data/credits.csv:/app/data/credits.csv:ro
+    networks:
+    - testing_net
+    depends_on:
+    - input_gateway
+    - output_gateway
+  client_3:
+    container_name: client_3
     image: client:latest
     entrypoint: /client
     environment:
@@ -194,3 +226,5 @@ volumes:
   aggregator1_tmp: null
   pnl1_tmp: null
   broker_tmp: null
+  input_gateway_tmp: null
+  output_gateway_tmp: null

@@ -239,23 +239,6 @@ func (g *Gateway) handleEOFMessage(conn net.Conn, clientID string, query string)
 	}
 }
 
-func (g *Gateway) mapQueryNumberToString(query uint8) string {
-	switch query {
-	case 1:
-		return QueryArgentinaEsp
-	case 2:
-		return QueryTopInvestors
-	case 3:
-		return QueryTopArgentinianMoviesByRating
-	case 4:
-		return QueryTopArgentinianActors
-	case 5:
-		return QuerySentimentAnalysis
-	default:
-		return ""
-	}
-}
-
 func (g *Gateway) gracefulShutdown(ctx context.Context, listener net.Listener) {
 	<-ctx.Done()
 	listener.Close()

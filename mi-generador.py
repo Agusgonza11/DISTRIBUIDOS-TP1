@@ -330,17 +330,18 @@ def generar_yaml(clients, cant_filter, cant_joiner, cant_aggregator, cant_pnl):
         f"PUERTO={puertos['output_gateway']}",
         f"PUERTO_SIGUIENTE={puertos[anillo['output_gateway']['siguiente']]}"
     ]
-    
-    compose["services"]["input_gateway"]["volumes"] = ["/var/run/docker.sock:/var/run/docker.sock"]
-    compose["services"]["output_gateway"]["volumes"] = ["/var/run/docker.sock:/var/run/docker.sock"]
+
+
+    compose["services"]["input_gateway"]["volumes"] = ["/var/run/docker.sock:/var/run/docker.sock", "input_gateway_tmp:/tmp/input_gateway_tmp"]
+    compose["services"]["output_gateway"]["volumes"] = ["/var/run/docker.sock:/var/run/docker.sock", "output_gateway_tmp:/tmp/output_gateway_tmp"]
 
     if "volumes" not in compose:
         compose["volumes"] = {}
 
-    tipos = [("joiner", cant_joiner), ("aggregator", cant_aggregator), ("pnl", cant_pnl), ("broker", 1)]
+    tipos = [("joiner", cant_joiner), ("aggregator", cant_aggregator), ("pnl", cant_pnl), ("broker", 1), ("input_gateway", 1), ("output_gateway", 1)]
     for tipo, cantidad in tipos:
-        if tipo == "broker":
-            compose["volumes"]["broker_tmp"] = None
+        if tipo in ["broker", "input_gateway", "output_gateway"]:
+            compose["volumes"][tipo + "_tmp"] = None
         else:
             for i in range(1, int(cantidad)+1):
                 compose["volumes"][f"{tipo}{i}_tmp"] = None
