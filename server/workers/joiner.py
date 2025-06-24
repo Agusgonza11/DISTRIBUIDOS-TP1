@@ -4,9 +4,9 @@ import logging
 import os
 import tempfile
 import threading
-from common.utils import EOF, concat_data, create_dataframe, get_batches, obtener_message_id, obtiene_nombre_contenedor, parse_credits, parse_datos, prepare_data_consult_4, write_dicts_to_csv
+from common.utils import EOF, concat_data, create_dataframe, get_batch_limits, obtener_message_id, obtener_nombre_contenedor, parse_credits, parse_datos, prepare_data_consult_4, write_dicts_to_csv
 from common.communication import obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
-from common.excepciones import ConsultaInexistente, ErrorCargaDelEstado
+from common.exceptions import ConsultaInexistente, ErrorCargaDelEstado
 from common.transaction import ACCION, Transaction
 
 
@@ -15,16 +15,16 @@ JOINER = "joiner"
 DATOS = 0
 LINEAS = 1
 TERMINO = 2
-TMP_DIR = f"/tmp/{obtiene_nombre_contenedor(JOINER)}_tmp"
+TMP_DIR = f"/tmp/{obtener_nombre_contenedor(JOINER)}_tmp"
 
-BATCH_CREDITS, BATCH_RATINGS = get_batches(JOINER)
+BATCH_CREDITS, BATCH_RATINGS = get_batch_limits(JOINER)
 
 DATA = "datos"
 DATA_TERM = "termino_datos"
 TERM = "termino_movies"
 RESULT = "resultados_parciales"
-DISK = "files_on_disk"
-PATH = "file_paths"
+DISK = "archivos_en_disco"
+PATH = "archivos_path"
 
 NO_ENVIAR = "no_enviar"
 ENVIAR = "enviar"
@@ -35,32 +35,32 @@ ENVIAR = "enviar"
 class JoinerNode:
 
     def __init__(self):
-        self.resultados_parciales = {}
+        self.informacion_movies = {}
         self.termino_movies = {}
-        self.datos = {}
+        self.informacion_csvs = {}
         self.locks = {}
-        self.files_on_disk = {}
-        self.file_paths = {}
+        self.archivos_en_disco = {}
+        self.archivos_path = {}
         self.transaction = Transaction(TMP_DIR)
         if self.transaction.cargar_estado(self):
-            for client_id in self.resultados_parciales.keys():
-                logging.debug(f"entra a actualizar {self.file_paths[client_id]['ratings']}", flush=True)
-                self.transaction.commit(PATH, [client_id, self.file_paths[client_id]["ratings"], self.file_paths[client_id]["credits"]])
+            for client_id in self.informacion_movies.keys():
+                self.transaction.commit(PATH, [client_id, self.archivos_path[client_id]["ratings"], self.archivos_path[client_id]["credits"]])
 
 
-    def reconstruir(self, clave, contenido):
+    def reconstruir_estado(self, clave, contenido):
         partes = contenido.split("|")
         if len(partes) < 2:
             raise ErrorCargaDelEstado(f"Contenido malformado: {contenido!r}")
         client_id, *contenido = partes
-        if client_id not in self.resultados_parciales:
+        if client_id not in self.informacion_movies:
             self.crear_datos(client_id, True)
+            
         match clave:
             case "datos":
                 csv_almacenado, datos, lineas = contenido
                 if datos == "BORRADO":
-                    self.datos[client_id][csv_almacenado][DATOS] = []
-                    self.datos[client_id][csv_almacenado][LINEAS] = 0
+                    self.informacion_csvs[client_id][csv_almacenado][DATOS] = []
+                    self.informacion_csvs[client_id][csv_almacenado][LINEAS] = 0
                 else:
                     try:
                         datos_dict = ast.literal_eval(datos)
@@ -81,35 +81,35 @@ class JoinerNode:
                         logging.info("Joiner recibe datos de credits")
                         valor = parse_credits(content)
 
-                    self.datos[client_id][csv_almacenado][DATOS].append({"batch_id": batch_id, "datos": content})
-                    self.datos[client_id][csv_almacenado][LINEAS] = int(lineas)
+                    self.informacion_csvs[client_id][csv_almacenado][DATOS].append({"batch_id": batch_id, "datos": content})
+                    self.informacion_csvs[client_id][csv_almacenado][LINEAS] = int(lineas)
 
             case "termino_datos":
                 csv_almacenado, booleano = contenido
                 valor = booleano == "True"
-                self.datos[client_id][csv_almacenado][TERMINO] = valor 
+                self.informacion_csvs[client_id][csv_almacenado][TERMINO] = valor
             case "termino_movies":
-                consulta_id, booleano = contenido
-                consulta_id = int(consulta_id)
+                request_id, booleano = contenido
+                request_id = int(request_id)
                 valor = booleano == "True"
-                self.termino_movies[client_id][consulta_id] = valor
+                self.termino_movies[client_id][request_id] = valor
             case "resultados_parciales":
-                consulta_id, valor = contenido
-                consulta_id = int(consulta_id)
+                request_id, valor = contenido
+                request_id = int(request_id)
                 if valor == "BORRADO":
-                    self.resultados_parciales[client_id][consulta_id] = []
+                    self.informacion_movies[client_id][request_id] = []
                 else:
-                    self.resultados_parciales[client_id][consulta_id].append(parse_datos(valor))
-            case "files_on_disk":
+                    self.informacion_movies[client_id][request_id].append(parse_datos(valor))
+            case "archivos_en_disco":
                 csv_almacenado, booleano = contenido
                 valor = booleano == "True"
-                self.files_on_disk[client_id][csv_almacenado] = valor 
-            case "file_paths":
+                self.archivos_en_disco[client_id][csv_almacenado] = valor
+            case "archivos_path":
                 ratings, credits = contenido
-                if not client_id in self.file_paths:
-                    self.file_paths[client_id] = {"ratings": None, "credits": None}
-                self.file_paths[client_id]["ratings"] = ratings
-                self.file_paths[client_id]["credits"] = credits
+                if not client_id in self.archivos_path:
+                    self.archivos_path[client_id] = {"ratings": None, "credits": None}
+                self.archivos_path[client_id]["ratings"] = ratings
+                self.archivos_path[client_id]["credits"] = credits
             case _:
                 raise ErrorCargaDelEstado(f"Error en la carga del estado")
 
@@ -118,7 +118,7 @@ class JoinerNode:
         if es_global:
             try:
                 self.transaction.borrar_carpeta()
-                for client_id, paths in self.file_paths.items():
+                for client_id, paths in self.archivos_path.items():
                     for tipo, path in paths.items():
                         try:
                             if os.path.exists(path):
@@ -130,23 +130,22 @@ class JoinerNode:
             except Exception as e:
                 logging.error(f"Error limpiando volumen en shutdown global: {e}")
         
-        self.resultados_parciales.clear()
+        self.informacion_movies.clear()
         self.termino_movies.clear()
-        self.datos.clear()
+        self.informacion_csvs.clear()
         self.locks.clear()
-        self.files_on_disk.clear()
-        self.file_paths.clear()
+        self.archivos_en_disco.clear()
+        self.archivos_path.clear()
 
 
 
     def crear_datos(self, client_id, reiniciado=None):
-        self.datos[client_id] = {"ratings": [[], 0, False], "credits": [[], 0, False]}
-         # "CSV": (datos, cantidad de datos, recibio el EOF correspondiente)
+        self.informacion_csvs[client_id] = {"ratings": [[], 0, False], "credits": [[], 0, False]}
         self.termino_movies[client_id] = {
             3: False,
             4: False,
         }
-        self.resultados_parciales[client_id] = {
+        self.informacion_movies[client_id] = {
             3: [],
             4: [],
         }
@@ -155,66 +154,70 @@ class JoinerNode:
             "ratings": threading.Lock(),
             "credits": threading.Lock(),
         }
-        self.files_on_disk[client_id] = {
+        
+        self.archivos_en_disco[client_id] = {
             "ratings": False,
             "credits": False,
         }
 
         os.makedirs(TMP_DIR, exist_ok=True)
+
         if reiniciado == True: return
-        self.file_paths[client_id] = {
+
+        self.archivos_path[client_id] = {
             "ratings": tempfile.NamedTemporaryFile(delete=False, dir=TMP_DIR).name,
             "credits": tempfile.NamedTemporaryFile(delete=False, dir=TMP_DIR).name,
         }
-        self.transaction.commit(PATH, [client_id, self.file_paths[client_id]["ratings"], self.file_paths[client_id]["credits"]])
+
+        self.transaction.commit(PATH, [client_id, self.archivos_path[client_id]["ratings"], self.archivos_path[client_id]["credits"]])
 
 
-    def puede_enviar(self, consulta_id, client_id):
-        if not self.termino_movies[client_id][consulta_id]:
+    def consulta_habilitada(self, request_id, client_id):
+        if not self.termino_movies[client_id][request_id]:
             return False
-        if consulta_id == 3:
-            return self.datos[client_id]["ratings"][TERMINO] or (self.datos[client_id]["ratings"][LINEAS] >= BATCH_RATINGS) or self.files_on_disk[client_id]["ratings"]
-        if consulta_id == 4:
-            return self.datos[client_id]["credits"][TERMINO] or (self.datos[client_id]["credits"][LINEAS] >= BATCH_CREDITS) or self.files_on_disk[client_id]["credits"]
+        if request_id == 3:
+            return self.informacion_csvs[client_id]["ratings"][TERMINO] or (self.informacion_csvs[client_id]["ratings"][LINEAS] >= BATCH_RATINGS) or self.archivos_en_disco[client_id]["ratings"]
+        if request_id == 4:
+            return self.informacion_csvs[client_id]["credits"][TERMINO] or (self.informacion_csvs[client_id]["credits"][LINEAS] >= BATCH_CREDITS) or self.archivos_en_disco[client_id]["credits"]
 
         return False
 
-    def guardar_datos(self, consulta_id, datos, client_id):
+    def handlear_movies_batch(self, request_id, datos, client_id):
         df = create_dataframe(datos)
-        self.resultados_parciales[client_id][consulta_id].append(df)
-        self.transaction.commit(RESULT, [client_id, consulta_id, df])
+        self.informacion_movies[client_id][request_id].append(df)
+        self.transaction.commit(RESULT, [client_id, request_id, df])
 
 
-    def almacenar_csv(self, consulta_id, datos, client_id, mensaje):
-        csv = "ratings" if consulta_id == 3 else "credits"
+    def almacenar_csv(self, request_id, datos, client_id, mensaje):
+        csv = "ratings" if request_id == 3 else "credits"
         batch_id = mensaje['headers'].get('BatchID')
 
         df = create_dataframe(datos)
-        self.datos[client_id][csv][LINEAS] += len(df)
+        self.informacion_csvs[client_id][csv][LINEAS] += len(df)
 
         data_dict = {"batch_id": batch_id, "datos": df}
-        self.datos[client_id][csv][DATOS].append(data_dict)
+        self.informacion_csvs[client_id][csv][DATOS].append(data_dict)
 
-        self.transaction.commit(DATA, [client_id, csv, data_dict, self.datos[client_id][csv][LINEAS]])
+        self.transaction.commit(DATA, [client_id, csv, data_dict, self.informacion_csvs[client_id][csv][LINEAS]])
 
-        if not self.termino_movies[client_id][consulta_id]:
+        if not self.termino_movies[client_id][request_id]:
             bsize = BATCH_RATINGS if csv == "ratings" else BATCH_CREDITS
-            if self.datos[client_id][csv][LINEAS] >= bsize:
+            if self.informacion_csvs[client_id][csv][LINEAS] >= bsize:
                 with self.locks[client_id][csv]:
                     df_total = []
 
-                    for chunk in self.datos[client_id][csv][DATOS]:
+                    for chunk in self.informacion_csvs[client_id][csv][DATOS]:
                         batch_id = chunk["batch_id"]
                         for row in chunk["datos"]:
                             row["_batch_id"] = batch_id
                             df_total.append(row)
 
                     write_dicts_to_csv(
-                        self.file_paths[client_id][csv],
+                        self.archivos_path[client_id][csv],
                         df_total,
-                        append=self.files_on_disk[client_id][csv]
+                        append=self.archivos_en_disco[client_id][csv]
                     )
-                    self.files_on_disk[client_id][csv] = True
+                    self.archivos_en_disco[client_id][csv] = True
 
 
                 self.borrar_info(csv, client_id)
@@ -224,7 +227,7 @@ class JoinerNode:
 
     def leer_batches_de_disco(self, client_id, csv_name):
         batch_size = BATCH_RATINGS if csv_name == "ratings" else BATCH_CREDITS
-        file_path = self.file_paths[client_id][csv_name]
+        file_path = self.archivos_path[client_id][csv_name]
 
         with self.locks[client_id][csv_name]:
             if not os.path.exists(file_path):
@@ -234,207 +237,217 @@ class JoinerNode:
             with open(file_path, newline='', encoding='utf-8') as csvfile:
                 reader = csv.DictReader(csvfile)
                 batch = []
-                last_batch_id = None
+                ultimo_batch_id = None
                 for row in reader:
                     batch_id = row.pop('_batch_id', None)
 
-                    if last_batch_id is None:
-                        last_batch_id = batch_id
-                    if batch_id != last_batch_id or len(batch) >= batch_size:
+                    if ultimo_batch_id is None:
+                        ultimo_batch_id = batch_id
+                    if batch_id != ultimo_batch_id or len(batch) >= batch_size:
                         if batch:
-                            yield batch, last_batch_id  
+                            yield batch, ultimo_batch_id
                         batch = []
-                        last_batch_id = batch_id
+                        ultimo_batch_id = batch_id
                     batch.append(row)
                 if batch:
-                    yield batch, last_batch_id
+                    yield batch, ultimo_batch_id
 
 
-    def enviar_resultados_disco(self, datos, client_id, canal, destino, mensaje, enviar_func, consulta_id):
-        csv = "ratings" if consulta_id == 3 else "credits"
+    def enviar_resultados_disco(self, datos, client_id, canal, destino, mensaje, enviar_func, request_id):
+        csv = "ratings" if request_id == 3 else "credits"
         for batch, batch_id in self.leer_batches_de_disco(client_id, csv):
             batch_mensaje = mensaje.copy()
             batch_mensaje['headers'] = batch_mensaje.get('headers', {}).copy()
             batch_mensaje['headers']['MessageID'] = str(batch_id)
 
-            if consulta_id == 3:
+            if request_id == 3:
                 self.procesar_y_enviar_batch_ratings(batch, datos, canal, destino, mensaje, enviar_func, batch_id)
             else:
                 self.procesar_y_enviar_batch_credit(batch, datos, canal, destino, mensaje, enviar_func, batch_id)
             batch = None
         try:
-            os.remove(self.file_paths[client_id][csv])
+            os.remove(self.archivos_path[client_id][csv])
         except Exception as e:
             logging.error(f"No se pudo borrar el archivo temporal {csv}: {e}")
-        self.files_on_disk[client_id][csv] = False
+
+        self.archivos_en_disco[client_id][csv] = False
         self.transaction.commit(DISK, [client_id, csv, False])
 
-    def procesar_y_enviar_batch_credit(self, batch, datos, canal, destino, mensaje, enviar_func, message_id):
+    def procesar_y_enviar_batch_credit(self, batch, informacion_movies, canal, destino, mensaje, enviar_func, message_id):
         if batch is None or len(batch) == 0:
             return
-        datos_dict = {entry['id']: entry['title'] for entry in datos}
-        joined = []
+
+        movies_dict = {entry['id']: entry['title'] for entry in informacion_movies}
+
+        resultado_final = []
+
         for row in batch:
             movie_id = row.get('id')
             cast_raw = row.get('cast', '[]')
+
             try:
                 cast_list = ast.literal_eval(cast_raw)
             except (ValueError, SyntaxError):
                 cast_list = []
 
-            if movie_id in datos_dict and isinstance(cast_list, list) and len(cast_list) > 0:
-                for cast_member in cast_list:
-                    actor_name = cast_member.get('name')
-                    if actor_name:
-                        joined.append({'id': movie_id, 'name': actor_name})
-        if len(joined) > 0:
-            logging.debug(f"Enviando {len(joined)} resultados para el batch {message_id}")
-            logging.debug(f"Resultados del batch {message_id}: {joined[:1]}")  
-            self.transaction.commit(ACCION, [message_id, joined, ENVIAR])
-            enviar_func(canal, destino, joined, mensaje, "RESULT")
+            if movie_id in movies_dict and isinstance(cast_list, list) and len(cast_list) > 0:
+                for miembro in cast_list:
+                    nombre_actor = miembro.get('name')
+                    if nombre_actor:
+                        resultado_final.append({'id': movie_id, 'name': nombre_actor})
+
+        if len(resultado_final) > 0:
+            self.transaction.commit(ACCION, [message_id, resultado_final, ENVIAR])
+            enviar_func(canal, destino, resultado_final, mensaje, "RESULT")
             self.transaction.commit(ACCION, [message_id, "", NO_ENVIAR])
 
 
-    def procesar_y_enviar_batch_ratings(self, batch, datos, canal, destino, mensaje, enviar_func, message_id):
+    def procesar_y_enviar_batch_ratings(self, batch, informacion_movies, canal, destino, mensaje, enviar_func, message_id):
         if batch is None or len(batch) == 0:
             return
 
-        datos_dict = {entry["id"]: entry["title"] for entry in datos}
-        joined = []
+        movies_dict = {entry["id"]: entry["title"] for entry in informacion_movies}
+        resultado_final = []
 
         for row in batch:
             movie_id = row.get("id")
-            if movie_id in datos_dict:
+            if movie_id in movies_dict:
                 merged = {
                     "id": movie_id,
-                    "title": datos_dict[movie_id],
+                    "title": movies_dict[movie_id],
                     **row
                 }
-                joined.append(merged)
+                resultado_final.append(merged)
 
-        if len(joined) > 0:
-            logging.debug(f"Enviando {len(joined)} resultados para el batch {message_id}")
-            logging.debug(f"Resultados del batch {message_id}: {joined[:5]}") 
-            self.transaction.commit(ACCION, [message_id, joined, ENVIAR])
-            enviar_func(canal, destino, joined, mensaje, "RESULT")
+        if len(resultado_final) > 0:
+            self.transaction.commit(ACCION, [message_id, resultado_final, ENVIAR])
+            enviar_func(canal, destino, resultado_final, mensaje, "RESULT")
             self.transaction.commit(ACCION, [message_id, "", NO_ENVIAR])
 
 
     def borrar_info(self, csv, client_id):
-        self.datos[client_id][csv][DATOS] = []
-        self.datos[client_id][csv][LINEAS] = 0
+        self.informacion_csvs[client_id][csv][DATOS] = []
+        self.informacion_csvs[client_id][csv][LINEAS] = 0
         self.transaction.commit(DATA, [client_id, csv, "BORRADO", "BORRADO"])
 
-    def limpiar_consulta(self, client_id, consulta_id):
-        csv = "ratings" if consulta_id == 3 else "credits"
-        path = self.file_paths[client_id][csv]
+    def limpiar_consulta(self, client_id, request_id):
+        csv = "ratings" if request_id == 3 else "credits"
+        path = self.archivos_path[client_id][csv]
         if os.path.exists(path):
             try:
                 os.remove(path)
             except Exception as ex:
                 logging.error(f"No se pudo borrar ratings temp: {ex}")
-        self.files_on_disk[client_id][csv] = False
-        self.file_paths[client_id][csv] = ""
+        self.archivos_en_disco[client_id][csv] = False
+        self.archivos_path[client_id][csv] = ""
         self.borrar_info(csv, client_id)
-        self.resultados_parciales[client_id][consulta_id] = []
+        self.informacion_movies[client_id][request_id] = []
         self.transaction.commit(DISK, [client_id, csv, False])
-        self.transaction.commit(RESULT, [client_id, consulta_id, "BORRADO"])
+        self.transaction.commit(RESULT, [client_id, request_id, "BORRADO"])
 
 
-    def ejecutar_consulta(self, datos, consulta_id, client_id):
-        match consulta_id:
+    def ejecutar_consulta(self, informacion_movies, request_id, client_id):
+        match request_id:
             case 3:
-                return self.consulta_3(datos, client_id)
+                return self.ejecutar_consulta_3(informacion_movies, client_id)
             case 4:
-                return self.consulta_4(datos, client_id)
+                return self.ejecutar_consulta_4(informacion_movies, client_id)
             case _:
-                logging.warning(f"Consulta desconocida: {consulta_id}")
-                raise ConsultaInexistente(f"Consulta {consulta_id} no encontrada")
+                logging.warning(f"Consulta desconocida: {request_id}")
+                raise ConsultaInexistente(f"Consulta {request_id} no encontrada")
 
-    def consulta_3(self, datos, client_id):
-        logging.info("Procesando datos para consulta 3")
-        ratings = concat_data(self.datos[client_id]["ratings"][DATOS])
+    def ejecutar_consulta_3(self, informacion_movies, client_id):
+        logging.info(f"[CONSULTA 3 - {client_id}] Ejecutando")    
+
+        ratings = concat_data(self.informacion_csvs[client_id]["ratings"][DATOS])
         self.borrar_info("ratings", client_id)
         if not ratings:
             return False
 
-        datos_dict = {d["id"]: d["title"] for d in datos}
+        movies_dict = {d["id"]: d["title"] for d in informacion_movies}
         resultado = []
+
         for r in ratings:
             movie_id = r.get("id")
-            if movie_id in datos_dict:
+            if movie_id in movies_dict:
                 merged = {
                     "id": movie_id,
-                    "title": datos_dict[movie_id],
+                    "title": movies_dict[movie_id],
                     **r
                 }
                 resultado.append(merged)
+
         return resultado
 
 
-    def consulta_4(self, datos, client_id):
-        logging.info("Procesando datos para consulta 4")    
-        credits = prepare_data_consult_4(concat_data(self.datos[client_id]["credits"][DATOS]))
+    def ejecutar_consulta_4(self, informacion_movies, client_id):
+        logging.info(f"[CONSULTA 4 - {client_id}] Ejecutando")    
+
+        credits = prepare_data_consult_4(concat_data(self.informacion_csvs[client_id]["credits"][DATOS]))
         self.borrar_info("credits", client_id)
+
         if not credits:
-            logging.info("No hay datos de creditos para procesar")
             return False
-        logging.debug(f"Cantidad de creditos: {len(credits)}")
-        logging.debug(credits[:5])
-        datos_list = [ {"id": d["id"], "title": d["title"]} for d in datos ]
+        
+        lista_movies = [ {"id": d["id"], "title": d["title"]} for d in informacion_movies ]
+
         merged = []
+
         credits_by_id = {}
+
         for c in credits:
             credits_by_id.setdefault(c["id"], []).append(c)
-        for movie in datos_list:
+
+        for movie in lista_movies:
             movie_id = movie["id"]
             if movie_id in credits_by_id:
                 for credit in credits_by_id[movie_id]:
                     merged.append({**movie, **credit})
-        exploded = []
-        for entry in merged:
-            cast_list = entry.get('cast', [])
-            for cast_member in cast_list:
-                if isinstance(cast_member, dict):
-                    actor_name = cast_member.get("name")
+                    
+        resultado_final = []
+
+        for m in merged:
+            cast_list = m.get('cast', [])
+            for miembro in cast_list:
+                if isinstance(miembro, dict):
+                    nombre_actor = miembro.get("name")
                 else:
-                    actor_name = cast_member
-                if actor_name:
-                    exploded.append({
-                        "id": entry["id"],
-                        "name": actor_name
+                    nombre_actor = miembro
+                if nombre_actor:
+                    resultado_final.append({
+                        "id": m["id"],
+                        "name": nombre_actor
                     })
-        logging.debug(f"Cantidad de resultados de la consulta 4: {len(exploded)}")
-        logging.debug(f"Primeros 5 resultados: {exploded[:5]}")
-        return exploded
+
+        return resultado_final
 
 
 
-    def procesar_datos(self, consulta_id, tipo_mensaje, mensaje, client_id):
+    def handlear_mensaje(self, request_id, tipo_mensaje, mensaje, client_id):
         contenido = obtener_body(mensaje)
-        if client_id not in self.datos:
+        if client_id not in self.informacion_csvs:
             self.crear_datos(client_id)
         if tipo_mensaje == "MOVIES":
-            self.guardar_datos(consulta_id, contenido, client_id)
+            self.handlear_movies_batch(request_id, contenido, client_id)
         else:
-            self.almacenar_csv(consulta_id, contenido, client_id, mensaje)
+            self.almacenar_csv(request_id, contenido, client_id, mensaje)
 
 
-    def procesar_resultado(self, consulta_id, canal, destino, mensaje, enviar_func, client_id):
-        if self.puede_enviar(consulta_id, client_id):
-            if client_id not in self.resultados_parciales:
+    def procesar_resultado(self, request_id, canal, destino, mensaje, enviar_func, client_id):
+        if self.consulta_habilitada(request_id, client_id):
+            if client_id not in self.informacion_movies:
                 return False
             
-            datos_cliente = self.resultados_parciales[client_id]
-            if not datos_cliente or consulta_id not in datos_cliente:
+            datos_cliente = self.informacion_movies[client_id]
+            if not datos_cliente or request_id not in datos_cliente:
                 return False
             
-            datos = concat_data(datos_cliente[consulta_id])
+            datos = concat_data(datos_cliente[request_id])
 
-            if consulta_id == 3:
-                batch_info = self.datos[client_id]["ratings"][DATOS]
+            if request_id == 3:
+                batch_info = self.informacion_csvs[client_id]["ratings"][DATOS]
             else:
-                batch_info = self.datos[client_id]["credits"][DATOS]
+                batch_info = self.informacion_csvs[client_id]["credits"][DATOS]
 
             batch_ids = [str(b.get('batch_id')) for b in batch_info if 'batch_id' in b]
             batch_ids = sorted(set(batch_ids))  
@@ -442,27 +455,27 @@ class JoinerNode:
 
             mensaje['headers']['MessageID'] = message_id
 
-            resultado = self.ejecutar_consulta(datos, consulta_id, client_id)
+            resultado = self.ejecutar_consulta(datos, request_id, client_id)
 
             self.transaction.commit(ACCION, [message_id, resultado, ENVIAR])
             enviar_func(canal, destino, resultado, mensaje, "RESULT")
             self.transaction.commit(ACCION, [message_id, "", NO_ENVIAR])
 
-            if consulta_id == 3 and self.files_on_disk[client_id]["ratings"]:
-                self.enviar_resultados_disco(datos, client_id, canal, destino, mensaje, enviar_func, consulta_id)
-            elif consulta_id == 4 and self.files_on_disk[client_id]["credits"]:
-                self.enviar_resultados_disco(datos, client_id, canal, destino, mensaje, enviar_func, consulta_id)
+            if request_id == 3 and self.archivos_en_disco[client_id]["ratings"]:
+                self.enviar_resultados_disco(datos, client_id, canal, destino, mensaje, enviar_func, request_id)
+            elif request_id == 4 and self.archivos_en_disco[client_id]["credits"]:
+                self.enviar_resultados_disco(datos, client_id, canal, destino, mensaje, enviar_func, request_id)
 
-        if self.termino_movies[client_id][consulta_id]:
-            if self.datos[client_id]["ratings"][TERMINO] or self.datos[client_id]["credits"][TERMINO]:
-                self.limpiar_consulta(client_id, consulta_id)
+        if self.termino_movies[client_id][request_id]:
+            if self.informacion_csvs[client_id]["ratings"][TERMINO] or self.informacion_csvs[client_id]["credits"][TERMINO]:
+                self.limpiar_consulta(client_id, request_id)
 
-    def enviar_eof(self, consulta_id, canal, destino, mensaje, enviar_func, client_id):
-        if self.termino_movies[client_id][consulta_id] and (
-            (consulta_id == 3 and (self.datos[client_id]["ratings"][TERMINO]))
-            or (consulta_id == 4 and (self.datos[client_id]["credits"][TERMINO]))
+    def enviar_eof(self, request_id, canal, destino, mensaje, enviar_func, client_id):
+        if self.termino_movies[client_id][request_id] and (
+            (request_id == 3 and (self.informacion_csvs[client_id]["ratings"][TERMINO]))
+            or (request_id == 4 and (self.informacion_csvs[client_id]["credits"][TERMINO]))
         ):
-            message_id = f"{client_id}-{consulta_id}"
+            message_id = f"{client_id}-{request_id}"
             mensaje['headers']['MessageID'] = message_id
 
             self.transaction.commit(ACCION, [message_id, EOF, ENVIAR])
@@ -471,44 +484,58 @@ class JoinerNode:
 
 
     def procesar_mensajes(self, canal, destino, mensaje, enviar_func):
-        consulta_id = obtener_query(mensaje)
+        request_id = obtener_query(mensaje)
         tipo_mensaje = obtener_tipo_mensaje(mensaje)
         client_id = obtener_client_id(mensaje)
         message_id = obtener_message_id(mensaje)
-        if self.transaction.comprobar_ultima_accion(client_id, message_id, enviar_func, mensaje, canal, destino):
-            logging.debug(f"Mensaje {message_id} ya procesado, ignorando")
+        if tipo_mensaje in ["RATINGS", "CREDITS"]:
+            logging.info(f"Mensaje {message_id} recibido")
+
+        if self.transaction.mensaje_duplicado(client_id, message_id, enviar_func, mensaje, canal, destino):
+            logging.info(f"Mensaje {message_id} ya procesado, ignorando")
             return
+        
         try:
             if tipo_mensaje == "EOF":
-                logging.info(f"Se recibio todo Movies, consulta {consulta_id} recibió EOF")
-                self.termino_movies[client_id][consulta_id] = True
-                self.transaction.commit(TERM, [client_id, consulta_id, True])
-                self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
-                self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func, client_id)
+                logging.info(f"EOF Movies: {request_id} para el cliente {client_id}")
+
+                self.termino_movies[client_id][request_id] = True
+                self.transaction.commit(TERM, [client_id, request_id, True])
+                self.procesar_resultado(request_id, canal, destino, mensaje, enviar_func, client_id)
+                self.enviar_eof(request_id, canal, destino, mensaje, enviar_func, client_id)
+         
             elif tipo_mensaje in ["MOVIES", "RATINGS", "CREDITS"]:
-                self.procesar_datos(consulta_id, tipo_mensaje, mensaje, client_id)
+                self.handlear_mensaje(request_id, tipo_mensaje, mensaje, client_id)
                 if tipo_mensaje != "MOVIES":
-                    self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
+                    self.procesar_resultado(request_id, canal, destino, mensaje, enviar_func, client_id)
+
             elif tipo_mensaje == "EOF_RATINGS":
-                logging.info("Recibí todos los ratings")
-                self.datos[client_id]["ratings"][TERMINO] = True
+                logging.info(f"EOF Ratings: {request_id} para el cliente {client_id}")
+               
+                self.informacion_csvs[client_id]["ratings"][TERMINO] = True
                 self.transaction.commit(DATA_TERM, [client_id, "ratings", True])
-                print(f"y esto {self.termino_movies[client_id][consulta_id]}", flush=True)
-                if self.datos[client_id]["ratings"][LINEAS] != 0 or self.files_on_disk[client_id]["ratings"]:
-                    self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
-                self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func, client_id)
+                
+                if self.informacion_csvs[client_id]["ratings"][LINEAS] > 0:
+                    self.procesar_resultado(request_id, canal, destino, mensaje, enviar_func, client_id)
+
+                self.enviar_eof(request_id, canal, destino, mensaje, enviar_func, client_id)
+
             elif tipo_mensaje == "EOF_CREDITS":
-                logging.info("Recibí todos los credits")
-                self.datos[client_id]["credits"][TERMINO] = True
+                logging.info(f"EOF Credits: {request_id} para el cliente {client_id}")
+
+                self.informacion_csvs[client_id]["credits"][TERMINO] = True
                 self.transaction.commit(DATA_TERM, [client_id, "credits", True])
-                if self.datos[client_id]["credits"][LINEAS] != 0 or self.files_on_disk[client_id]["credits"]:
-                    self.procesar_resultado(consulta_id, canal, destino, mensaje, enviar_func, client_id)
-                self.enviar_eof(consulta_id, canal, destino, mensaje, enviar_func, client_id)
+
+                if self.informacion_csvs[client_id]["credits"][LINEAS] > 0:
+                    self.procesar_resultado(request_id, canal, destino, mensaje, enviar_func, client_id)
+
+                self.enviar_eof(request_id, canal, destino, mensaje, enviar_func, client_id)
+
             mensaje['ack']()
         except ConsultaInexistente as e:
             logging.warning(f"Consulta inexistente: {e}")
         except Exception as e:
-            logging.error(f"Error procesando mensaje en consulta {consulta_id}: {e}")
+            logging.error(f"Error procesando mensaje en consulta {request_id}: {e}")
 
 
 # -----------------------

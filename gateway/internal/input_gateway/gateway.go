@@ -167,7 +167,12 @@ func (g *Gateway) handleMessage(
 	conn net.Conn,
 	messageBuilderFunc func([]string, string) ([]byte, error),
 ) {
-	defer conn.Close()
+	var clientID string
+
+	defer func() {
+		g.cleanupClient(clientID)
+		conn.Close()
+	}()
 
 	reader := bufio.NewReader(conn)
 
@@ -189,7 +194,7 @@ func (g *Gateway) handleMessage(
 		splittedHeader := strings.Split(header, ",")
 		rawQueries := strings.TrimSpace(splittedHeader[0])
 		file := splittedHeader[1]
-		clientID := splittedHeader[2]
+		clientID = splittedHeader[2]
 		batchID := splittedHeader[3]
 		isEOF := splittedHeader[len(splittedHeader)-1] == models.MessageEOF
 
@@ -420,7 +425,6 @@ func (g *Gateway) addQueries(clientID string, queries []string, file string) {
 		g.requestsByClientID[clientID][fmt.Sprintf("%s|%s", file, q)] = struct{}{}
 	}
 
-
 	g.saveState()
 }
 
@@ -471,22 +475,50 @@ func (g *Gateway) handleStateRecovery() {
 	}
 
 	for clientID, queries := range m {
-		queriesByFile := make(map[string][]string)
-
-		for q := range queries {
-			values := strings.Split(q, "|")
-			file := values[0]
-			query := values[1]
-			queriesByFile[file] = append(queriesByFile[file], query)
-		}
-
-		for file, queriesSlice := range queriesByFile {
-			g.publishEOFs(queriesSlice, file, clientID)
-			g.logger.Infof("[RECOVERY] eof's delivered successfully for clientID: %s, file: %s, queries: %v", clientID, file, queriesSlice)
-		}
+		g.sendMissingEOFs(clientID, queries)
 	}
 
 	g.requestsByClientID = make(map[string]map[string]struct{})
+
+	g.saveState()
+}
+
+func (g *Gateway) sendMissingEOFs(clientID string, queries map[string]struct{}) {
+	queriesByFile := make(map[string][]string)
+
+	for q := range queries {
+		values := strings.Split(q, "|")
+		if len(values) != 2 {
+			continue
+		}
+
+		file := values[0]
+		query := values[1]
+		queriesByFile[file] = append(queriesByFile[file], query)
+	}
+
+	for file, queriesSlice := range queriesByFile {
+		g.publishEOFs(queriesSlice, file, clientID)
+		g.logger.Infof("[RECOVERY] eof's delivered successfully for clientID: %s, file: %s, queries: %v", clientID, file, queriesSlice)
+	}
+}
+
+func (g *Gateway) cleanupClient(clientID string) {
+	if clientID == "" {
+		return
+	}
+
+	g.stateMutex.Lock()
+	defer g.stateMutex.Unlock()
+
+	queries, exists := g.requestsByClientID[clientID]
+	if !exists {
+		return
+	}
+
+	g.sendMissingEOFs(clientID, queries)
+
+	delete(g.requestsByClientID, clientID)
 
 	g.saveState()
 }

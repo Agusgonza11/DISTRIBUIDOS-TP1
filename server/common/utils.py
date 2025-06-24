@@ -11,11 +11,9 @@ import configparser
 from pathlib import Path
 import csv
 
-
-
-def get_batches(worker):
+def get_batch_limits(worker):
     config = configparser.ConfigParser()
-    config_path = os.path.join(os.path.dirname(__file__), 'batches.ini')
+    config_path = os.path.join(os.path.dirname(__file__), 'batch_limits.ini')
     config.read(config_path)
 
     v1 = int(config['DEFAULT']['BATCH_CREDITS'])
@@ -279,7 +277,7 @@ def cargar_puerto():
 def cargar_puerto_siguiente():
     return os.getenv("PUERTO_SIGUIENTE", "")
 
-def obtiene_nombre_contenedor(tipo):
+def obtener_nombre_contenedor(tipo):
     worker_id = int(os.environ.get("WORKER_ID", 0))
     if tipo != "broker":
         worker_id = int(os.environ.get("WORKER_ID", 0))

@@ -2,18 +2,18 @@ import logging
 from multiprocessing import Process
 import os
 import sys
-from common.utils import EOF, concat_data, create_dataframe, get_batches, obtener_message_id, obtiene_nombre_contenedor, parse_datos
+from common.utils import EOF, concat_data, create_dataframe, get_batch_limits, obtener_message_id, obtener_nombre_contenedor, parse_datos
 from common.communication import obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
 from transformers import pipeline # type: ignore
 import torch # type: ignore
-from common.excepciones import ConsultaInexistente, ErrorCargaDelEstado
+from common.exceptions import ConsultaInexistente, ErrorCargaDelEstado
 from common.transaction import ACCION, Transaction
 
 
 PNL = "pnl"
-TMP_DIR = f"/tmp/{obtiene_nombre_contenedor(PNL)}_tmp"
+TMP_DIR = f"/tmp/{obtener_nombre_contenedor(PNL)}_tmp"
 
-BATCH_PNL = get_batches(PNL)
+BATCH_PNL = get_batch_limits(PNL)
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
 torch.set_num_threads(1)
@@ -39,7 +39,7 @@ class PnlNode:
         self.transaction.cargar_estado(self)
 
     
-    def reconstruir(self, _, contenido):
+    def reconstruir_estado(self, _, contenido):
         client_id, _, valor, lineas = contenido.split("|", 3)
         if client_id not in self.resultados_parciales:
             self.resultados_parciales[client_id] = []
@@ -81,7 +81,7 @@ class PnlNode:
 
 
 
-    def ejecutar_consulta(self, consulta_id, client_id):
+    def ejecutar_consulta(self, request_id, client_id):
         if client_id not in self.resultados_parciales:
             return False
         
@@ -91,15 +91,15 @@ class PnlNode:
         
         datos = concat_data(datos_cliente)
 
-        match consulta_id:
+        match request_id:
             case 5:
-                return self.consulta_5(datos, client_id)
+                return self.ejecutar_consulta_5(datos, client_id)
             case _:
-                logging.warning(f"Consulta desconocida: {consulta_id}")
-                raise ConsultaInexistente(f"Consulta {consulta_id} no encontrada")
+                logging.warning(f"Consulta desconocida: {request_id}")
+                raise ConsultaInexistente(f"Consulta {request_id} no encontrada")
     
 
-    def consulta_5(self, datos, client_id):
+    def ejecutar_consulta_5(self, datos, client_id):
         logging.info("Procesando datos para consulta 5")
         overviews = [fila.get("overview", "") or "" for fila in datos]
         sentiments = self.sentiment_analyzer(overviews, truncation=True)
@@ -110,17 +110,17 @@ class PnlNode:
         
 
     def procesar_mensajes(self, canal, destino, mensaje, enviar_func):
-        consulta_id = obtener_query(mensaje)
+        request_id = obtener_query(mensaje)
         client_id = obtener_client_id(mensaje)
         message_id = obtener_message_id(mensaje)
-        if self.transaction.comprobar_ultima_accion(client_id, message_id, enviar_func, mensaje, canal, destino):
+        if self.transaction.mensaje_duplicado(client_id, message_id, enviar_func, mensaje, canal, destino):
             logging.debug(f"Mensaje {message_id} ya procesado, ignorando")
             return
         try:
             if obtener_tipo_mensaje(mensaje) == EOF:
-                logging.info(f"Consulta {consulta_id} de pnl recibió EOF")
+                logging.info(f"Consulta {request_id} de pnl recibió EOF")
                 if self.resultados_parciales[client_id]:
-                    resultado = self.ejecutar_consulta(consulta_id, client_id)
+                    resultado = self.ejecutar_consulta(request_id, client_id)
                     self.transaction.commit(ACCION, [message_id, resultado, ENVIAR])
                     enviar_func(canal, destino, resultado, mensaje, "RESULT")
                     self.transaction.commit(ACCION, [message_id, "", NO_ENVIAR])
@@ -130,7 +130,7 @@ class PnlNode:
             else:
                 self.guardar_datos(obtener_body(mensaje), client_id)
                 if self.lineas_actuales[client_id] >= BATCH_PNL:
-                    resultado = self.ejecutar_consulta(consulta_id, client_id)
+                    resultado = self.ejecutar_consulta(request_id, client_id)
                     self.transaction.commit(ACCION, [message_id, resultado, ENVIAR])
                     enviar_func(canal, destino, resultado, mensaje, "RESULT")
                     self.transaction.commit(ACCION, [message_id, "", NO_ENVIAR])
@@ -138,7 +138,7 @@ class PnlNode:
         except ConsultaInexistente as e:
             logging.warning(f"Consulta inexistente: {e}")
         except Exception as e:
-            logging.error(f"Error procesando mensaje en consulta {consulta_id}: {e}")
+            logging.error(f"Error procesando mensaje en consulta {request_id}: {e}")
 
         
 

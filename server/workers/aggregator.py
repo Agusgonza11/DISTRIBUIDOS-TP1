@@ -2,13 +2,13 @@ from ast import literal_eval
 import logging
 from collections import Counter, defaultdict
 
-from common.utils import EOF, cargar_eofs, concat_data, create_dataframe, obtener_message_id, obtiene_nombre_contenedor, parse_datos, prepare_data_aggregator_consult_3
+from common.utils import EOF, cargar_eofs, concat_data, create_dataframe, obtener_message_id, obtener_nombre_contenedor, parse_datos, prepare_data_aggregator_consult_3
 from common.communication import obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
-from common.excepciones import ConsultaInexistente, ErrorCargaDelEstado
+from common.exceptions import ConsultaInexistente, ErrorCargaDelEstado
 from common.transaction import Transaction
 
 AGGREGATOR = "aggregator"
-TMP_DIR = f"/tmp/{obtiene_nombre_contenedor(AGGREGATOR)}_tmp"
+TMP_DIR = f"/tmp/{obtener_nombre_contenedor(AGGREGATOR)}_tmp"
 RESULT = "resultados_parciales"
 EOF_ESPERADOS = "eof_esperados"
 ACCION = "accion"
@@ -26,20 +26,20 @@ class AggregatorNode:
         self.transaction = Transaction(TMP_DIR)
         self.transaction.cargar_estado(self)
     
-    def reconstruir(self, clave, contenido):
-        client_id, consulta_id, valor = contenido.split("|", 2)
+    def reconstruir_estado(self, clave, contenido):
+        client_id, request_id, valor = contenido.split("|", 2)
         match clave:
             case "resultados_parciales":
                 if client_id not in self.resultados_parciales:
                     self.resultados_parciales[client_id] = {}
-                consulta_id = int(consulta_id)
-                if consulta_id not in self.resultados_parciales[client_id]:
-                    self.resultados_parciales[client_id][consulta_id] = []
-                self.resultados_parciales[client_id][consulta_id].append(parse_datos(valor))
+                request_id = int(request_id)
+                if request_id not in self.resultados_parciales[client_id]:
+                    self.resultados_parciales[client_id][request_id] = []
+                self.resultados_parciales[client_id][request_id].append(parse_datos(valor))
             case "eof_esperados":
                 if client_id not in self.eof_esperados:
                     self.eof_esperados[client_id] = {}
-                self.eof_esperados[client_id][consulta_id] = int(valor)
+                self.eof_esperados[client_id][request_id] = int(valor)
             case _:
                 raise ErrorCargaDelEstado(f"Error en la carga del estado")
 
@@ -55,24 +55,24 @@ class AggregatorNode:
 
 
 
-    def guardar_datos(self, consulta_id, datos, client_id):
+    def guardar_datos(self, request_id, datos, client_id):
         if client_id not in self.resultados_parciales:
             self.resultados_parciales[client_id] = {}
             self.eof_esperados[client_id] = {}
             
-        if consulta_id not in self.resultados_parciales[client_id]:
-            self.resultados_parciales[client_id][consulta_id] = []
+        if request_id not in self.resultados_parciales[client_id]:
+            self.resultados_parciales[client_id][request_id] = []
             
-        if consulta_id not in self.eof_esperados[client_id]:
-            self.eof_esperados[client_id][consulta_id] = cargar_eofs()[consulta_id]
-            self.transaction.commit(EOF_ESPERADOS, [client_id, consulta_id, self.eof_esperados[client_id][consulta_id]])
+        if request_id not in self.eof_esperados[client_id]:
+            self.eof_esperados[client_id][request_id] = cargar_eofs()[request_id]
+            self.transaction.commit(EOF_ESPERADOS, [client_id, request_id, self.eof_esperados[client_id][request_id]])
         datos = create_dataframe(datos)
-        self.resultados_parciales[client_id][consulta_id].append(datos)
-        self.transaction.commit(RESULT, [client_id, consulta_id, datos])
+        self.resultados_parciales[client_id][request_id].append(datos)
+        self.transaction.commit(RESULT, [client_id, request_id, datos])
 
 
 
-    def ejecutar_consulta(self, consulta_id, client_id):
+    def ejecutar_consulta(self, request_id, client_id):
         if client_id not in self.resultados_parciales:
             return False
         
@@ -80,23 +80,23 @@ class AggregatorNode:
         if not datos_cliente:
             return False 
         
-        datos = concat_data(datos_cliente[consulta_id])
+        datos = concat_data(datos_cliente[request_id])
         
-        match consulta_id:
+        match request_id:
             case 2:
-                return self.consulta_2(datos)
+                return self.ejecutar_consulta_2(datos)
             case 3:
-                return self.consulta_3(datos)
+                return self.ejecutar_consulta_3(datos)
             case 4:
-                return self.consulta_4(datos)
+                return self.ejecutar_consulta_4(datos)
             case 5:
-                return self.consulta_5(datos)
+                return self.ejecutar_consulta_5(datos)
             case _:
-                logging.warning(f"Consulta desconocida {consulta_id}")
-                raise ConsultaInexistente(f"Consulta {consulta_id} no encontrada")
+                logging.warning(f"Consulta desconocida {request_id}")
+                raise ConsultaInexistente(f"Consulta {request_id} no encontrada")
     
 
-    def consulta_2(self, datos):
+    def ejecutar_consulta_2(self, datos):
         logging.info("Procesando datos para consulta 2")
         suma_por_pais = {}
         for row in datos:
@@ -114,7 +114,7 @@ class AggregatorNode:
 
         return resultado
 
-    def consulta_3(self, datos):
+    def ejecutar_consulta_3(self, datos):
         logging.info("Procesando datos para consulta 3")
         if not datos:
             return None
@@ -147,7 +147,7 @@ class AggregatorNode:
 
 
 
-    def consulta_4(self, datos):
+    def ejecutar_consulta_4(self, datos):
         logging.info("Procesando datos para consulta 4")
         contador = Counter()
         for fila in datos:
@@ -160,7 +160,7 @@ class AggregatorNode:
 
 
 
-    def consulta_5(self, datos):
+    def ejecutar_consulta_5(self, datos):
         logging.info("Procesando datos para consulta 5")
         for fila in datos:
             try:
@@ -191,41 +191,41 @@ class AggregatorNode:
     
 
     def procesar_mensajes(self, canal, destino, mensaje, enviar_func):
-        consulta_id = obtener_query(mensaje)
+        request_id = obtener_query(mensaje)
         tipo_mensaje = obtener_tipo_mensaje(mensaje)
         client_id = obtener_client_id(mensaje)
         message_id = obtener_message_id(mensaje)
-        if self.transaction.comprobar_ultima_accion(client_id, message_id, enviar_func, mensaje, canal, destino):
+        if self.transaction.mensaje_duplicado(client_id, message_id, enviar_func, mensaje, canal, destino):
             logging.debug(f"Mensaje {message_id} ya procesado, ignorando")
             return
         try:
             if tipo_mensaje == EOF:
-                logging.info(f"Consulta {consulta_id} de aggregator recibió EOF")
-                self.eof_esperados[client_id][consulta_id] -= 1
-                self.transaction.commit(EOF_ESPERADOS, [client_id, consulta_id, self.eof_esperados[client_id][consulta_id]])
-                if self.eof_esperados[client_id][consulta_id] == 0:
-                    logging.info(f"Consulta {consulta_id} recibió TODOS los EOF que esperaba")
-                    resultado = self.ejecutar_consulta(consulta_id, client_id)
+                logging.info(f"Consulta {request_id} de aggregator recibió EOF")
+                self.eof_esperados[client_id][request_id] -= 1
+                self.transaction.commit(EOF_ESPERADOS, [client_id, request_id, self.eof_esperados[client_id][request_id]])
+                if self.eof_esperados[client_id][request_id] == 0:
+                    logging.info(f"Consulta {request_id} recibió TODOS los EOF que esperaba")
+                    resultado = self.ejecutar_consulta(request_id, client_id)
                     self.transaction.commit(ACCION, [message_id, resultado, ENVIAR])
                     enviar_func(canal, destino, resultado, mensaje, "RESULT")
                     self.transaction.commit(ACCION, [message_id, "", NO_ENVIAR])
                     self.transaction.commit(ACCION, [message_id, EOF, ENVIAR])
                     enviar_func(canal, destino, EOF, mensaje, EOF)
                     self.transaction.commit(ACCION, [message_id, "", NO_ENVIAR])
-                    del self.resultados_parciales[client_id][consulta_id]
-                    del self.eof_esperados[client_id][consulta_id]
+                    del self.resultados_parciales[client_id][request_id]
+                    del self.eof_esperados[client_id][request_id]
 
                     if not self.resultados_parciales[client_id]:
                         del self.resultados_parciales[client_id]
                     if not self.eof_esperados[client_id]:
                         del self.eof_esperados[client_id]
             else:
-                self.guardar_datos(consulta_id, obtener_body(mensaje), client_id)
+                self.guardar_datos(request_id, obtener_body(mensaje), client_id)
             mensaje['ack']()
         except ConsultaInexistente as e:
             logging.warning(f"Consulta inexistente: {e}")
         except Exception as e:
-            logging.error(f"Error procesando mensaje en consulta {consulta_id}: {e}")
+            logging.error(f"Error procesando mensaje en consulta {request_id}: {e}")
 
 
 # -----------------------

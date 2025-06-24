@@ -59,8 +59,8 @@ def distribuir_consultas_por_nodo(cant_filter=1, cant_joiner=1, cant_aggregator=
             extras = cantidad - len(consultas)
             for i in range(extras):
                 idx = ((i + len(consultas)) % cantidad) + 1
-                consulta_idx = i % len(consultas)
-                consulta = consultas[consulta_idx]
+                request_idx = i % len(consultas)
+                consulta = consultas[request_idx]
                 asignacion[idx].append(consulta)
 
         # Guardar la asignación de consultas por tipo

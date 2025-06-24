@@ -15,8 +15,8 @@ JOINER = "joiner"
 DATA = "datos"
 TERM = "termino_movies"
 DATA_TERM = "termino_datos"
-DISK = "files_on_disk"
-PATH = "file_paths"
+DISK = "archivos_en_disco"
+PATH = "archivos_path"
 
 PNL = "pnl"
 
@@ -64,7 +64,7 @@ class Transaction:
         message_id, resultado, accion = contenido.split("|", 2)
         self.ultima_accion = [message_id, accion, resultado]
 
-    def comprobar_ultima_accion(self, client_id, message_id, enviar_func, mensaje, canal, destino):
+    def mensaje_duplicado(self, client_id, message_id, enviar_func, mensaje, canal, destino):
         if len(self.ultima_accion) == 0:
             return False
         if self.ultima_accion[0] == message_id:
@@ -107,7 +107,7 @@ class Transaction:
             with open(self.archivo, "r") as f:
                 for linea in f:
                     clave, contenido = parse_linea(linea)
-                    nodo.reconstruir(clave, contenido)
+                    nodo.reconstruir_estado(clave, contenido)
             with open(self.archivo_acciones, "r") as f:
                 for linea in f:
                     _, contenido = parse_linea(linea)

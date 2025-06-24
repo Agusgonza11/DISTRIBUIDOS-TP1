@@ -4,7 +4,7 @@ from pathlib import Path
 import docker # type: ignore
 import socket
 import time
-from common.utils import cargar_nodo_siguiente, cargar_nodo_anterior, cargar_puerto, cargar_puerto_siguiente, obtiene_nombre_contenedor
+from common.utils import cargar_nodo_siguiente, cargar_nodo_anterior, cargar_puerto, cargar_puerto_siguiente, obtener_nombre_contenedor
 import signal
 
 class HealthMonitor:
@@ -13,7 +13,7 @@ class HealthMonitor:
         self.puerto_nodo_siguiente = int(cargar_puerto_siguiente())
         self.nodo_anterior = cargar_nodo_anterior()
         self.nodo_siguiente = cargar_nodo_siguiente()
-        self.nodo_actual = obtiene_nombre_contenedor(tipo)
+        self.nodo_actual = obtener_nombre_contenedor(tipo)
         self.heartbeat_interval = 4
         self.check_interval = 10
         self.max_failed_heartbeats = 3
