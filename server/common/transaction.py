@@ -21,6 +21,7 @@ PATH = "archivos_path"
 PNL = "pnl"
 
 ACCION = "accion"
+LAST_BATCH_ID = "ultimo_batch_id"    
 
 COMMITS = {
     RESULT: "/M",
@@ -35,7 +36,8 @@ COMMITS = {
     DISK: "/K",
     PATH: "/P",
 
-    ACCION: "/C"
+    ACCION: "/C",
+    LAST_BATCH_ID: "/B"
 }
 
 SUFIJOS_A_CLAVE = {v: k for k, v in COMMITS.items()}
@@ -54,11 +56,17 @@ class Transaction:
         os.makedirs(self.directorio, exist_ok=True)
         self.archivo = os.path.join(self.directorio, ".data")
         self.archivo_acciones = os.path.join(self.directorio, "-acciones.data")
+        self.archivo_last_batch = os.path.join(self.directorio, "-last_batch.data")
         self.ultima_accion = []
 
     def borrar_carpeta(self):
         if os.path.exists(self.archivo):
             os.remove(self.archivo)
+        if os.path.exists(self.archivo_acciones):
+            os.remove(self.archivo_acciones)
+        if os.path.exists(self.archivo_last_batch):
+            os.remove(self.archivo_last_batch)
+
 
     def cargar_ultima_accion(self, contenido):
         message_id, resultado, accion = contenido.split("|", 2)
@@ -86,11 +94,18 @@ class Transaction:
         if sufijo is None:
             raise ValueError(f"Clave '{clave}' no encontrada en COMMITS")
         try:
-            partes = [str(v) if not isinstance(v, (dict, list)) else repr(v) for v in valores]
-            contenido = "|".join(partes)
+            if isinstance(valores, dict):
+                contenido = str(valores)
+            else:
+                partes = [str(v) if not isinstance(v, (dict, list)) else repr(v) for v in valores]
+                contenido = "|".join(partes)
+
             commit = f"{contenido}{sufijo}\n"
             if clave == ACCION:
                 ruta = self.archivo_acciones
+                modo = "w"
+            elif clave == LAST_BATCH_ID:
+                ruta = self.archivo_last_batch    
                 modo = "w"
             else:
                 ruta = self.archivo
@@ -104,6 +119,15 @@ class Transaction:
 
     def cargar_estado(self, nodo):
         try:
+            try:
+                with open(self.archivo_last_batch, "r") as f:
+                    for linea in f:
+                        clave, contenido = parse_linea(linea)
+                        if clave == LAST_BATCH_ID:
+                            nodo.reconstruir_estado(clave, contenido)
+            except FileNotFoundError:
+                pass
+
             with open(self.archivo, "r") as f:
                 for linea in f:
                     clave, contenido = parse_linea(linea)

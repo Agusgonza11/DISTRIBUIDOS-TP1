@@ -7,7 +7,7 @@ import threading
 from common.utils import EOF, concat_data, create_dataframe, get_batch_limits, obtener_message_id, obtener_nombre_contenedor, parse_credits, parse_datos, prepare_data_consult_4, write_dicts_to_csv
 from common.communication import obtener_body, obtener_client_id, obtener_query, obtener_tipo_mensaje, run
 from common.exceptions import ConsultaInexistente, ErrorCargaDelEstado
-from common.transaction import ACCION, Transaction
+from common.transaction import ACCION, LAST_BATCH_ID, Transaction
 
 
 JOINER = "joiner"
@@ -41,6 +41,7 @@ class JoinerNode:
         self.locks = {}
         self.archivos_en_disco = {}
         self.archivos_path = {}
+        self.ultimo_batch_id = {} 
         self.transaction = Transaction(TMP_DIR)
         if self.transaction.cargar_estado(self):
             for client_id in self.informacion_movies.keys():
@@ -48,6 +49,10 @@ class JoinerNode:
 
 
     def reconstruir_estado(self, clave, contenido):
+        if clave == "ultimo_batch_id":
+            self.ultimo_batch_id = ast.literal_eval(contenido)
+            return
+
         partes = contenido.split("|")
         if len(partes) < 2:
             raise ErrorCargaDelEstado(f"Contenido malformado: {contenido!r}")
@@ -72,7 +77,10 @@ class JoinerNode:
                     batch_id = datos_dict.get('batch_id', None)
                     if content is None:
                         return
-
+                    
+                    ultimo_batch_id = self.ultimo_batch_id.get(client_id, {}).get(csv_almacenado, -1)
+                    if int(batch_id) <= int(ultimo_batch_id):
+                        return
                     
                     if csv_almacenado == "ratings":
                         logging.info("Joiner recibe datos de ratings")
@@ -110,6 +118,8 @@ class JoinerNode:
                     self.archivos_path[client_id] = {"ratings": None, "credits": None}
                 self.archivos_path[client_id]["ratings"] = ratings
                 self.archivos_path[client_id]["credits"] = credits
+            case "ultimo_batch_id":
+                self.ultimo_batch_id = ast.literal_eval(contenido)
             case _:
                 raise ErrorCargaDelEstado(f"Error en la carga del estado")
 
@@ -160,6 +170,11 @@ class JoinerNode:
             "credits": False,
         }
 
+        self.ultimo_batch_id[client_id] = {
+            "ratings": -1,
+            "credits": -1,
+        }
+        
         os.makedirs(TMP_DIR, exist_ok=True)
 
         if reiniciado == True: return
@@ -205,12 +220,13 @@ class JoinerNode:
             if self.informacion_csvs[client_id][csv][LINEAS] >= bsize:
                 with self.locks[client_id][csv]:
                     df_total = []
-
+                    ultimo_batch_id = None
                     for chunk in self.informacion_csvs[client_id][csv][DATOS]:
                         batch_id = chunk["batch_id"]
                         for row in chunk["datos"]:
                             row["_batch_id"] = batch_id
                             df_total.append(row)
+                        ultimo_batch_id = batch_id
 
                     write_dicts_to_csv(
                         self.archivos_path[client_id][csv],
@@ -219,6 +235,9 @@ class JoinerNode:
                     )
                     self.archivos_en_disco[client_id][csv] = True
 
+                    if ultimo_batch_id is not None:
+                        self.ultimo_batch_id[client_id][csv] = ultimo_batch_id
+                        self.transaction.commit(LAST_BATCH_ID, self.ultimo_batch_id)
 
                 self.borrar_info(csv, client_id)
                 self.transaction.commit(DISK, [client_id, csv, True])
@@ -255,6 +274,7 @@ class JoinerNode:
 
     def enviar_resultados_disco(self, datos, client_id, canal, destino, mensaje, enviar_func, request_id):
         csv = "ratings" if request_id == 3 else "credits"
+
         for batch, batch_id in self.leer_batches_de_disco(client_id, csv):
             batch_mensaje = mensaje.copy()
             batch_mensaje['headers'] = batch_mensaje.get('headers', {}).copy()
@@ -344,6 +364,10 @@ class JoinerNode:
         self.informacion_movies[client_id][request_id] = []
         self.transaction.commit(DISK, [client_id, csv, False])
         self.transaction.commit(RESULT, [client_id, request_id, "BORRADO"])
+        if client_id in self.ultimo_batch_id:
+            if csv in self.ultimo_batch_id[client_id]:
+                del self.ultimo_batch_id[client_id][csv] 
+                self.transaction.commit(LAST_BATCH_ID, [str(self.ultimo_batch_id)])  
 
 
     def ejecutar_consulta(self, informacion_movies, request_id, client_id):
@@ -488,9 +512,7 @@ class JoinerNode:
         tipo_mensaje = obtener_tipo_mensaje(mensaje)
         client_id = obtener_client_id(mensaje)
         message_id = obtener_message_id(mensaje)
-        if tipo_mensaje in ["RATINGS", "CREDITS"]:
-            logging.info(f"Mensaje {message_id} recibido")
-
+        
         if self.transaction.mensaje_duplicado(client_id, message_id, enviar_func, mensaje, canal, destino):
             logging.info(f"Mensaje {message_id} ya procesado, ignorando")
             return
